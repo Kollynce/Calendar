@@ -1,0 +1,58 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --color-primary: 79 70 229; /* indigo-600 */
+    --color-primary-foreground: 255 255 255;
+
+    --color-accent: 6 182 212; /* cyan-500 */
+    --color-accent-foreground: 255 255 255;
+
+    --color-background: 255 255 255;
+    --color-foreground: 31 41 55; /* gray-800 */
+
+    --color-muted: 243 244 246; /* gray-100 */
+    --color-muted-foreground: 107 114 128; /* gray-500 */
+
+    --color-border: 229 231 235; /* gray-200 */
+
+    --color-holiday: 239 68 68; /* red-500 */
+    --color-weekend: 249 250 251; /* gray-50 */
+  }
+
+  .dark {
+    --color-primary: 99 102 241; /* indigo-500 */
+    --color-primary-foreground: 255 255 255;
+
+    --color-accent: 34 211 238; /* cyan-400 */
+    --color-accent-foreground: 15 23 42;
+
+    --color-background: 15 23 42; /* slate-900 */
+    --color-foreground: 248 250 252; /* slate-50 */
+
+    --color-muted: 30 41 59; /* slate-800 */
+    --color-muted-foreground: 148 163 184; /* slate-400 */
+
+    --color-border: 51 65 85; /* slate-700 */
+
+    --color-holiday: 248 113 113; /* red-400 */
+    --color-weekend: 30 41 59; /* slate-800 */
+  }
+
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-white text-gray-900 antialiased dark:bg-slate-900 dark:text-slate-50;
+    font-feature-settings:
+      "rlig" 1,
+      "calt" 1;
+  }
+}
+
+@layer components {
+  .container {
+    @apply mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl;
+  }
+}
