@@ -22,6 +22,12 @@ export const routes: RouteRecordRaw[] = [
     component: () => import('@/pages/marketplace/[id].vue'),
     meta: { layout: 'default' },
   },
+  {
+    path: '/pricing',
+    name: 'pricing',
+    component: () => import('@/pages/pricing.vue'),
+    meta: { layout: 'default' },
+  },
 
   // ═══════════════════════════════════════════════════════════════
   // AUTH ROUTES

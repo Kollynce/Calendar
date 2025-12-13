@@ -119,13 +119,14 @@ class CalendarGeneratorService {
     locale: string = 'en',
     formatStyle: 'long' | 'short' | 'narrow' = 'short'
   ): string[] {
-    const baseDate = new Date(2024, 0, 7) // A Sunday
+    // Use a known Sunday as base (Jan 7, 2024 is a Sunday)
+    const baseSunday = new Date(2024, 0, 7)
     const days: string[] = []
 
     for (let i = 0; i < 7; i++) {
-      const dayIndex = (startDay + i) % 7
-      const date = new Date(baseDate)
-      date.setDate(date.getDate() + dayIndex)
+      // Calculate the day of week starting from startDay
+      const date = new Date(baseSunday)
+      date.setDate(baseSunday.getDate() + ((startDay + i) % 7))
       
       days.push(
         date.toLocaleDateString(locale, { weekday: formatStyle })

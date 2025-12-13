@@ -2,86 +2,126 @@
 import { ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useAuthStore } from '@/stores'
+import AppLayout from '@/layouts/AppLayout.vue'
+import { 
+  PlusIcon, 
+  ArrowUpTrayIcon, 
+  ClockIcon, 
+  CalendarDaysIcon,
+  ChartPieIcon,
+  SparklesIcon
+} from '@heroicons/vue/24/outline'
 
 const authStore = useAuthStore()
 
-// Placeholder projects
-const projects = ref([
-  { id: '1', name: 'My 2025 Calendar', updatedAt: '2024-12-08', thumbnail: null },
-  { id: '2', name: 'Business Calendar', updatedAt: '2024-12-07', thumbnail: null },
+// Mock data for widgets
+const stats = [
+  { name: 'Total Projects', value: '12', icon: CalendarDaysIcon, color: 'text-blue-500', bg: 'bg-blue-100 dark:bg-blue-900/20' },
+  { name: 'Storage Used', value: '75%', icon: ChartPieIcon, color: 'text-purple-500', bg: 'bg-purple-100 dark:bg-purple-900/20' },
+  { name: 'Days Active', value: '24', icon: ClockIcon, color: 'text-green-500', bg: 'bg-green-100 dark:bg-green-900/20' },
+]
+
+const recentProjects = ref([
+  { id: '1', name: '2025 Corporate Calendar', updatedAt: '2 hours ago', thumbnail: null, status: 'Draft' },
+  { id: '2', name: 'Family Photo Planner', updatedAt: '1 day ago', thumbnail: null, status: 'Completed' },
+  { id: '3', name: 'Marketing Schedule Q1', updatedAt: '3 days ago', thumbnail: null, status: 'Printed' },
 ])
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-50 dark:bg-gray-900">
-    <!-- Header -->
-    <header class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-        <div class="flex items-center justify-between">
-          <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
-            Dashboard
-          </h1>
-          <RouterLink
-            to="/editor"
-            class="btn btn-primary"
-          >
-            + New Calendar
+  <AppLayout>
+    <div class="space-y-8">
+      <!-- Welcome & Stats Section -->
+      <div class="space-y-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 class="text-3xl font-display font-bold text-gray-900 dark:text-white">
+              Dashboard
+            </h1>
+            <p class="text-gray-500 dark:text-gray-400 mt-1">
+              Welcome back, {{ authStore.user?.displayName || 'Creator' }}. Here's what's happening.
+            </p>
+          </div>
+          <div class="flex gap-3">
+            <button class="btn-secondary flex items-center gap-2 text-sm">
+              <ArrowUpTrayIcon class="w-4 h-4" /> Import
+            </button>
+            <RouterLink to="/editor" class="btn-primary flex items-center gap-2">
+              <PlusIcon class="w-5 h-5" /> New Project
+            </RouterLink>
+          </div>
+        </div>
+
+        <!-- Stats Grid -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div v-for="stat in stats" :key="stat.name" class="glass-card p-5 flex items-center gap-4">
+            <div :class="[stat.bg, 'p-3 rounded-xl']">
+              <component :is="stat.icon" :class="[stat.color, 'w-6 h-6']" />
+            </div>
+            <div>
+              <p class="text-sm font-medium text-gray-500 dark:text-gray-400">{{ stat.name }}</p>
+              <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ stat.value }}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Actions -->
+      <div class="grid md:grid-cols-2 gap-6">
+        <div class="glass-card p-6 bg-linear-to-br from-primary-500 to-indigo-600 text-white relative overflow-hidden group cursor-pointer">
+          <div class="absolute top-0 right-0 -mr-8 -mt-8 w-32 h-32 bg-white/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500"></div>
+          <h3 class="text-xl font-bold mb-2 relative z-10">Start from Scratch</h3>
+          <p class="text-primary-100 mb-6 relative z-10 max-w-sm">
+            Create a custom calendar with our powerful design editor. Choose size, layout, and holidays.
+          </p>
+          <RouterLink to="/editor" class="inline-flex items-center gap-2 bg-white/20 backdrop-blur-md hover:bg-white/30 text-white px-4 py-2 rounded-lg font-medium transition-colors relative z-10">
+            Open Editor <PlusIcon class="w-4 h-4" />
+          </RouterLink>
+        </div>
+
+        <div class="glass-card p-6 border-l-4 border-l-accent-500 relative overflow-hidden group cursor-pointer">
+          <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-2">Browse Templates</h3>
+          <p class="text-gray-500 dark:text-gray-400 mb-6 max-w-sm">
+            Jump start your design with professionlly crafted templates for every industry.
+          </p>
+          <RouterLink to="/marketplace" class="inline-flex items-center gap-2 text-accent-500 font-medium hover:text-accent-600 transition-colors">
+            Visit Marketplace <SparklesIcon class="w-4 h-4" />
           </RouterLink>
         </div>
       </div>
-    </header>
 
-    <!-- Content -->
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <!-- Welcome -->
-      <div class="mb-8">
-        <h2 class="text-xl font-semibold text-gray-900 dark:text-white">
-          Welcome back, {{ authStore.user?.displayName || 'Creator' }}!
-        </h2>
-        <p class="text-gray-600 dark:text-gray-400">
-          Subscription: <span class="font-medium capitalize">{{ authStore.subscriptionTier }}</span>
-        </p>
+      <!-- Recent Projects -->
+      <div>
+        <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">Recent Projects</h2>
+        <div class="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          <RouterLink
+            v-for="project in recentProjects"
+            :key="project.id"
+            :to="`/editor/${project.id}`"
+            class="glass-card group overflow-hidden"
+          >
+            <!-- Preview Area -->
+            <div class="aspect-4/3 bg-gray-100 dark:bg-gray-800 relative flex items-center justify-center overflow-hidden">
+              <div class="absolute inset-0 bg-linear-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-4">
+                <span class="text-white text-sm font-medium">Click to edit</span>
+              </div>
+              <CalendarDaysIcon class="w-12 h-12 text-gray-300 dark:text-gray-600 group-hover:scale-110 transition-transform duration-300" />
+            </div>
+            
+            <!-- Card Footer -->
+            <div class="p-4">
+              <div class="flex justify-between items-start mb-1">
+                <h3 class="font-medium text-gray-900 dark:text-white truncate pr-2">{{ project.name }}</h3>
+                <span class="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                  {{ project.status }}
+                </span>
+              </div>
+              <p class="text-xs text-gray-500 dark:text-gray-400">Edited {{ project.updatedAt }}</p>
+            </div>
+          </RouterLink>
+        </div>
       </div>
-
-      <!-- Projects Grid -->
-      <div class="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        <!-- New Project Card -->
-        <RouterLink
-          to="/editor"
-          class="card p-6 flex flex-col items-center justify-center min-h-[200px] border-2 border-dashed border-gray-300 dark:border-gray-600 hover:border-blue-500 dark:hover:border-blue-400 transition-colors group"
-        >
-          <div class="w-12 h-12 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center group-hover:bg-blue-100 dark:group-hover:bg-blue-900 transition-colors">
-            <svg class="w-6 h-6 text-gray-400 group-hover:text-blue-600 dark:group-hover:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-            </svg>
-          </div>
-          <span class="mt-4 text-gray-600 dark:text-gray-400 group-hover:text-blue-600 dark:group-hover:text-blue-400">
-            Create New Calendar
-          </span>
-        </RouterLink>
-
-        <!-- Project Cards -->
-        <RouterLink
-          v-for="project in projects"
-          :key="project.id"
-          :to="`/editor/${project.id}`"
-          class="card overflow-hidden hover:shadow-lg transition-shadow"
-        >
-          <div class="aspect-[4/3] bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
-            <svg class="w-12 h-12 text-gray-300 dark:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-          </div>
-          <div class="p-4">
-            <h3 class="font-medium text-gray-900 dark:text-white truncate">
-              {{ project.name }}
-            </h3>
-            <p class="text-sm text-gray-500 dark:text-gray-400">
-              Updated {{ project.updatedAt }}
-            </p>
-          </div>
-        </RouterLink>
-      </div>
-    </main>
-  </div>
+    </div>
+  </AppLayout>
 </template>
+

@@ -6,8 +6,18 @@ import type {
   CanvasState, 
   CanvasObject, 
   ObjectType,
-  CalendarConfig 
+  CalendarConfig,
+  TemplateOptions,
+  CanvasElementMetadata,
+  CalendarGridMetadata,
+  WeekStripMetadata,
+  PlannerNoteMetadata,
+  PhotoBlockMetadata,
+  DateCellMetadata,
+  PlannerPatternVariant
 } from '@/types'
+import { mergeTemplateOptions } from '@/config/editor-defaults'
+import { calendarGeneratorService } from '@/services/calendar/generator.service'
 
 export const useEditorStore = defineStore('editor', () => {
   // ═══════════════════════════════════════════════════════════════
@@ -36,10 +46,615 @@ export const useEditorStore = defineStore('editor', () => {
   const saving = ref(false)
   const isDirty = ref(false)
 
+  const today = new Date()
+
+  function getISODateString(date: Date = new Date()): string {
+    return date.toISOString()
+  }
+
+  function getDefaultCalendarMetadata(
+    overrides: Partial<CalendarGridMetadata> = {},
+  ): CalendarGridMetadata {
+    const defaultSize = { width: 460, height: 360 }
+    const size = overrides.size ? { ...defaultSize, ...overrides.size } : defaultSize
+    return {
+      kind: 'calendar-grid',
+      mode: overrides.mode ?? 'month',
+      year: overrides.year ?? today.getFullYear(),
+      month: overrides.month ?? today.getMonth() + 1,
+      startDay: overrides.startDay ?? 0,
+      showHeader: overrides.showHeader ?? true,
+      showWeekdays: overrides.showWeekdays ?? true,
+      size,
+    }
+  }
+
+  function getDefaultWeekStripMetadata(
+    overrides: Partial<WeekStripMetadata> = {},
+  ): WeekStripMetadata {
+    const defaultSize = { width: 520, height: 110 }
+    const size = overrides.size ? { ...defaultSize, ...overrides.size } : defaultSize
+    return {
+      kind: 'week-strip',
+      startDate: overrides.startDate ?? getISODateString(),
+      startDay: overrides.startDay ?? 0,
+      label: overrides.label ?? 'Week Plan',
+      size,
+    }
+  }
+
+  function getDefaultPlannerNoteMetadata(
+    pattern: PlannerPatternVariant = 'ruled',
+    overrides: Partial<PlannerNoteMetadata> = {},
+  ): PlannerNoteMetadata {
+    const defaultSize = { width: 280, height: 320 }
+    const size = overrides.size ? { ...defaultSize, ...overrides.size } : defaultSize
+    return {
+      kind: 'planner-note',
+      pattern: overrides.pattern ?? pattern,
+      title: overrides.title ?? 'Notes',
+      accentColor: overrides.accentColor ?? '#2563eb',
+      size,
+    }
+  }
+
+  function getDefaultPhotoBlockMetadata(
+    overrides: Partial<PhotoBlockMetadata> = {},
+  ): PhotoBlockMetadata {
+    const defaultSize = { width: 280, height: 220 }
+    const size = overrides.size ? { ...defaultSize, ...overrides.size } : defaultSize
+    return {
+      kind: 'photo-block',
+      label: overrides.label ?? 'Add photo',
+      accentColor: overrides.accentColor ?? '#0ea5e9',
+      size,
+    }
+  }
+
+  function getDefaultDateCellMetadata(
+    overrides: Partial<DateCellMetadata> = {},
+  ): DateCellMetadata {
+    const defaultSize = { width: 200, height: 220 }
+    const size = overrides.size ? { ...defaultSize, ...overrides.size } : defaultSize
+    return {
+      kind: 'date-cell',
+      date: overrides.date ?? getISODateString(),
+      highlightAccent: overrides.highlightAccent ?? '#fef3c7',
+      notePlaceholder: overrides.notePlaceholder ?? 'Add event',
+      size,
+    }
+  }
+
+  function attachElementMetadata(
+    obj: FabricObject,
+    metadata?: CanvasElementMetadata,
+  ): void {
+    if (!metadata) return
+    const existingData = (obj as any).data ?? {}
+    obj.set('data', {
+      ...existingData,
+      elementMetadata: metadata,
+    })
+  }
+
+  function rebuildElementWithMetadata(
+    target: FabricObject,
+    metadata: CanvasElementMetadata,
+  ): FabricObject | null {
+    let rebuilt: FabricObject | null = null
+    switch (metadata.kind) {
+      case 'calendar-grid':
+        rebuilt = buildCalendarGridGraphics(metadata)
+        break
+      case 'week-strip':
+        rebuilt = buildWeekStripGraphics(metadata)
+        break
+      case 'date-cell':
+        rebuilt = buildDateCellGraphics(metadata)
+        break
+      case 'planner-note':
+        rebuilt = buildPlannerNoteGraphics(metadata)
+        break
+      case 'photo-block':
+        rebuilt = buildPhotoBlockGraphics(metadata)
+        break
+      default:
+        rebuilt = null
+    }
+
+    if (!rebuilt) return null
+
+    rebuilt.set({
+      left: target.left,
+      top: target.top,
+      scaleX: target.scaleX,
+      scaleY: target.scaleY,
+      angle: target.angle,
+      flipX: (target as any).flipX,
+      flipY: (target as any).flipY,
+    })
+
+    ;(rebuilt as any).id = (target as any).id
+    attachElementMetadata(rebuilt, metadata)
+    return rebuilt
+  }
+
+  function getActiveCanvasObject(): FabricObject | null {
+    if (!canvas.value) return null
+    const active = canvas.value.getActiveObject()
+    return active ?? null
+  }
+
+  function getActiveElementMetadata(): CanvasElementMetadata | null {
+    const active = getActiveCanvasObject()
+    if (!active) return null
+    const metadata = (active as any).data?.elementMetadata as CanvasElementMetadata | undefined
+    if (!metadata) return null
+    return JSON.parse(JSON.stringify(metadata)) as CanvasElementMetadata
+  }
+
+  function updateSelectedElementMetadata(
+    updater: (metadata: CanvasElementMetadata) => CanvasElementMetadata | null,
+  ): void {
+    if (!canvas.value) return
+    const active = canvas.value.getActiveObject()
+    if (!active) return
+    const existingMetadata = (active as any).data?.elementMetadata as CanvasElementMetadata | undefined
+    if (!existingMetadata) return
+    const draft = JSON.parse(JSON.stringify(existingMetadata)) as CanvasElementMetadata
+    const nextMetadata = updater(draft)
+    if (!nextMetadata) return
+    const rebuilt = rebuildElementWithMetadata(active, nextMetadata)
+    if (!rebuilt) return
+    canvas.value.remove(active)
+    canvas.value.add(rebuilt)
+    canvas.value.setActiveObject(rebuilt)
+    canvas.value.renderAll()
+    saveToHistory()
+  }
+
+  function buildCalendarGridGraphics(metadata: CalendarGridMetadata): Group {
+    const { width, height } = metadata.size
+    const objects: FabricObject[] = []
+    const headerHeight = metadata.showHeader ? 60 : 0
+    const weekdayHeight = metadata.showWeekdays ? 36 : 0
+    const gridHeight = height - headerHeight - weekdayHeight
+    const cellHeight = gridHeight / 6
+    const cellWidth = width / 7
+
+    objects.push(
+      new Rect({
+        width,
+        height,
+        rx: 26,
+        ry: 26,
+        fill: '#ffffff',
+        stroke: '#e5e7eb',
+        strokeWidth: 1,
+      }),
+    )
+
+    if (metadata.showHeader) {
+      const monthName = calendarGeneratorService.getMonthName(metadata.month)
+      objects.push(
+        new Rect({
+          top: 0,
+          left: 0,
+          width,
+          height: headerHeight,
+          rx: 26,
+          ry: 26,
+          fill: '#111827',
+          opacity: 0.95,
+        }),
+      )
+      objects.push(
+        new Textbox(`${monthName} ${metadata.year}`, {
+          left: 32,
+          top: headerHeight / 2 - 12,
+          width: width - 64,
+          fontSize: 24,
+          fontFamily: 'Outfit',
+          fontWeight: 600,
+          fill: '#ffffff',
+          selectable: false,
+        }),
+      )
+    }
+
+    if (metadata.showWeekdays) {
+      const labels = calendarGeneratorService.getWeekdayNames(metadata.startDay, 'en', 'short')
+      labels.forEach((label, index) => {
+        objects.push(
+          new Textbox(label.toUpperCase(), {
+            left: index * cellWidth + 12,
+            top: headerHeight + 8,
+            width: cellWidth - 24,
+            fontSize: 12,
+            fontWeight: 600,
+            fill: '#6b7280',
+            textAlign: 'center',
+            selectable: false,
+          }),
+        )
+      })
+    }
+
+    const monthData =
+      metadata.mode === 'month'
+        ? calendarGeneratorService.generateMonth(metadata.year, metadata.month, [], metadata.startDay)
+        : null
+    const weeks = monthData?.weeks ?? Array.from({ length: 6 }, () => Array(7).fill(null))
+
+    weeks.forEach((week, weekIndex) => {
+      week.forEach((maybeDay, dayIndex) => {
+        const top =
+          headerHeight + weekdayHeight + weekIndex * cellHeight
+        const left = dayIndex * cellWidth
+
+        objects.push(
+          new Rect({
+            top,
+            left,
+            width: cellWidth,
+            height: cellHeight,
+            fill: 'transparent',
+            stroke: '#e5e7eb',
+            strokeWidth: 1,
+            selectable: false,
+          }),
+        )
+
+        if (maybeDay) {
+          objects.push(
+            new Textbox(String(maybeDay.dayOfMonth), {
+              left: left + cellWidth - 28,
+              top: top + 8,
+              width: 24,
+              fontSize: 16,
+              fontWeight: 600,
+              fill: maybeDay.isCurrentMonth ? '#1f2937' : '#9ca3af',
+              textAlign: 'right',
+              selectable: false,
+            }),
+          )
+
+          if (maybeDay.holidays?.length) {
+            objects.push(
+              new Rect({
+                left: left + 12,
+                top: top + cellHeight - 16,
+                width: cellWidth - 24,
+                height: 4,
+                rx: 2,
+                ry: 2,
+                fill: '#ef4444',
+                selectable: false,
+              }),
+            )
+          }
+        }
+      })
+    })
+
+    return new Group(objects, {
+      subTargetCheck: false,
+      hasControls: true,
+      hoverCursor: 'move',
+    })
+  }
+
+  function buildWeekStripGraphics(metadata: WeekStripMetadata): Group {
+    const { width, height } = metadata.size
+    const objects: FabricObject[] = []
+
+    objects.push(
+      new Rect({
+        width,
+        height,
+        rx: 24,
+        ry: 24,
+        fill: '#ffffff',
+        stroke: '#e5e7eb',
+        strokeWidth: 1,
+      }),
+    )
+
+    const label = metadata.label ?? 'Weekly Focus'
+    objects.push(
+      new Textbox(label, {
+        left: 24,
+        top: 20,
+        width: width - 48,
+        fontSize: 16,
+        fontWeight: 600,
+        fill: '#0f172a',
+        selectable: false,
+      }),
+    )
+
+    const days = calendarGeneratorService.generateWeek(new Date(metadata.startDate), [], metadata.startDay)
+    const bodyTop = 60
+    const cellWidth = width / days.length
+
+    days.forEach((day, index) => {
+      const left = index * cellWidth
+      objects.push(
+        new Rect({
+          left,
+          top: bodyTop,
+          width: cellWidth,
+          height: height - bodyTop - 16,
+          fill: 'transparent',
+          stroke: '#f1f5f9',
+          strokeWidth: 1,
+          selectable: false,
+        }),
+      )
+      objects.push(
+        new Textbox(day.date.toLocaleDateString('en', { weekday: 'short' }), {
+          left: left + 8,
+          top: bodyTop + 8,
+          width: cellWidth - 16,
+          fontSize: 12,
+          fontWeight: 600,
+          fill: '#64748b',
+          selectable: false,
+          textAlign: 'center',
+        }),
+      )
+      objects.push(
+        new Textbox(String(day.dayOfMonth), {
+          left: left + cellWidth / 2 - 12,
+          top: bodyTop + 28,
+          width: 24,
+          fontSize: 22,
+          fontWeight: 700,
+          fill: '#0f172a',
+          selectable: false,
+          textAlign: 'center',
+        }),
+      )
+    })
+
+    return new Group(objects, {
+      subTargetCheck: false,
+      hoverCursor: 'move',
+    })
+  }
+
+  function buildDateCellGraphics(metadata: DateCellMetadata): Group {
+    const { width, height } = metadata.size
+    const objects: FabricObject[] = []
+    const date = new Date(metadata.date)
+
+    objects.push(
+      new Rect({
+        width,
+        height,
+        rx: 24,
+        ry: 24,
+        fill: '#ffffff',
+        stroke: '#e2e8f0',
+        strokeWidth: 1,
+      }),
+    )
+
+    objects.push(
+      new Rect({
+        width,
+        height: height * 0.4,
+        rx: 24,
+        ry: 24,
+        fill: metadata.highlightAccent,
+      }),
+    )
+
+    objects.push(
+      new Textbox(date.toLocaleDateString('en', { weekday: 'long' }), {
+        left: 16,
+        top: 16,
+        width: width - 32,
+        fontSize: 13,
+        fontWeight: 600,
+        fill: '#78350f',
+        selectable: false,
+      }),
+    )
+
+    objects.push(
+      new Textbox(String(date.getDate()), {
+        left: 16,
+        top: 48,
+        width: width - 32,
+        fontSize: 52,
+        fontWeight: 700,
+        fill: '#92400e',
+        selectable: false,
+      }),
+    )
+
+    objects.push(
+      new Textbox(metadata.notePlaceholder ?? 'Add event', {
+        left: 16,
+        top: height * 0.45,
+        width: width - 32,
+        fontSize: 13,
+        fill: '#475569',
+        selectable: false,
+      }),
+    )
+
+    return new Group(objects, {
+      subTargetCheck: false,
+      hoverCursor: 'move',
+    })
+  }
+
+  function buildPlannerNoteGraphics(metadata: PlannerNoteMetadata): Group {
+    const { width, height } = metadata.size
+    const objects: FabricObject[] = []
+
+    objects.push(
+      new Rect({
+        width,
+        height,
+        rx: 28,
+        ry: 28,
+        fill: '#ffffff',
+        stroke: '#e2e8f0',
+        strokeWidth: 1,
+      }),
+    )
+
+    if (metadata.pattern === 'hero') {
+      objects.push(
+        new Rect({
+          width,
+          height: 68,
+          rx: 28,
+          ry: 28,
+          fill: metadata.accentColor,
+        }),
+      )
+      objects.push(
+        new Textbox(metadata.title, {
+          left: 24,
+          top: 24,
+          width: width - 48,
+          fontSize: 18,
+          fontWeight: 600,
+          fill: '#ffffff',
+          selectable: false,
+        }),
+      )
+    } else {
+      objects.push(
+        new Textbox(metadata.title, {
+          left: 24,
+          top: 18,
+          width: width - 48,
+          fontSize: 16,
+          fontWeight: 600,
+          fill: '#0f172a',
+          selectable: false,
+        }),
+      )
+    }
+
+    if (metadata.pattern === 'ruled') {
+      for (let y = 80; y < height - 24; y += 26) {
+        objects.push(
+          new Line([24, y, width - 24, y], {
+            stroke: '#e2e8f0',
+            strokeWidth: 1,
+            selectable: false,
+          }),
+        )
+      }
+    }
+
+    if (metadata.pattern === 'grid') {
+      for (let x = 24; x < width - 24; x += 24) {
+        objects.push(
+          new Line([x, 70, x, height - 24], {
+            stroke: '#eff6ff',
+            strokeWidth: 1,
+            selectable: false,
+          }),
+        )
+      }
+      for (let y = 70; y < height - 24; y += 24) {
+        objects.push(
+          new Line([24, y, width - 24, y], {
+            stroke: '#eff6ff',
+            strokeWidth: 1,
+            selectable: false,
+          }),
+        )
+      }
+    }
+
+    if (metadata.pattern === 'dot') {
+      for (let x = 28; x < width - 28; x += 20) {
+        for (let y = 80; y < height - 28; y += 20) {
+          objects.push(
+            new Rect({
+              left: x,
+              top: y,
+              width: 2,
+              height: 2,
+              rx: 1,
+              ry: 1,
+              fill: '#cbd5f5',
+              selectable: false,
+            }),
+          )
+        }
+      }
+    }
+
+    return new Group(objects, {
+      subTargetCheck: false,
+      hoverCursor: 'text',
+    })
+  }
+
+  function buildPhotoBlockGraphics(metadata: PhotoBlockMetadata): Group {
+    const { width, height } = metadata.size
+    const objects: FabricObject[] = []
+
+    objects.push(
+      new Rect({
+        width,
+        height,
+        rx: 24,
+        ry: 24,
+        fill: '#f0f9ff',
+        stroke: metadata.accentColor,
+        strokeDashArray: [14, 10],
+        strokeWidth: 2,
+      }),
+    )
+
+    objects.push(
+      new Textbox('+', {
+        left: width / 2 - 20,
+        top: height / 2 - 54,
+        width: 40,
+        fontSize: 54,
+        fontWeight: 200,
+        fill: metadata.accentColor,
+        selectable: false,
+        textAlign: 'center',
+      }),
+    )
+
+    objects.push(
+      new Textbox(metadata.label, {
+        left: 0,
+        top: height / 2 + 8,
+        width,
+        fontSize: 15,
+        fontWeight: 600,
+        fill: '#0f172a',
+        textAlign: 'center',
+        selectable: false,
+      }),
+    )
+
+    return new Group(objects, {
+      subTargetCheck: false,
+      hoverCursor: 'pointer',
+    })
+  }
+
   // ═══════════════════════════════════════════════════════════════
   // GETTERS
   // ═══════════════════════════════════════════════════════════════
   const selectedObjects = computed(() => {
+    // Depend on selectedObjectIds to ensure reactivity when selection changes
+    selectedObjectIds.value 
     if (!canvas.value) return []
     return canvas.value.getActiveObjects()
   })
@@ -147,6 +762,18 @@ export const useEditorStore = defineStore('editor', () => {
       case 'calendar-grid':
         fabricObject = createCalendarGridObject(id, options)
         break
+      case 'week-strip':
+        fabricObject = createWeekStripObject(id, options)
+        break
+      case 'date-cell':
+        fabricObject = createDateCellObject(id, options)
+        break
+      case 'notes-panel':
+        fabricObject = createNotesPanelObject(id, options)
+        break
+      case 'photo-block':
+        fabricObject = createPhotoBlockObject(id, options)
+        break
     }
 
     if (fabricObject) {
@@ -158,87 +785,227 @@ export const useEditorStore = defineStore('editor', () => {
   }
 
   function createTextObject(id: string, options: any): FabricObject {
-    return new Textbox(options.content || 'Double-click to edit', {
-      ...options, // Spread potential overrides
+    const {
+      content: rawContent,
+      x,
+      y,
+      left,
+      top,
+      color,
+      fill,
+      selectable,
+      evented,
+      width,
+      fontFamily,
+      fontSize: providedFontSize,
+      textAlign,
+      originX,
+      originY,
+      ...other
+    } = options
+
+    const content =
+      typeof rawContent === 'number'
+        ? String(rawContent)
+        : rawContent || 'Double-click to edit'
+
+    const fontSize = providedFontSize || 24
+    const estimatedWidth = Math.max(content.length * fontSize * 0.6 + 8, fontSize)
+
+    const textbox = new Textbox(content, {
       id,
-      left: options.x || 100,
-      top: options.y || 100,
-      width: options.width || 200,
-      fontFamily: options.fontFamily || 'Inter',
-      fontSize: options.fontSize || 24,
-      fill: options.color || '#000000',
-      textAlign: options.textAlign || 'left',
+      left: x ?? left ?? 100,
+      top: y ?? top ?? 100,
+      fontFamily: fontFamily ?? 'Inter',
+      fontSize,
+      fill: color ?? fill ?? '#000000',
+      textAlign: textAlign ?? 'left',
+      originX: originX ?? 'center',
+      originY: originY ?? 'top',
+      selectable: selectable ?? true,
+      evented: evented ?? true,
+      lockRotation: options.lockRotation ?? true,
+      hasRotatingPoint: options.hasRotatingPoint ?? false,
+      borderColor: options.borderColor ?? '#2563eb',
+      cornerColor: options.cornerColor ?? '#ffffff',
+      cornerStrokeColor: options.cornerStrokeColor ?? '#2563eb',
+      cornerStyle: options.cornerStyle ?? 'circle',
+      cornerSize: options.cornerSize ?? 8,
+      transparentCorners: options.transparentCorners ?? false,
+      borderScaleFactor: options.borderScaleFactor ?? 1,
+      padding: options.padding ?? 0,
+      hoverCursor: options.hoverCursor ?? 'pointer',
+      ...other,
     })
+
+    const measuredWidth = textbox.getLineWidth(0) + textbox.padding * 2
+    const finalWidth = width ?? Math.max(measuredWidth, estimatedWidth)
+    textbox.set({ width: finalWidth })
+    textbox.initDimensions()
+
+    return textbox
   }
 
   function createShapeObject(id: string, options: any): FabricObject {
-    const shapeType = options.shapeType || 'rect'
+    const {
+      shapeType = 'rect',
+      x,
+      y,
+      left,
+      top,
+      width,
+      height,
+      fill,
+      stroke,
+      strokeWidth,
+      radius,
+      cornerRadius,
+      selectable,
+      evented,
+      ...other
+    } = options
+
+    const basePosition = {
+      left: x ?? left ?? 100,
+      top: y ?? top ?? 100,
+      selectable: selectable ?? true,
+      evented: evented ?? true,
+    }
 
     switch (shapeType) {
       case 'circle':
         return new Circle({
           id,
-          left: options.x || 100,
-          top: options.y || 100,
-          radius: options.width ? options.width / 2 : 50,
-          fill: options.fill || '#3b82f6',
-          stroke: options.stroke || '',
-          strokeWidth: options.strokeWidth || 0,
+          radius: radius ?? (width ? width / 2 : 50),
+          fill: fill ?? '#3b82f6',
+          stroke: stroke ?? '',
+          strokeWidth: strokeWidth ?? 0,
+          cornerStyle: other.cornerStyle ?? 'circle',
+          cornerColor: other.cornerColor ?? '#ffffff',
+          cornerStrokeColor: other.cornerStrokeColor ?? '#2563eb',
+          borderColor: other.borderColor ?? '#2563eb',
+          transparentCorners: other.transparentCorners ?? false,
+          cornerSize: other.cornerSize ?? 8,
+          ...basePosition,
+          ...other,
         })
       case 'line':
-        return new Line([0, 0, options.width || 100, 0], {
+        return new Line([0, 0, width ?? 100, 0], {
           id,
-          left: options.x || 100,
-          top: options.y || 100,
-          stroke: options.stroke || '#000000',
-          strokeWidth: options.strokeWidth || 2,
+          stroke: stroke ?? '#000000',
+          strokeWidth: strokeWidth ?? 2,
+          ...basePosition,
+          ...other,
         })
       default:
         return new Rect({
           id,
-          left: options.x || 100,
-          top: options.y || 100,
-          width: options.width || 100,
-          height: options.height || 100,
-          fill: options.fill || '#3b82f6',
-          stroke: options.stroke || '',
-          strokeWidth: options.strokeWidth || 0,
-          rx: options.cornerRadius || 0,
-          ry: options.cornerRadius || 0,
+          width: width ?? 100,
+          height: height ?? 100,
+          fill: fill ?? '#3b82f6',
+          stroke: stroke ?? '',
+          strokeWidth: strokeWidth ?? 0,
+          rx: cornerRadius ?? other.rx ?? 0,
+          ry: cornerRadius ?? other.ry ?? 0,
+          ...basePosition,
+          ...other,
         })
     }
   }
-
   function createCalendarGridObject(id: string, options: any): FabricObject {
-    // Calendar grid is a special grouped object
-    // This is a placeholder - actual implementation would render calendar
-    
-    const placeholder = new Rect({
-      width: options.width || 400,
-      height: options.height || 300,
-      fill: '#f3f4f6',
-      stroke: '#d1d5db',
-      strokeWidth: 1,
+    const metadata = getDefaultCalendarMetadata({
+      mode: options.calendarMode,
+      year: options.year,
+      month: options.month,
+      startDay: options.startDay,
+      showHeader: options.showHeader,
+      showWeekdays: options.showWeekdays,
+      size: options.width && options.height ? { width: options.width, height: options.height } : undefined,
     })
-
-    const label = new Textbox('Calendar Grid', {
-      fontSize: 16,
-      width: 200, 
-      textAlign: 'center',
-      fill: '#6b7280',
-      originX: 'center',
-      originY: 'center',
-      left: 200, // Center in placeholder
-      top: 150
-    })
-
-    return new Group([placeholder, label], {
-      left: options.x || 100,
-      top: options.y || 100,
-      subTargetCheck: true,
-      // @ts-ignore
+    const group = buildCalendarGridGraphics(metadata)
+    group.set({
+      left: options.x ?? options.left ?? 100,
+      top: options.y ?? options.top ?? 120,
       id,
+      subTargetCheck: false,
+      hoverCursor: 'move',
     })
+    attachElementMetadata(group, metadata)
+    return group
+  }
+
+  function createWeekStripObject(id: string, options: any): FabricObject {
+    const metadata = getDefaultWeekStripMetadata({
+      startDate: options.startDate,
+      startDay: options.startDay,
+      label: options.label,
+      size: options.width && options.height ? { width: options.width, height: options.height } : undefined,
+    })
+    const group = buildWeekStripGraphics(metadata)
+    group.set({
+      left: options.x ?? options.left ?? 80,
+      top: options.y ?? options.top ?? 120,
+      id,
+      subTargetCheck: false,
+      hoverCursor: 'move',
+    })
+    attachElementMetadata(group, metadata)
+    return group
+  }
+
+  function createDateCellObject(id: string, options: any): FabricObject {
+    const metadata = getDefaultDateCellMetadata({
+      date: options.date,
+      highlightAccent: options.highlightAccent,
+      notePlaceholder: options.notePlaceholder,
+      size: options.width && options.height ? { width: options.width, height: options.height } : undefined,
+    })
+    const group = buildDateCellGraphics(metadata)
+    group.set({
+      left: options.x ?? options.left ?? 120,
+      top: options.y ?? options.top ?? 140,
+      id,
+      subTargetCheck: false,
+      hoverCursor: 'move',
+    })
+    attachElementMetadata(group, metadata)
+    return group
+  }
+
+  function createNotesPanelObject(id: string, options: any): FabricObject {
+    const metadata = getDefaultPlannerNoteMetadata(options.pattern ?? 'hero', {
+      title: options.title,
+      accentColor: options.accentColor,
+      size: options.width && options.height ? { width: options.width, height: options.height } : undefined,
+    })
+    const group = buildPlannerNoteGraphics(metadata)
+    group.set({
+      left: options.x ?? options.left ?? 80,
+      top: options.y ?? options.top ?? 80,
+      id,
+      subTargetCheck: false,
+      hoverCursor: 'text',
+    })
+    attachElementMetadata(group, metadata)
+    return group
+  }
+
+  function createPhotoBlockObject(id: string, options: any): FabricObject {
+    const metadata = getDefaultPhotoBlockMetadata({
+      label: options.label,
+      accentColor: options.accentColor,
+      size: options.width && options.height ? { width: options.width, height: options.height } : undefined,
+    })
+    const group = buildPhotoBlockGraphics(metadata)
+    group.set({
+      left: options.x ?? options.left ?? 160,
+      top: options.y ?? options.top ?? 140,
+      id,
+      subTargetCheck: false,
+      hoverCursor: 'pointer',
+    })
+    attachElementMetadata(group, metadata)
+    return group
   }
 
   async function addImage(url: string, options: any = {}): Promise<void> {
@@ -519,11 +1286,22 @@ export const useEditorStore = defineStore('editor', () => {
     })
   }
 
+  function snapshotCanvasState(): void {
+    if (!canvas.value) return
+    saveToHistory()
+    isDirty.value = true
+  }
+
   // ═══════════════════════════════════════════════════════════════
   // PROJECT OPERATIONS
   // ═══════════════════════════════════════════════════════════════
 
+  function ensureTemplateOptions(options?: TemplateOptions): TemplateOptions {
+    return mergeTemplateOptions(options)
+  }
+
   function createNewProject(config: CalendarConfig): void {
+    config.templateOptions = ensureTemplateOptions(config.templateOptions)
     project.value = {
       id: `project-${Date.now()}`,
       userId: '', // Set from auth store
@@ -549,7 +1327,13 @@ export const useEditorStore = defineStore('editor', () => {
   }
 
   function loadProject(loadedProject: Project): void {
-    project.value = loadedProject
+    project.value = {
+      ...loadedProject,
+      config: {
+        ...loadedProject.config,
+        templateOptions: ensureTemplateOptions(loadedProject.config.templateOptions),
+      },
+    }
     
     // Reset history
     history.value = []
@@ -619,6 +1403,16 @@ export const useEditorStore = defineStore('editor', () => {
     isDirty.value = true
   }
 
+  function updateTemplateOptions(partial: Partial<TemplateOptions>): void {
+    if (!project.value) return
+
+    project.value.config.templateOptions = ensureTemplateOptions({
+      ...project.value.config.templateOptions,
+      ...partial,
+    })
+    isDirty.value = true
+  }
+
   return {
     // State
     project,
@@ -670,6 +1464,7 @@ export const useEditorStore = defineStore('editor', () => {
     // History
     undo,
     redo,
+    snapshotCanvasState,
     // Project
     createNewProject,
     loadProject,
@@ -678,5 +1473,9 @@ export const useEditorStore = defineStore('editor', () => {
     // Settings
     setCanvasSize,
     setBackgroundColor,
+    updateTemplateOptions,
+    // Metadata-aware helpers
+    getActiveElementMetadata,
+    updateSelectedElementMetadata,
   }
 })

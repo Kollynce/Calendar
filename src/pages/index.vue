@@ -1,99 +1,209 @@
 <script setup lang="ts">
 import { RouterLink } from 'vue-router'
 import { useAuthStore } from '@/stores'
+import AppNavbar from '@/components/layout/AppNavbar.vue'
+import { 
+  CalendarDaysIcon, 
+  SwatchIcon, 
+  ArrowDownTrayIcon, 
+  GlobeAltIcon,
+  SparklesIcon,
+  DevicePhoneMobileIcon
+} from '@heroicons/vue/24/outline'
 
 const authStore = useAuthStore()
+
+const features = [
+  {
+    name: 'African Holidays',
+    description: 'Built-in holiday data for all 54 African countries with local language support.',
+    icon: GlobeAltIcon,
+    color: 'bg-blue-100 text-blue-600'
+  },
+  {
+    name: 'Design Studio',
+    description: 'Powerful canvas editor with drag-and-drop, layers, and professional design tools.',
+    icon: SwatchIcon,
+    color: 'bg-purple-100 text-purple-600'
+  },
+  {
+    name: 'Print-Ready Export',
+    description: 'Export in PDF, PNG, or SVG with bleed marks and crop marks (CMYK available).',
+    icon: ArrowDownTrayIcon,
+    color: 'bg-green-100 text-green-600'
+  },
+  {
+    name: 'Smart Templates',
+    description: 'Start with professionally designed templates for Business, Family, or Schools.',
+    icon: SparklesIcon,
+    color: 'bg-pink-100 text-pink-600'
+  },
+  {
+    name: 'Device Friendly',
+    description: 'Design on the go with our fully responsive interface for tablets and desktops.',
+    icon: DevicePhoneMobileIcon,
+    color: 'bg-orange-100 text-orange-600'
+  },
+  {
+    name: 'Batch Processing',
+    description: 'Generate hundreds of personalized calendars in seconds (Business Plan).',
+    icon: CalendarDaysIcon,
+    color: 'bg-indigo-100 text-indigo-600'
+  }
+]
 </script>
 
 <template>
-  <div class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
+  <div class="min-h-screen bg-gray-50 dark:bg-gray-950">
+    <AppNavbar />
+
     <!-- Hero Section -->
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-16">
-      <div class="text-center">
-        <h1 class="text-4xl sm:text-5xl lg:text-6xl font-bold text-gray-900 dark:text-white">
-          Create Beautiful
-          <span class="text-blue-600 dark:text-blue-400">Calendars</span>
-        </h1>
-        <p class="mt-6 text-xl text-gray-600 dark:text-gray-300 max-w-3xl mx-auto">
-          Design professional calendars for your business, clients, or personal use. 
-          Perfect for printing shops and creators across Africa.
-        </p>
-        
-        <div class="mt-10 flex flex-col sm:flex-row gap-4 justify-center">
-          <RouterLink
-            v-if="authStore.isAuthenticated"
-            to="/dashboard"
-            class="btn btn-primary text-lg px-8 py-3"
-          >
-            Go to Dashboard
-          </RouterLink>
-          <template v-else>
-            <RouterLink
-              to="/register"
-              class="btn btn-primary text-lg px-8 py-3"
-            >
-              Get Started Free
-            </RouterLink>
-            <RouterLink
-              to="/login"
-              class="btn btn-secondary text-lg px-8 py-3"
-            >
-              Sign In
-            </RouterLink>
-          </template>
-        </div>
-      </div>
-    </div>
-
-    <!-- Features Section -->
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-      <h2 class="text-3xl font-bold text-center text-gray-900 dark:text-white mb-12">
-        Everything You Need
-      </h2>
+    <div class="relative pt-32 pb-20 sm:pt-40 sm:pb-24 overflow-hidden">
+      <!-- Background Mesh -->
+      <div class="absolute inset-0 -z-10 bg-[radial-gradient(45rem_50rem_at_top,theme(colors.indigo.100),white)] dark:bg-[radial-gradient(45rem_50rem_at_top,theme(colors.indigo.900),theme(colors.gray.950))] opacity-50"></div>
       
-      <div class="grid md:grid-cols-3 gap-8">
-        <div class="card p-6">
-          <div class="w-12 h-12 bg-blue-100 dark:bg-blue-900 rounded-lg flex items-center justify-center mb-4">
-            <svg class="w-6 h-6 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
+      <div class="mx-auto max-w-7xl px-6 lg:px-8 relative">
+        <div class="mx-auto max-w-2xl text-center">
+          <div class="mb-8 flex justify-center animate-fade-in-up" style="animation-delay: 0.1s">
+            <span class="rounded-full bg-primary-50 px-3 py-1 text-sm font-semibold text-primary-600 ring-1 ring-inset ring-primary-500/20 dark:bg-primary-900/10 dark:text-primary-400">
+              New: 2025 Templates Available
+            </span>
           </div>
-          <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-            African Holidays
-          </h3>
-          <p class="text-gray-600 dark:text-gray-400">
-            Built-in holiday data for all 54 African countries with local language support.
+          <h1 class="text-4xl font-display font-bold tracking-tight text-gray-900 dark:text-white sm:text-6xl animate-fade-in-up" style="animation-delay: 0.2s">
+            Create Beautiful
+            <span class="text-transparent bg-clip-text bg-linear-to-r from-primary-500 to-accent-500">Calendars</span>
+            in Minutes
+          </h1>
+          <p class="mt-6 text-lg leading-8 text-gray-600 dark:text-gray-300 animate-fade-in-up" style="animation-delay: 0.3s">
+            The professional design platform for creators and print shops. 
+            Customize layouts, manage holidays, and export print-ready files with ease.
           </p>
+          <div class="mt-10 flex items-center justify-center gap-x-6 animate-fade-in-up" style="animation-delay: 0.4s">
+            <RouterLink
+              v-if="authStore.isAuthenticated"
+              to="/dashboard"
+              class="btn-primary"
+            >
+              Go to Dashboard
+            </RouterLink>
+            <template v-else>
+              <RouterLink
+                to="/auth/register"
+                class="btn-primary"
+              >
+                Get Started Free
+              </RouterLink>
+              <RouterLink
+                to="/auth/login"
+                class="text-sm font-semibold leading-6 text-gray-900 dark:text-white hover:text-primary-500 transition-colors"
+              >
+                Sign In <span aria-hidden="true">→</span>
+              </RouterLink>
+            </template>
+          </div>
         </div>
-
-        <div class="card p-6">
-          <div class="w-12 h-12 bg-green-100 dark:bg-green-900 rounded-lg flex items-center justify-center mb-4">
-            <svg class="w-6 h-6 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
+        
+        <!-- Hero Image Mockup -->
+        <div class="mt-16 flow-root sm:mt-24 animate-fade-in-up" style="animation-delay: 0.6s">
+          <div class="-m-2 rounded-xl bg-gray-900/5 p-2 ring-1 ring-inset ring-gray-900/10 dark:bg-white/5 dark:ring-white/10 lg:-m-4 lg:rounded-2xl lg:p-4">
+            <div class="aspect-video rounded-md bg-gray-200 dark:bg-gray-800 shadow-2xl flex items-center justify-center text-gray-400">
+              <!-- Placeholder for App Screenshot -->
+              <span class="text-lg font-medium">App Screenshot Playground</span>
+            </div>
           </div>
-          <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-            Design Studio
-          </h3>
-          <p class="text-gray-600 dark:text-gray-400">
-            Powerful canvas editor with drag-and-drop, layers, and professional design tools.
-          </p>
-        </div>
-
-        <div class="card p-6">
-          <div class="w-12 h-12 bg-purple-100 dark:bg-purple-900 rounded-lg flex items-center justify-center mb-4">
-            <svg class="w-6 h-6 text-purple-600 dark:text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-            </svg>
-          </div>
-          <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-            Print-Ready Export
-          </h3>
-          <p class="text-gray-600 dark:text-gray-400">
-            Export in PDF, PNG, or SVG with bleed marks and crop marks for professional printing.
-          </p>
         </div>
       </div>
     </div>
+
+    <!-- Features Grid -->
+    <div class="py-24 sm:py-32 bg-white dark:bg-gray-900" id="features">
+      <div class="mx-auto max-w-7xl px-6 lg:px-8">
+        <div class="mx-auto max-w-2xl text-center">
+          <h2 class="text-base font-semibold leading-7 text-primary-600">Everything you need</h2>
+          <p class="mt-2 text-3xl font-display font-bold tracking-tight text-gray-900 dark:text-white sm:text-4xl">
+            Professional tools for everyone
+          </p>
+          <p class="mt-6 text-lg leading-8 text-gray-600 dark:text-gray-400">
+            Whether you're a hobbyist or a print shop owner, we have the features to streamline your workflow.
+          </p>
+        </div>
+        <div class="mx-auto mt-16 max-w-2xl sm:mt-20 lg:mt-24 lg:max-w-none">
+          <dl class="grid max-w-xl grid-cols-1 gap-x-8 gap-y-16 lg:max-w-none lg:grid-cols-3">
+            <div v-for="feature in features" :key="feature.name" class="flex flex-col">
+              <dt class="flex items-center gap-x-3 text-base font-semibold leading-7 text-gray-900 dark:text-white">
+                <div :class="['h-10 w-10 flex items-center justify-center rounded-lg', feature.color.replace('text-', 'bg-').replace('100', '500/10')]">
+                  <component :is="feature.icon" class="h-6 w-6" :class="feature.color" aria-hidden="true" />
+                </div>
+                {{ feature.name }}
+              </dt>
+              <dd class="mt-4 flex flex-auto flex-col text-base leading-7 text-gray-600 dark:text-gray-400">
+                <p class="flex-auto">{{ feature.description }}</p>
+              </dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+    </div>
+
+    <!-- CTA Section -->
+    <div class="relative isolate mt-32 px-6 py-32 sm:mt-56 sm:py-40 lg:px-8 bg-gray-900 text-center overflow-hidden">
+      <!-- Gradient effects -->
+      <div class="absolute inset-0 -z-10 transform-gpu bg-[radial-gradient(45rem_50rem_at_top,theme(colors.indigo.800),theme(colors.gray.900))] opacity-20 filter blur-3xl"></div>
+      
+      <div class="mx-auto max-w-2xl text-center z-10 relative">
+        <h2 class="text-3xl font-display font-bold tracking-tight text-white sm:text-4xl">
+          Ready to start designing?
+        </h2>
+        <p class="mx-auto mt-6 max-w-xl text-lg leading-8 text-gray-300">
+          Join thousands of creators and print shops using Calendar Creator today.
+        </p>
+        <div class="mt-10 flex items-center justify-center gap-x-6">
+          <RouterLink
+            to="/auth/register"
+            class="rounded-md bg-white px-3.5 py-2.5 text-sm font-semibold text-gray-900 shadow-sm hover:bg-gray-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+          >
+            Get started for free
+          </RouterLink>
+          <RouterLink to="/features" class="text-sm font-semibold leading-6 text-white">
+            Learn more <span aria-hidden="true">→</span>
+          </RouterLink>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-gray-50 dark:bg-gray-950 border-t border-gray-200 dark:border-gray-800" aria-labelledby="footer-heading">
+      <h2 id="footer-heading" class="sr-only">Footer</h2>
+      <div class="mx-auto max-w-7xl px-6 py-12 lg:px-8 lg:py-16">
+        <div class="grid grid-cols-2 gap-8 md:grid-cols-4">
+            <div>
+              <h3 class="text-sm font-semibold leading-6 text-gray-900 dark:text-white">Product</h3>
+              <ul role="list" class="mt-6 space-y-4">
+                <li><a href="#" class="text-sm leading-6 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white">Features</a></li>
+                <li><a href="#" class="text-sm leading-6 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white">Templates</a></li>
+                <li><a href="#" class="text-sm leading-6 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white">Pricing</a></li>
+              </ul>
+            </div>
+            <div>
+              <h3 class="text-sm font-semibold leading-6 text-gray-900 dark:text-white">Company</h3>
+              <ul role="list" class="mt-6 space-y-4">
+                <li><a href="#" class="text-sm leading-6 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white">About</a></li>
+                <li><a href="#" class="text-sm leading-6 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white">Blog</a></li>
+                <li><a href="#" class="text-sm leading-6 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white">Careers</a></li>
+              </ul>
+            </div>
+             <div>
+              <h3 class="text-sm font-semibold leading-6 text-gray-900 dark:text-white">Legal</h3>
+              <ul role="list" class="mt-6 space-y-4">
+                <li><a href="#" class="text-sm leading-6 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white">Privacy</a></li>
+                <li><a href="#" class="text-sm leading-6 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white">Terms</a></li>
+              </ul>
+            </div>
+        </div>
+        <div class="mt-16 border-t border-gray-900/10 dark:border-gray-700 pt-8 sm:mt-20 lg:mt-24">
+          <p class="text-xs leading-5 text-gray-500 dark:text-gray-400">&copy; 2024 Calendar Creator. All rights reserved.</p>
+        </div>
+      </div>
+    </footer>
   </div>
 </template>

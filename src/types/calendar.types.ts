@@ -7,7 +7,18 @@ export interface CalendarConfig {
   showHolidays: boolean
   showCustomHolidays: boolean
   showWeekNumbers: boolean
-  currentMonth?: number
+  currentMonth?: number // For monthly view navigation
+  templateOptions?: TemplateOptions
+}
+
+export interface TemplateOptions {
+  highlightToday: boolean
+  highlightWeekends: boolean
+  hasPhotoArea: boolean
+  hasNotesArea: boolean
+  primaryColor?: string
+  accentColor?: string
+  backgroundColor?: string
 }
 
 export type CalendarLayout = 

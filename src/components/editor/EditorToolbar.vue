@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useEditorStore } from '@/stores/editor.store'
 import ExportModal from '@/components/export/ExportModal.vue'
+import { Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/vue'
 import { 
   ArrowUturnLeftIcon,
   ArrowUturnRightIcon,
@@ -13,6 +14,13 @@ import {
   Bars3Icon,
   Bars3BottomRightIcon,
   ArrowDownTrayIcon,
+  CursorArrowRaysIcon, // For Select
+  PencilSquareIcon, // For Text
+  Square2StackIcon, // For Shape
+  PhotoIcon, // For Image
+  CalendarIcon, // For Calendar
+  StopIcon, // For Rect
+  ViewColumnsIcon // For Line (approx)
 } from '@heroicons/vue/24/outline'
 
 const editorStore = useEditorStore()
@@ -24,14 +32,6 @@ const {
   saving 
 } = storeToRefs(editorStore)
 
-const tools = [
-  { id: 'select', icon: 'cursor', label: 'Select' },
-  { id: 'text', icon: 'text', label: 'Text' },
-  { id: 'shape', icon: 'shape', label: 'Shape' },
-  { id: 'image', icon: 'image', label: 'Image' },
-  { id: 'calendar', icon: 'calendar', label: 'Calendar' },
-]
-
 const activeTool = ref('select')
 const showExportModal = ref(false)
 
@@ -40,13 +40,18 @@ function selectTool(toolId: string): void {
   
   if (toolId === 'text') {
     editorStore.addObject('text')
-  } else if (toolId === 'shape') {
-    editorStore.addObject('shape')
   } else if (toolId === 'calendar') {
     editorStore.addObject('calendar-grid')
   } else if (toolId === 'image') {
       handleImageUpload()
+  } else if (toolId === 'select') {
+    // Just select mode
   }
+}
+
+function addShape(shapeType: string): void {
+  editorStore.addObject('shape', { shapeType })
+  activeTool.value = 'shape'
 }
 
 function handleImageUpload(): void {
@@ -105,25 +110,105 @@ function openExportModal(): void {
 
     <!-- Tools -->
     <div class="flex items-center gap-1 px-2 border-r border-gray-200 dark:border-gray-700">
+      <!-- Select -->
       <button
-        v-for="tool in tools"
-        :key="tool.id"
-        class="p-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        :class="{ 'bg-primary-100 text-primary-600 dark:bg-primary-900/50 dark:text-primary-400': activeTool === tool.id }"
-        @click="selectTool(tool.id)"
-        :title="tool.label"
+        class="p-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+        :class="{ 'bg-primary-100 text-primary-600 dark:bg-primary-900/50 dark:text-primary-400': activeTool === 'select' }"
+        @click="selectTool('select')"
+        title="Select"
       >
-        <span class="capitalize text-xs font-medium">{{ tool.label }}</span>
+        <CursorArrowRaysIcon class="w-5 h-5" />
       </button>
-      
+
+      <!-- Text -->
       <button
-        class="p-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        class="p-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+        :class="{ 'bg-primary-100 text-primary-600 dark:bg-primary-900/50 dark:text-primary-400': activeTool === 'text' }"
+        @click="selectTool('text')"
+        title="Text"
+      >
+        <PencilSquareIcon class="w-5 h-5" />
+      </button>
+
+      <!-- Shape Dropdown -->
+      <Menu as="div" class="relative">
+        <MenuButton
+          class="p-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center gap-1"
+          :class="{ 'bg-primary-100 text-primary-600 dark:bg-primary-900/50 dark:text-primary-400': activeTool === 'shape' }"
+        >
+          <Square2StackIcon class="w-5 h-5" />
+        </MenuButton>
+        <transition
+          enter-active-class="transition duration-100 ease-out"
+          enter-from-class="transform scale-95 opacity-0"
+          enter-to-class="transform scale-100 opacity-100"
+          leave-active-class="transition duration-75 ease-in"
+          leave-from-class="transform scale-100 opacity-100"
+          leave-to-class="transform scale-95 opacity-0"
+        >
+          <MenuItems
+            class="absolute left-0 mt-2 w-32 origin-top-left divide-y divide-gray-100 rounded-md bg-white dark:bg-gray-800 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none z-50"
+          >
+            <div class="px-1 py-1">
+              <MenuItem v-slot="{ active }">
+                <button
+                  :class="[
+                    active ? 'bg-primary-500 text-white' : 'text-gray-900 dark:text-gray-200',
+                    'group flex w-full items-center rounded-md px-2 py-2 text-sm',
+                  ]"
+                  @click="addShape('rect')"
+                >
+                  <StopIcon class="mr-2 h-4 w-4" />
+                  Rectangle
+                </button>
+              </MenuItem>
+              <MenuItem v-slot="{ active }">
+                <button
+                  :class="[
+                    active ? 'bg-primary-500 text-white' : 'text-gray-900 dark:text-gray-200',
+                    'group flex w-full items-center rounded-md px-2 py-2 text-sm',
+                  ]"
+                  @click="addShape('circle')"
+                >
+                  <div class="mr-2 h-4 w-4 border-2 border-current rounded-full"></div>
+                  Circle
+                </button>
+              </MenuItem>
+              <MenuItem v-slot="{ active }">
+                <button
+                  :class="[
+                    active ? 'bg-primary-500 text-white' : 'text-gray-900 dark:text-gray-200',
+                    'group flex w-full items-center rounded-md px-2 py-2 text-sm',
+                  ]"
+                  @click="addShape('line')"
+                >
+                   <ViewColumnsIcon class="mr-2 h-4 w-4 transform rotate-90" />
+                  Line
+                </button>
+              </MenuItem>
+            </div>
+          </MenuItems>
+        </transition>
+      </Menu>
+
+      <!-- Calendar -->
+      <button
+        class="p-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+        :class="{ 'bg-primary-100 text-primary-600 dark:bg-primary-900/50 dark:text-primary-400': activeTool === 'calendar' }"
+        @click="selectTool('calendar')"
+        title="Calendar"
+      >
+        <CalendarIcon class="w-5 h-5" />
+      </button>
+
+      <!-- Image -->
+      <button
+        class="p-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+        :class="{ 'bg-primary-100 text-primary-600 dark:bg-primary-900/50 dark:text-primary-400': activeTool === 'image' }"
         @click="handleImageUpload"
         title="Upload Image"
       >
-        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-        </svg>
+        <PhotoIcon class="w-5 h-5" />
       </button>
     </div>
 

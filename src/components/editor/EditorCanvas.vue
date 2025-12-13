@@ -20,19 +20,29 @@ const {
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const containerRef = ref<HTMLDivElement | null>(null)
 
-// Initialize canvas
-onMounted(() => {
-  if (canvasRef.value) {
+function initCanvas() {
+  if (canvasRef.value && editorStore.project && !editorStore.canvas) {
     editorStore.initializeCanvas(canvasRef.value)
     // Small timeout to ensure container is sized
     setTimeout(() => {
       editorStore.fitToScreen()
     }, 100)
   }
+}
 
-  // Keyboard shortcuts
+// Initialize canvas
+onMounted(() => {
+  initCanvas()
   window.addEventListener('keydown', handleKeydown)
 })
+
+// Watch for project to be ready (handles race condition where parent sets project after child mounts)
+watch(
+  () => editorStore.project,
+  () => {
+    initCanvas()
+  }
+)
 
 onUnmounted(() => {
   editorStore.destroyCanvas()

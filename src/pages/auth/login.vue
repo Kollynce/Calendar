@@ -13,7 +13,7 @@ const loading = ref(false)
 async function handleSubmit() {
   loading.value = true
   try {
-    await authStore.signInWithEmail(email.value, password.value)
+    await authStore.signIn(email.value, password.value)
     router.push('/dashboard')
   } catch {
     // Error is handled in store

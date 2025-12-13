@@ -1,4 +1,4 @@
-import type { CalendarConfig } from './calendar.types'
+import type { CalendarConfig, WeekDay } from './calendar.types'
 
 export interface Project {
   id: string
@@ -44,6 +44,10 @@ export interface CanvasObject {
 
 export type ObjectType = 
   | 'calendar-grid'
+  | 'week-strip'
+  | 'date-cell'
+  | 'notes-panel'
+  | 'photo-block'
   | 'text'
   | 'image'
   | 'shape'
@@ -54,6 +58,7 @@ export type ObjectProperties =
   | TextProperties
   | ImageProperties
   | ShapeProperties
+  | PlannerElementProperties
 
 export interface CalendarGridProperties {
   month?: number
@@ -94,4 +99,77 @@ export interface ShapeProperties {
   stroke: string
   strokeWidth: number
   cornerRadius?: number
+}
+
+export interface PlannerElementProperties {
+  variant: 'notes-panel' | 'photo-block' | 'week-strip' | 'date-cell'
+  accentColor?: string
+  title?: string
+  [key: string]: any
+}
+
+export type PlannerPatternVariant = 'hero' | 'ruled' | 'grid' | 'dot'
+
+export type CanvasElementMetadata =
+  | CalendarGridMetadata
+  | WeekStripMetadata
+  | DateCellMetadata
+  | PlannerNoteMetadata
+  | PhotoBlockMetadata
+
+export interface CalendarGridMetadata {
+  kind: 'calendar-grid'
+  mode: 'blank' | 'month'
+  year: number
+  month: number
+  startDay: WeekDay
+  showHeader: boolean
+  showWeekdays: boolean
+  size: {
+    width: number
+    height: number
+  }
+}
+
+export interface WeekStripMetadata {
+  kind: 'week-strip'
+  startDate: string
+  startDay: WeekDay
+  label?: string
+  size: {
+    width: number
+    height: number
+  }
+}
+
+export interface DateCellMetadata {
+  kind: 'date-cell'
+  date: string
+  highlightAccent: string
+  notePlaceholder: string
+  size: {
+    width: number
+    height: number
+  }
+}
+
+export interface PlannerNoteMetadata {
+  kind: 'planner-note'
+  pattern: PlannerPatternVariant
+  title: string
+  accentColor: string
+  size: {
+    width: number
+    height: number
+  }
+}
+
+export interface PhotoBlockMetadata {
+  kind: 'photo-block'
+  label: string
+  accentColor: string
+  size: {
+    width: number
+    height: number
+  }
 }

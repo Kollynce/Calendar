@@ -176,12 +176,39 @@ export const useAuthStore = defineStore('auth', () => {
   /**
    * Sign in with email and password
    */
-  async function signIn(email: string, password: string): Promise<void> {
+  async function signIn(emailInput: string, password: string): Promise<void> {
     loading.value = true
     error.value = null
     
     try {
-      const result = await signInWithEmailAndPassword(auth, email, password)
+      // Demo mode - use mock users
+      if (isDemoMode) {
+        const demoUser = DEMO_USERS[emailInput]
+        if (demoUser) {
+          user.value = demoUser
+          return
+        }
+        // Allow any email in demo mode with a default user
+        user.value = {
+          id: 'demo-user-' + Date.now(),
+          email: emailInput,
+          displayName: emailInput.split('@')[0],
+          role: 'user',
+          subscription: 'pro', // Give pro access in demo
+          preferences: {
+            theme: 'system',
+            language: 'en',
+            defaultCountry: 'ZA',
+            emailNotifications: true,
+            marketingEmails: false,
+          },
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }
+        return
+      }
+
+      const result = await signInWithEmailAndPassword(auth, emailInput, password)
       await fetchUserProfile(result.user.uid)
     } catch (e: any) {
       error.value = getAuthErrorMessage(e.code)

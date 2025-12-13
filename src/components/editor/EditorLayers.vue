@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useEditorStore } from '@/stores/editor.store'
 import { 
@@ -11,9 +11,57 @@ import {
 } from '@heroicons/vue/24/outline'
 
 const editorStore = useEditorStore()
-const { canvas, selectedObjectIds } = storeToRefs(editorStore)
+const { canvas, selectedObjectIds, isDirty } = storeToRefs(editorStore)
+
+// Force reactivity by tracking a version counter
+const layerVersion = ref(0)
+
+// Watch for canvas changes and dirty state to trigger layer refresh
+watch([canvas, isDirty], () => {
+  layerVersion.value++
+}, { deep: true })
+
+// Set up canvas event listeners for real-time updates
+onMounted(() => {
+  setupCanvasListeners()
+})
+
+onUnmounted(() => {
+  cleanupCanvasListeners()
+})
+
+function setupCanvasListeners() {
+  if (!canvas.value) return
+  canvas.value.on('object:added', refreshLayers)
+  canvas.value.on('object:removed', refreshLayers)
+  canvas.value.on('object:modified', refreshLayers)
+}
+
+function cleanupCanvasListeners() {
+  if (!canvas.value) return
+  canvas.value.off('object:added', refreshLayers)
+  canvas.value.off('object:removed', refreshLayers)
+  canvas.value.off('object:modified', refreshLayers)
+}
+
+function refreshLayers() {
+  layerVersion.value++
+}
+
+// Watch for canvas initialization
+watch(canvas, (newCanvas) => {
+  if (newCanvas) {
+    cleanupCanvasListeners()
+    setupCanvasListeners()
+    refreshLayers()
+  }
+})
 
 const layers = computed(() => {
+  // Access layerVersion to make this reactive (intentionally unused)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  void layerVersion.value
+  
   if (!canvas.value) return []
   
   // Fabric.js types are a bit weak here, casting to any
@@ -81,11 +129,7 @@ function deleteLayer(id: string): void {
 </script>
 
 <template>
-  <div class="editor-layers h-full flex flex-col bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 w-64">
-    <div class="p-3 border-b border-gray-200 dark:border-gray-700">
-      <h3 class="font-semibold text-gray-900 dark:text-white">Layers</h3>
-    </div>
-
+  <div class="editor-layers h-full flex flex-col">
     <div class="layers-list flex-1 overflow-y-auto">
       <div
         v-for="layer in layers"

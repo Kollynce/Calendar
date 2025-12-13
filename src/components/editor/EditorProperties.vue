@@ -4,6 +4,15 @@ import { storeToRefs } from 'pinia'
 import { useEditorStore } from '@/stores/editor.store'
 import ColorPicker from './ColorPicker.vue'
 import FontPicker from './FontPicker.vue'
+import type {
+  CalendarGridMetadata,
+  WeekStripMetadata,
+  DateCellMetadata,
+  PlannerNoteMetadata,
+  PhotoBlockMetadata,
+  PlannerPatternVariant,
+  CanvasElementMetadata,
+} from '@/types'
 
 const editorStore = useEditorStore()
 const { selectedObjects, hasSelection } = storeToRefs(editorStore)
@@ -56,6 +65,106 @@ const strokeWidth = computed({
   get: () => (selectedObject.value as any)?.strokeWidth || 0,
   set: (value) => editorStore.updateObjectProperty('strokeWidth', value),
 })
+
+const elementMetadata = computed<CanvasElementMetadata | null>(() =>
+  editorStore.getActiveElementMetadata(),
+)
+
+const calendarMetadata = computed<CalendarGridMetadata | null>(() =>
+  elementMetadata.value?.kind === 'calendar-grid' ? elementMetadata.value : null,
+)
+
+const weekStripMetadata = computed<WeekStripMetadata | null>(() =>
+  elementMetadata.value?.kind === 'week-strip' ? elementMetadata.value : null,
+)
+
+const dateCellMetadata = computed<DateCellMetadata | null>(() =>
+  elementMetadata.value?.kind === 'date-cell' ? elementMetadata.value : null,
+)
+
+const plannerNoteMetadata = computed<PlannerNoteMetadata | null>(() =>
+  elementMetadata.value?.kind === 'planner-note' ? elementMetadata.value : null,
+)
+
+const photoBlockMetadata = computed<PhotoBlockMetadata | null>(() =>
+  elementMetadata.value?.kind === 'photo-block' ? elementMetadata.value : null,
+)
+
+function updateCalendarMetadata(updater: (draft: CalendarGridMetadata) => void) {
+  editorStore.updateSelectedElementMetadata((metadata) => {
+    if (metadata.kind !== 'calendar-grid') return null
+    updater(metadata)
+    return metadata
+  })
+}
+
+function updateWeekStripMetadata(updater: (draft: WeekStripMetadata) => void) {
+  editorStore.updateSelectedElementMetadata((metadata) => {
+    if (metadata.kind !== 'week-strip') return null
+    updater(metadata)
+    return metadata
+  })
+}
+
+function updateDateCellMetadata(updater: (draft: DateCellMetadata) => void) {
+  editorStore.updateSelectedElementMetadata((metadata) => {
+    if (metadata.kind !== 'date-cell') return null
+    updater(metadata)
+    return metadata
+  })
+}
+
+function updatePlannerMetadata(updater: (draft: PlannerNoteMetadata) => void) {
+  editorStore.updateSelectedElementMetadata((metadata) => {
+    if (metadata.kind !== 'planner-note') return null
+    updater(metadata)
+    return metadata
+  })
+}
+
+function updatePhotoMetadata(updater: (draft: PhotoBlockMetadata) => void) {
+  editorStore.updateSelectedElementMetadata((metadata) => {
+    if (metadata.kind !== 'photo-block') return null
+    updater(metadata)
+    return metadata
+  })
+}
+
+const monthOptions = Array.from({ length: 12 }, (_, index) => ({
+  value: index + 1,
+  label: new Date(2024, index, 1).toLocaleDateString('en', { month: 'long' }),
+}))
+
+const weekStartOptions = [
+  { value: 0, label: 'Sunday' },
+  { value: 1, label: 'Monday' },
+  { value: 2, label: 'Tuesday' },
+  { value: 3, label: 'Wednesday' },
+  { value: 4, label: 'Thursday' },
+  { value: 5, label: 'Friday' },
+  { value: 6, label: 'Saturday' },
+]
+
+const plannerPatternOptions: { value: PlannerPatternVariant; label: string }[] = [
+  { value: 'hero', label: 'Hero Banner' },
+  { value: 'ruled', label: 'Ruled Lines' },
+  { value: 'grid', label: 'Grid' },
+  { value: 'dot', label: 'Dot Grid' },
+]
+
+const weekStripDateValue = computed(() =>
+  weekStripMetadata.value?.startDate?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
+)
+
+const dateCellDateValue = computed(() =>
+  dateCellMetadata.value?.date?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
+)
+
+function handleDateInput(value: string, updater: (iso: string) => void) {
+  if (!value) return
+  const iso = new Date(`${value}T00:00:00`).toISOString()
+  updater(iso)
+}
 
 // Common properties
 const opacity = computed({
@@ -181,6 +290,231 @@ const rotation = computed({
               class="w-full"
             />
             <span class="text-xs text-gray-500">{{ strokeWidth }}px</span>
+          </div>
+        </div>
+      </template>
+
+      <!-- Calendar Grid Properties -->
+      <template v-if="calendarMetadata">
+        <div class="space-y-4 border border-gray-200 dark:border-gray-700 rounded-2xl p-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-xs font-semibold text-gray-500 uppercase tracking-widest">Calendar</p>
+              <p class="text-sm text-gray-700 dark:text-gray-100">Month Grid</p>
+            </div>
+            <select
+              class="text-xs px-2 py-1 rounded-lg bg-gray-100 dark:bg-gray-800"
+              :value="calendarMetadata.mode"
+              @change="updateCalendarMetadata((draft) => { draft.mode = ($event.target as HTMLSelectElement).value as CalendarGridMetadata['mode'] })"
+            >
+              <option value="month">Actual Month</option>
+              <option value="blank">Blank Grid</option>
+            </select>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Year</label>
+              <input
+                type="number"
+                min="1900"
+                max="2100"
+                class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                :value="calendarMetadata.year"
+                @change="updateCalendarMetadata((draft) => { draft.year = Number(($event.target as HTMLInputElement).value) || draft.year })"
+              />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Month</label>
+              <select
+                class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                :value="calendarMetadata.month"
+                @change="updateCalendarMetadata((draft) => { draft.month = Number(($event.target as HTMLSelectElement).value) || draft.month })"
+              >
+                <option v-for="month in monthOptions" :key="month.value" :value="month.value">
+                  {{ month.label }}
+                </option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Week Starts On</label>
+            <select
+              class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+              :value="calendarMetadata.startDay"
+              @change="updateCalendarMetadata((draft) => { draft.startDay = Number(($event.target as HTMLSelectElement).value) as CalendarGridMetadata['startDay'] })"
+            >
+              <option v-for="day in weekStartOptions" :key="day.value" :value="day.value">
+                {{ day.label }}
+              </option>
+            </select>
+          </div>
+          <div class="flex items-center justify-between text-sm">
+            <label class="flex items-center gap-2">
+              <input
+                type="checkbox"
+                class="accent-primary-500"
+                :checked="calendarMetadata.showHeader"
+                @change="updateCalendarMetadata((draft) => { draft.showHeader = ($event.target as HTMLInputElement).checked })"
+              >
+              <span>Show header</span>
+            </label>
+            <label class="flex items-center gap-2">
+              <input
+                type="checkbox"
+                class="accent-primary-500"
+                :checked="calendarMetadata.showWeekdays"
+                @change="updateCalendarMetadata((draft) => { draft.showWeekdays = ($event.target as HTMLInputElement).checked })"
+              >
+              <span>Show weekdays</span>
+            </label>
+          </div>
+        </div>
+      </template>
+
+      <!-- Week Strip Properties -->
+      <template v-if="weekStripMetadata">
+        <div class="space-y-4 border border-gray-200 dark:border-gray-700 rounded-2xl p-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-xs font-semibold text-gray-500 uppercase tracking-widest">Week Strip</p>
+              <p class="text-sm text-gray-700 dark:text-gray-100">Planner Bar</p>
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Label</label>
+            <input
+              type="text"
+              class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+              :value="weekStripMetadata.label"
+              @input="updateWeekStripMetadata((draft) => { draft.label = ($event.target as HTMLInputElement).value })"
+            />
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Start Date</label>
+              <input
+                type="date"
+                class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                :value="weekStripDateValue"
+                @change="handleDateInput(($event.target as HTMLInputElement).value, (iso) => updateWeekStripMetadata((draft) => { draft.startDate = iso }))"
+              />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Week Starts On</label>
+              <select
+                class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                :value="weekStripMetadata.startDay"
+                @change="updateWeekStripMetadata((draft) => { draft.startDay = Number(($event.target as HTMLSelectElement).value) as WeekStripMetadata['startDay'] })"
+              >
+                <option v-for="day in weekStartOptions" :key="day.value" :value="day.value">
+                  {{ day.label }}
+                </option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- Date Card Properties -->
+      <template v-if="dateCellMetadata">
+        <div class="space-y-4 border border-gray-200 dark:border-gray-700 rounded-2xl p-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-xs font-semibold text-gray-500 uppercase tracking-widest">Day Card</p>
+              <p class="text-sm text-gray-700 dark:text-gray-100">Highlight Tile</p>
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Date</label>
+              <input
+                type="date"
+                class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                :value="dateCellDateValue"
+                @change="handleDateInput(($event.target as HTMLInputElement).value, (iso) => updateDateCellMetadata((draft) => { draft.date = iso }))"
+              />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Accent</label>
+              <ColorPicker
+                :model-value="dateCellMetadata.highlightAccent"
+                @update:model-value="(color) => updateDateCellMetadata((draft) => { draft.highlightAccent = color })"
+              />
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Note Placeholder</label>
+            <input
+              type="text"
+              class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+              :value="dateCellMetadata.notePlaceholder"
+              @input="updateDateCellMetadata((draft) => { draft.notePlaceholder = ($event.target as HTMLInputElement).value })"
+            />
+          </div>
+        </div>
+      </template>
+
+      <!-- Planner Panel Properties -->
+      <template v-if="plannerNoteMetadata">
+        <div class="space-y-4 border border-gray-200 dark:border-gray-700 rounded-2xl p-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-xs font-semibold text-gray-500 uppercase tracking-widest">Planner Block</p>
+              <p class="text-sm text-gray-700 dark:text-gray-100">Patterned Notes</p>
+            </div>
+            <select
+              class="text-xs px-2 py-1 rounded-lg bg-gray-100 dark:bg-gray-800"
+              :value="plannerNoteMetadata.pattern"
+              @change="updatePlannerMetadata((draft) => { draft.pattern = ($event.target as HTMLSelectElement).value as PlannerPatternVariant })"
+            >
+              <option v-for="pattern in plannerPatternOptions" :key="pattern.value" :value="pattern.value">
+                {{ pattern.label }}
+              </option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Title</label>
+            <input
+              type="text"
+              class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+              :value="plannerNoteMetadata.title"
+              @input="updatePlannerMetadata((draft) => { draft.title = ($event.target as HTMLInputElement).value })"
+            />
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Accent Color</label>
+            <ColorPicker
+              :model-value="plannerNoteMetadata.accentColor"
+              @update:model-value="(color) => updatePlannerMetadata((draft) => { draft.accentColor = color })"
+            />
+          </div>
+        </div>
+      </template>
+
+      <!-- Photo Block Properties -->
+      <template v-if="photoBlockMetadata">
+        <div class="space-y-4 border border-gray-200 dark:border-gray-700 rounded-2xl p-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-xs font-semibold text-gray-500 uppercase tracking-widest">Photo Drop</p>
+              <p class="text-sm text-gray-700 dark:text-gray-100">Media Placeholder</p>
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Label</label>
+            <input
+              type="text"
+              class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+              :value="photoBlockMetadata.label"
+              @input="updatePhotoMetadata((draft) => { draft.label = ($event.target as HTMLInputElement).value })"
+            />
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Accent Color</label>
+            <ColorPicker
+              :model-value="photoBlockMetadata.accentColor"
+              @update:model-value="(color) => updatePhotoMetadata((draft) => { draft.accentColor = color })"
+            />
           </div>
         </div>
       </template>
