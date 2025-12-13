@@ -48,6 +48,8 @@ export type ObjectType =
   | 'date-cell'
   | 'notes-panel'
   | 'photo-block'
+  | 'schedule'
+  | 'checklist'
   | 'text'
   | 'image'
   | 'shape'
@@ -102,7 +104,7 @@ export interface ShapeProperties {
 }
 
 export interface PlannerElementProperties {
-  variant: 'notes-panel' | 'photo-block' | 'week-strip' | 'date-cell'
+  variant: 'notes-panel' | 'photo-block' | 'week-strip' | 'date-cell' | 'schedule' | 'checklist'
   accentColor?: string
   title?: string
   [key: string]: any
@@ -110,12 +112,16 @@ export interface PlannerElementProperties {
 
 export type PlannerPatternVariant = 'hero' | 'ruled' | 'grid' | 'dot'
 
+export type PlannerHeaderStyle = 'none' | 'minimal' | 'filled' | 'tint'
+
 export type CanvasElementMetadata =
   | CalendarGridMetadata
   | WeekStripMetadata
   | DateCellMetadata
   | PlannerNoteMetadata
   | PhotoBlockMetadata
+  | ScheduleMetadata
+  | ChecklistMetadata
 
 export interface CalendarGridMetadata {
   kind: 'calendar-grid'
@@ -158,6 +164,16 @@ export interface PlannerNoteMetadata {
   pattern: PlannerPatternVariant
   title: string
   accentColor: string
+  headerStyle?: PlannerHeaderStyle
+  backgroundColor?: string
+  borderColor?: string
+  borderWidth?: number
+  cornerRadius?: number
+  titleColor?: string
+  headerBackgroundColor?: string
+  headerBackgroundOpacity?: number
+  guideColor?: string
+  dotColor?: string
   size: {
     width: number
     height: number
@@ -168,6 +184,51 @@ export interface PhotoBlockMetadata {
   kind: 'photo-block'
   label: string
   accentColor: string
+  size: {
+    width: number
+    height: number
+  }
+}
+
+export interface ScheduleMetadata {
+  kind: 'schedule'
+  title: string
+  accentColor: string
+  startHour: number
+  endHour: number
+  intervalMinutes: 30 | 60
+  headerStyle?: PlannerHeaderStyle
+  backgroundColor?: string
+  borderColor?: string
+  borderWidth?: number
+  cornerRadius?: number
+  titleColor?: string
+  headerBackgroundColor?: string
+  headerBackgroundOpacity?: number
+  lineColor?: string
+  timeLabelColor?: string
+  size: {
+    width: number
+    height: number
+  }
+}
+
+export interface ChecklistMetadata {
+  kind: 'checklist'
+  title: string
+  accentColor: string
+  rows: number
+  showCheckboxes: boolean
+  headerStyle?: PlannerHeaderStyle
+  backgroundColor?: string
+  borderColor?: string
+  borderWidth?: number
+  cornerRadius?: number
+  titleColor?: string
+  headerBackgroundColor?: string
+  headerBackgroundOpacity?: number
+  lineColor?: string
+  checkboxColor?: string
   size: {
     width: number
     height: number

@@ -11,7 +11,10 @@ import type {
   PlannerNoteMetadata,
   PhotoBlockMetadata,
   PlannerPatternVariant,
+  PlannerHeaderStyle,
   CanvasElementMetadata,
+  ScheduleMetadata,
+  ChecklistMetadata,
 } from '@/types'
 
 const editorStore = useEditorStore()
@@ -66,9 +69,11 @@ const strokeWidth = computed({
   set: (value) => editorStore.updateObjectProperty('strokeWidth', value),
 })
 
-const elementMetadata = computed<CanvasElementMetadata | null>(() =>
-  editorStore.getActiveElementMetadata(),
-)
+const elementMetadata = computed<CanvasElementMetadata | null>(() => {
+  // Ensure this recomputes on selection changes (Fabric active object isn't reactive).
+  void selectedObjects.value
+  return editorStore.getActiveElementMetadata()
+})
 
 const calendarMetadata = computed<CalendarGridMetadata | null>(() =>
   elementMetadata.value?.kind === 'calendar-grid' ? elementMetadata.value : null,
@@ -88,6 +93,14 @@ const plannerNoteMetadata = computed<PlannerNoteMetadata | null>(() =>
 
 const photoBlockMetadata = computed<PhotoBlockMetadata | null>(() =>
   elementMetadata.value?.kind === 'photo-block' ? elementMetadata.value : null,
+)
+
+const scheduleMetadata = computed<ScheduleMetadata | null>(() =>
+  elementMetadata.value?.kind === 'schedule' ? elementMetadata.value : null,
+)
+
+const checklistMetadata = computed<ChecklistMetadata | null>(() =>
+  elementMetadata.value?.kind === 'checklist' ? elementMetadata.value : null,
 )
 
 function updateCalendarMetadata(updater: (draft: CalendarGridMetadata) => void) {
@@ -130,6 +143,22 @@ function updatePhotoMetadata(updater: (draft: PhotoBlockMetadata) => void) {
   })
 }
 
+function updateScheduleMetadata(updater: (draft: ScheduleMetadata) => void) {
+  editorStore.updateSelectedElementMetadata((metadata) => {
+    if (metadata.kind !== 'schedule') return null
+    updater(metadata)
+    return metadata
+  })
+}
+
+function updateChecklistMetadata(updater: (draft: ChecklistMetadata) => void) {
+  editorStore.updateSelectedElementMetadata((metadata) => {
+    if (metadata.kind !== 'checklist') return null
+    updater(metadata)
+    return metadata
+  })
+}
+
 const monthOptions = Array.from({ length: 12 }, (_, index) => ({
   value: index + 1,
   label: new Date(2024, index, 1).toLocaleDateString('en', { month: 'long' }),
@@ -150,6 +179,18 @@ const plannerPatternOptions: { value: PlannerPatternVariant; label: string }[] =
   { value: 'ruled', label: 'Ruled Lines' },
   { value: 'grid', label: 'Grid' },
   { value: 'dot', label: 'Dot Grid' },
+]
+
+const scheduleIntervalOptions: { value: ScheduleMetadata['intervalMinutes']; label: string }[] = [
+  { value: 30, label: '30 min' },
+  { value: 60, label: '60 min' },
+]
+
+const headerStyleOptions: { value: PlannerHeaderStyle; label: string }[] = [
+  { value: 'none', label: 'None' },
+  { value: 'minimal', label: 'Minimal' },
+  { value: 'tint', label: 'Tint' },
+  { value: 'filled', label: 'Filled' },
 ]
 
 const weekStripDateValue = computed(() =>
@@ -176,6 +217,60 @@ const rotation = computed({
   get: () => (selectedObject.value as any)?.angle || 0,
   set: (value) => editorStore.updateObjectProperty('angle', value),
 })
+
+const positionX = computed({
+  get: () => Math.round(((selectedObject.value as any)?.left ?? 0) as number),
+  set: (value) => editorStore.updateObjectProperty('left', Number(value) || 0),
+})
+
+const positionY = computed({
+  get: () => Math.round(((selectedObject.value as any)?.top ?? 0) as number),
+  set: (value) => editorStore.updateObjectProperty('top', Number(value) || 0),
+})
+
+const elementSize = computed(() => {
+  const meta = elementMetadata.value as any
+  if (!meta || !meta.size) return null
+  return meta.size as { width: number; height: number }
+})
+
+function updateElementSize(next: { width: number; height: number }) {
+  editorStore.updateSelectedElementMetadata((metadata) => {
+    const draft: any = metadata as any
+    if (!draft.size) return null
+    draft.size.width = Math.max(10, Number(next.width) || draft.size.width)
+    draft.size.height = Math.max(10, Number(next.height) || draft.size.height)
+    return metadata
+  })
+}
+
+const objectWidth = computed({
+  get: () => {
+    if (!selectedObject.value) return 0
+    return Math.round(selectedObject.value.getScaledWidth())
+  },
+  set: (value) => {
+    if (!selectedObject.value) return
+    const target = Math.max(1, Number(value) || 1)
+    const base = (selectedObject.value as any).width || selectedObject.value.getScaledWidth() || 1
+    const nextScale = target / base
+    editorStore.updateObjectProperty('scaleX', nextScale)
+  },
+})
+
+const objectHeight = computed({
+  get: () => {
+    if (!selectedObject.value) return 0
+    return Math.round(selectedObject.value.getScaledHeight())
+  },
+  set: (value) => {
+    if (!selectedObject.value) return
+    const target = Math.max(1, Number(value) || 1)
+    const base = (selectedObject.value as any).height || selectedObject.value.getScaledHeight() || 1
+    const nextScale = target / base
+    editorStore.updateObjectProperty('scaleY', nextScale)
+  },
+})
 </script>
 
 <template>
@@ -198,6 +293,77 @@ const rotation = computed({
         <span class="text-xs text-gray-500">
           {{ selectedObjects.length }} selected
         </span>
+      </div>
+
+      <!-- Position & Size -->
+      <div class="space-y-4 border border-gray-200 dark:border-gray-700 rounded-2xl p-4">
+        <div>
+          <p class="text-xs font-semibold text-gray-500 uppercase tracking-widest">Layout</p>
+          <p class="text-sm text-gray-700 dark:text-gray-100">Position & Size</p>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">X</label>
+            <input
+              v-model.number="positionX"
+              type="number"
+              class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+            />
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Y</label>
+            <input
+              v-model.number="positionY"
+              type="number"
+              class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+            />
+          </div>
+        </div>
+
+        <div v-if="elementSize" class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">W</label>
+            <input
+              type="number"
+              min="10"
+              class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+              :value="Math.round(elementSize.width)"
+              @change="updateElementSize({ width: Number(($event.target as HTMLInputElement).value), height: elementSize.height })"
+            />
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">H</label>
+            <input
+              type="number"
+              min="10"
+              class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+              :value="Math.round(elementSize.height)"
+              @change="updateElementSize({ width: elementSize.width, height: Number(($event.target as HTMLInputElement).value) })"
+            />
+          </div>
+        </div>
+
+        <div v-else class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">W</label>
+            <input
+              v-model.number="objectWidth"
+              type="number"
+              min="1"
+              class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+            />
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">H</label>
+            <input
+              v-model.number="objectHeight"
+              type="number"
+              min="1"
+              class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+            />
+          </div>
+        </div>
       </div>
 
       <!-- Text Properties -->
@@ -262,6 +428,265 @@ const rotation = computed({
                   <path d="M2 4.75A.75.75 0 012.75 4h14.5a.75.75 0 010 1.5H2.75A.75.75 0 012 4.75zm7 10.5a.75.75 0 01.75-.75h7.5a.75.75 0 010 1.5h-7.5a.75.75 0 01-.75-.75zM2 10a.75.75 0 01.75-.75h14.5a.75.75 0 010 1.5H2.75A.75.75 0 012 10z" />
                 </svg>
               </button>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- Schedule Properties -->
+      <template v-if="scheduleMetadata">
+        <div class="space-y-4 border border-gray-200 dark:border-gray-700 rounded-2xl p-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-xs font-semibold text-gray-500 uppercase tracking-widest">Schedule</p>
+              <p class="text-sm text-gray-700 dark:text-gray-100">Timeline</p>
+            </div>
+            <select
+              class="text-xs px-2 py-1 rounded-lg bg-gray-100 dark:bg-gray-800"
+              :value="scheduleMetadata.intervalMinutes"
+              @change="updateScheduleMetadata((draft) => { draft.intervalMinutes = Number(($event.target as HTMLSelectElement).value) as ScheduleMetadata['intervalMinutes'] })"
+            >
+              <option v-for="opt in scheduleIntervalOptions" :key="opt.value" :value="opt.value">
+                {{ opt.label }}
+              </option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Header Style</label>
+            <select
+              class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+              :value="scheduleMetadata.headerStyle ?? 'minimal'"
+              @change="updateScheduleMetadata((draft) => { draft.headerStyle = ($event.target as HTMLSelectElement).value as PlannerHeaderStyle })"
+            >
+              <option v-for="opt in headerStyleOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Title</label>
+            <input
+              type="text"
+              class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+              :value="scheduleMetadata.title"
+              @input="updateScheduleMetadata((draft) => { draft.title = ($event.target as HTMLInputElement).value })"
+            />
+          </div>
+
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Accent Color</label>
+            <ColorPicker
+              :model-value="scheduleMetadata.accentColor"
+              @update:model-value="(color) => updateScheduleMetadata((draft) => { draft.accentColor = color })"
+            />
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Background</label>
+              <ColorPicker
+                :model-value="scheduleMetadata.backgroundColor ?? '#ffffff'"
+                @update:model-value="(color) => updateScheduleMetadata((draft) => { draft.backgroundColor = color })"
+              />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Border</label>
+              <ColorPicker
+                :model-value="scheduleMetadata.borderColor ?? '#e2e8f0'"
+                @update:model-value="(color) => updateScheduleMetadata((draft) => { draft.borderColor = color })"
+              />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Radius</label>
+              <input
+                type="number"
+                min="0"
+                max="80"
+                class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                :value="scheduleMetadata.cornerRadius ?? 22"
+                @change="updateScheduleMetadata((draft) => { draft.cornerRadius = Math.max(0, Math.min(80, Number(($event.target as HTMLInputElement).value) || 0)) })"
+              />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Border Width</label>
+              <input
+                type="number"
+                min="0"
+                max="10"
+                class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                :value="scheduleMetadata.borderWidth ?? 1"
+                @change="updateScheduleMetadata((draft) => { draft.borderWidth = Math.max(0, Math.min(10, Number(($event.target as HTMLInputElement).value) || 0)) })"
+              />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Lines</label>
+              <ColorPicker
+                :model-value="scheduleMetadata.lineColor ?? '#e2e8f0'"
+                @update:model-value="(color) => updateScheduleMetadata((draft) => { draft.lineColor = color })"
+              />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Time Labels</label>
+              <ColorPicker
+                :model-value="scheduleMetadata.timeLabelColor ?? '#64748b'"
+                @update:model-value="(color) => updateScheduleMetadata((draft) => { draft.timeLabelColor = color })"
+              />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Start Hour</label>
+              <input
+                type="number"
+                min="0"
+                max="23"
+                class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                :value="scheduleMetadata.startHour"
+                @change="updateScheduleMetadata((draft) => { draft.startHour = Math.max(0, Math.min(23, Number(($event.target as HTMLInputElement).value) || draft.startHour)) })"
+              />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">End Hour</label>
+              <input
+                type="number"
+                min="0"
+                max="23"
+                class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                :value="scheduleMetadata.endHour"
+                @change="updateScheduleMetadata((draft) => { draft.endHour = Math.max(0, Math.min(23, Number(($event.target as HTMLInputElement).value) || draft.endHour)) })"
+              />
+            </div>
+          </div>
+
+          <p class="text-xs text-gray-500">Tip: keep end hour greater than start hour for visible time slots.</p>
+        </div>
+      </template>
+
+      <!-- Checklist Properties -->
+      <template v-if="checklistMetadata">
+        <div class="space-y-4 border border-gray-200 dark:border-gray-700 rounded-2xl p-4">
+          <div>
+            <p class="text-xs font-semibold text-gray-500 uppercase tracking-widest">Checklist</p>
+            <p class="text-sm text-gray-700 dark:text-gray-100">To-do List</p>
+          </div>
+
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Header Style</label>
+            <select
+              class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+              :value="checklistMetadata.headerStyle ?? 'tint'"
+              @change="updateChecklistMetadata((draft) => { draft.headerStyle = ($event.target as HTMLSelectElement).value as PlannerHeaderStyle })"
+            >
+              <option v-for="opt in headerStyleOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Title</label>
+            <input
+              type="text"
+              class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+              :value="checklistMetadata.title"
+              @input="updateChecklistMetadata((draft) => { draft.title = ($event.target as HTMLInputElement).value })"
+            />
+          </div>
+
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Accent Color</label>
+            <ColorPicker
+              :model-value="checklistMetadata.accentColor"
+              @update:model-value="(color) => updateChecklistMetadata((draft) => { draft.accentColor = color })"
+            />
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Background</label>
+              <ColorPicker
+                :model-value="checklistMetadata.backgroundColor ?? '#ffffff'"
+                @update:model-value="(color) => updateChecklistMetadata((draft) => { draft.backgroundColor = color })"
+              />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Border</label>
+              <ColorPicker
+                :model-value="checklistMetadata.borderColor ?? '#e2e8f0'"
+                @update:model-value="(color) => updateChecklistMetadata((draft) => { draft.borderColor = color })"
+              />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Radius</label>
+              <input
+                type="number"
+                min="0"
+                max="80"
+                class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                :value="checklistMetadata.cornerRadius ?? 22"
+                @change="updateChecklistMetadata((draft) => { draft.cornerRadius = Math.max(0, Math.min(80, Number(($event.target as HTMLInputElement).value) || 0)) })"
+              />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Border Width</label>
+              <input
+                type="number"
+                min="0"
+                max="10"
+                class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                :value="checklistMetadata.borderWidth ?? 1"
+                @change="updateChecklistMetadata((draft) => { draft.borderWidth = Math.max(0, Math.min(10, Number(($event.target as HTMLInputElement).value) || 0)) })"
+              />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Lines</label>
+              <ColorPicker
+                :model-value="checklistMetadata.lineColor ?? '#e2e8f0'"
+                @update:model-value="(color) => updateChecklistMetadata((draft) => { draft.lineColor = color })"
+              />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Checkbox</label>
+              <ColorPicker
+                :model-value="checklistMetadata.checkboxColor ?? checklistMetadata.accentColor"
+                @update:model-value="(color) => updateChecklistMetadata((draft) => { draft.checkboxColor = color })"
+              />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Rows</label>
+              <input
+                type="number"
+                min="1"
+                max="30"
+                class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                :value="checklistMetadata.rows"
+                @change="updateChecklistMetadata((draft) => { draft.rows = Math.max(1, Math.min(30, Number(($event.target as HTMLInputElement).value) || draft.rows)) })"
+              />
+            </div>
+            <div class="flex items-end">
+              <label class="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  class="accent-primary-500"
+                  :checked="checklistMetadata.showCheckboxes"
+                  @change="updateChecklistMetadata((draft) => { draft.showCheckboxes = ($event.target as HTMLInputElement).checked })"
+                >
+                <span>Checkboxes</span>
+              </label>
             </div>
           </div>
         </div>
@@ -472,6 +897,17 @@ const rotation = computed({
               </option>
             </select>
           </div>
+
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Header Style</label>
+            <select
+              class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+              :value="plannerNoteMetadata.headerStyle ?? (plannerNoteMetadata.pattern === 'hero' ? 'filled' : 'minimal')"
+              @change="updatePlannerMetadata((draft) => { draft.headerStyle = ($event.target as HTMLSelectElement).value as PlannerHeaderStyle })"
+            >
+              <option v-for="opt in headerStyleOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+            </select>
+          </div>
           <div>
             <label class="block text-xs text-gray-500 mb-1">Title</label>
             <input
@@ -487,6 +923,68 @@ const rotation = computed({
               :model-value="plannerNoteMetadata.accentColor"
               @update:model-value="(color) => updatePlannerMetadata((draft) => { draft.accentColor = color })"
             />
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Background</label>
+              <ColorPicker
+                :model-value="plannerNoteMetadata.backgroundColor ?? '#ffffff'"
+                @update:model-value="(color) => updatePlannerMetadata((draft) => { draft.backgroundColor = color })"
+              />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Border</label>
+              <ColorPicker
+                :model-value="plannerNoteMetadata.borderColor ?? '#e2e8f0'"
+                @update:model-value="(color) => updatePlannerMetadata((draft) => { draft.borderColor = color })"
+              />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Radius</label>
+              <input
+                type="number"
+                min="0"
+                max="80"
+                class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                :value="plannerNoteMetadata.cornerRadius ?? 22"
+                @change="updatePlannerMetadata((draft) => { draft.cornerRadius = Math.max(0, Math.min(80, Number(($event.target as HTMLInputElement).value) || 0)) })"
+              />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Border Width</label>
+              <input
+                type="number"
+                min="0"
+                max="10"
+                class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                :value="plannerNoteMetadata.borderWidth ?? 1"
+                @change="updatePlannerMetadata((draft) => { draft.borderWidth = Math.max(0, Math.min(10, Number(($event.target as HTMLInputElement).value) || 0)) })"
+              />
+            </div>
+          </div>
+
+          <div v-if="plannerNoteMetadata.pattern === 'ruled' || plannerNoteMetadata.pattern === 'grid'" class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Guide Color</label>
+              <ColorPicker
+                :model-value="plannerNoteMetadata.guideColor ?? (plannerNoteMetadata.pattern === 'grid' ? '#eff6ff' : '#e2e8f0')"
+                @update:model-value="(color) => updatePlannerMetadata((draft) => { draft.guideColor = color })"
+              />
+            </div>
+          </div>
+
+          <div v-if="plannerNoteMetadata.pattern === 'dot'" class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Dot Color</label>
+              <ColorPicker
+                :model-value="plannerNoteMetadata.dotColor ?? '#cbd5f5'"
+                @update:model-value="(color) => updatePlannerMetadata((draft) => { draft.dotColor = color })"
+              />
+            </div>
           </div>
         </div>
       </template>

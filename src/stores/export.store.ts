@@ -2,6 +2,8 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { pdfExportService } from '@/services/export/pdf.service'
 import { imageExportService } from '@/services/export/image.service'
+import { renderTemplateOnCanvas } from '@/services/editor/template-renderer'
+import { calendarTemplates, type CalendarTemplate } from '@/data/templates/calendar-templates'
 import { useEditorStore } from './editor.store'
 import { useAuthStore } from './auth.store'
 import type { 
@@ -28,13 +30,35 @@ export const useExportStore = defineStore('export', () => {
     cropMarks: false,
     safeZone: false,
     transparent: false,
-    pages: 'all',
+    pages: 'current',
+    includeUserObjectsAllMonths: true,
   })
 
   const exporting = ref(false)
   const progress = ref(0)
+  const statusText = ref<string | null>(null)
   const error = ref<string | null>(null)
   const recentExports = ref<ExportJob[]>([])
+
+  async function yieldToUI(): Promise<void> {
+    await new Promise<void>((resolve) => {
+      const raf = typeof window !== 'undefined' ? window.requestAnimationFrame : undefined
+      if (raf) {
+        raf(() => resolve())
+        return
+      }
+      setTimeout(resolve, 0)
+    })
+  }
+
+  function normalizeMonthList(months: number[]): number[] {
+    const normalized = months
+      .filter((m) => Number.isFinite(m))
+      .map((m) => Math.round(m))
+      .filter((m) => m >= 1 && m <= 12)
+
+    return Array.from(new Set(normalized)).sort((a, b) => a - b)
+  }
 
   // ═══════════════════════════════════════════════════════════════
   // GETTERS
@@ -79,7 +103,32 @@ export const useExportStore = defineStore('export', () => {
    * Update export configuration
    */
   function updateConfig(updates: Partial<ExportConfig>): void {
-    config.value = { ...config.value, ...updates }
+    const next = { ...config.value, ...updates }
+
+    if (typeof next.bleed === 'number' && next.bleed < 0) {
+      next.bleed = 0
+    }
+
+    if (!availableFormats.value.includes(next.format)) {
+      const fallback = availableFormats.value[0]
+      if (fallback) next.format = fallback
+    }
+
+    const dpi = QUALITY_DPI[next.quality]
+    if (dpi > maxDPI.value) {
+      next.quality = 'screen'
+    }
+
+    if (next.format !== 'pdf' && next.pages !== 'current') {
+      next.pages = 'current'
+    }
+
+    if (next.format === 'pdf' && Array.isArray(next.pages)) {
+      const normalized = normalizeMonthList(next.pages)
+      next.pages = normalized.length ? normalized : 'current'
+    }
+
+    config.value = next
   }
 
   /**
@@ -91,8 +140,20 @@ export const useExportStore = defineStore('export', () => {
       return
     }
 
+    if (!availableFormats.value.includes(config.value.format)) {
+      error.value = 'This export format is not available on your current plan'
+      return
+    }
+
+    const requestedDpi = QUALITY_DPI[config.value.quality]
+    if (requestedDpi > maxDPI.value) {
+      error.value = 'Upgrade your plan to export at this quality'
+      return
+    }
+
     exporting.value = true
     progress.value = 0
+    statusText.value = 'Preparing export…'
     error.value = null
 
     try {
@@ -103,6 +164,8 @@ export const useExportStore = defineStore('export', () => {
       let filename: string
 
       progress.value = 20
+      statusText.value = 'Starting export…'
+      await yieldToUI()
 
       switch (format) {
         case 'pdf':
@@ -143,9 +206,10 @@ export const useExportStore = defineStore('export', () => {
       imageExportService.downloadBlob(blob, filename)
 
       // Track export
-      trackExport(filename, format, blob.size)
+      trackExport(filename)
 
       progress.value = 100
+      statusText.value = null
     } catch (e: any) {
       error.value = e.message || 'Export failed'
       console.error('Export error:', e)
@@ -160,11 +224,106 @@ export const useExportStore = defineStore('export', () => {
   async function exportAsPDF(): Promise<Blob> {
     if (!editorStore.canvas) throw new Error('Canvas not found')
 
+    if (config.value.pages === 'all') {
+      return exportAsYearPDF()
+    }
+
+    if (Array.isArray(config.value.pages)) {
+      const months = normalizeMonthList(config.value.pages)
+      if (!months.length) {
+        throw new Error('Select at least one month to export')
+      }
+      return exportAsYearPDF(months)
+    }
+
     return pdfExportService.exportFromFabricCanvas(
       editorStore.canvas,
       config.value,
       editorStore.project?.name || 'calendar'
     )
+  }
+
+  function getTemplateForExport(): CalendarTemplate {
+    const templateId = editorStore.project?.templateId
+    if (!templateId) {
+      throw new Error('Select a template to export all months')
+    }
+    const template = calendarTemplates.find((t) => t.id === templateId)
+    if (!template) {
+      throw new Error('Selected template not found')
+    }
+    return template
+  }
+
+  function buildCustomizedTemplate(template: CalendarTemplate): CalendarTemplate {
+    const options = editorStore.project?.config.templateOptions
+    return {
+      ...template,
+      preview: {
+        ...template.preview,
+        hasPhotoArea: options?.hasPhotoArea ?? template.preview.hasPhotoArea,
+        hasNotesArea: options?.hasNotesArea ?? template.preview.hasNotesArea,
+      },
+      config: {
+        ...template.config,
+        highlightToday: options?.highlightToday ?? template.config.highlightToday,
+        highlightWeekends: options?.highlightWeekends ?? template.config.highlightWeekends,
+      },
+    }
+  }
+
+  async function exportAsYearPDF(months?: number[]): Promise<Blob> {
+    if (!editorStore.canvas || !editorStore.project) throw new Error('Canvas not found')
+
+    const year = editorStore.project.config.year ?? new Date().getFullYear()
+    const baseTemplate = getTemplateForExport()
+    const template = buildCustomizedTemplate(baseTemplate)
+
+    const exportConfig: ExportConfig = {
+      ...config.value,
+      orientation: baseTemplate.config.layout === 'landscape' ? 'landscape' : 'portrait',
+    }
+
+    const originalState = editorStore.getCanvasState()
+    if (!originalState) throw new Error('Canvas state not found')
+
+    const pdf = pdfExportService.createPDFDocument(exportConfig)
+    const preserveUserObjects = config.value.includeUserObjectsAllMonths !== false
+    const monthList = months?.length ? normalizeMonthList(months) : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    const total = monthList.length
+
+    try {
+      for (let i = 0; i < total; i++) {
+        const month = monthList[i]
+        if (!month) continue
+        statusText.value = `Rendering month ${i + 1}/${total}…`
+        progress.value = 20 + Math.round((i / total) * 60)
+        await yieldToUI()
+        await renderTemplateOnCanvas(
+          editorStore.canvas,
+          template,
+          { year, month },
+          { preserveUserObjects },
+        )
+
+        statusText.value = `Generating PDF page ${i + 1}/${total}…`
+        await yieldToUI()
+        pdfExportService.appendFabricCanvasPage(pdf, editorStore.canvas, exportConfig, i > 0)
+        await yieldToUI()
+      }
+
+      progress.value = 80
+      statusText.value = 'Finalizing PDF…'
+      await yieldToUI()
+      return pdf.output('blob')
+    } finally {
+      statusText.value = 'Restoring editor…'
+      await yieldToUI()
+      await editorStore.canvas.loadFromJSON(originalState).then(() => {
+        editorStore.canvas?.renderAll()
+      })
+      statusText.value = null
+    }
   }
 
   /**
@@ -254,7 +413,7 @@ export const useExportStore = defineStore('export', () => {
   /**
    * Track export for analytics
    */
-  function trackExport(filename: string, format: string, size: number): void {
+  function trackExport(filename: string): void {
     const job: ExportJob = {
       id: `export-${Date.now()}`,
       projectId: editorStore.project?.id || '',
@@ -313,6 +472,7 @@ export const useExportStore = defineStore('export', () => {
   function resetState(): void {
     exporting.value = false
     progress.value = 0
+    statusText.value = null
     error.value = null
   }
 
@@ -333,6 +493,7 @@ export const useExportStore = defineStore('export', () => {
     config,
     exporting,
     progress,
+    statusText,
     error,
     recentExports,
     // Getters

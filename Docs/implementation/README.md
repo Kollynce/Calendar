@@ -18,19 +18,55 @@
 
 ---
 
-## Current Implementation Status _(updated 8 Dec 2025)_
+## Current Implementation Status _(updated 14 Dec 2025)_
 
-### Completed
-- **Documentation refresh** – All tech/deployment/foundation docs updated to PayPal + Firebase stack with the current architecture.
-- **Environment scaffolding** – `.env.example`, PayPal + Firebase config files, and shared constants/types created.
-- **Core stores & router** – `auth` store with Firestore profile bootstrap, `theme` store, Pinia wiring in `main.ts`, and guarded routes for dashboard/editor/settings.
-- **UI shell** – Home, Auth (Login/Register), Dashboard, Editor placeholder, Marketplace, Settings, and 404 pages implemented with Tailwind styling for initial navigation flows.
-- **Tooling config** – `package.json`, `vite.config.ts`, `tsconfig`, Tailwind entry CSS, and alias setup ready for dependency install.
+Status legend:
+- **Done**: implemented and wired end-to-end
+- **Partial**: implemented but incomplete, not wired, or not production-ready
+- **Not started**: not implemented
 
-### Next Up
-- Provision Firestore + Storage in Firebase and deploy the dev security rules from `10-database-schema.md`.
-- Hook up real Editor canvas (Fabric.js) and bridge the marketplace/services described in `05-07` docs.
-- Implement subscription + PayPal billing flows once the Firebase backend is stable.
+### Phase 1: Foundation (Weeks 1-2)
+- **Done**: Project scaffolding (Vue 3 + TypeScript + Vite)
+- **Done**: Tailwind + base styling
+- **Partial**: Firebase setup (Auth/Firestore/Storage/Functions initialized; full app persistence rules/collections not yet fully in use)
+- **Done**: Core Pinia stores present (`auth`, `calendar`, `editor`, `export`, `theme`)
+- **Done**: Routing + protected route metadata (dashboard/editor/settings)
+- **Partial**: “Base components” (UI shell exists; several settings pages are placeholders)
+
+### Phase 2: Calendar Engine (Weeks 3-4)
+- **Partial**: Holiday service (implemented via `date-holidays` + static fallback; not an external HTTP API)
+- **Done**: Calendar generator service (`src/services/calendar/generator.service.ts`)
+- **Optional (hybrid approach)**: `CalendarGrid`, `CalendarMonth`, `CalendarDay` Vue components for non-editor previews (the editor/export pipeline renders calendars via Fabric smart elements)
+- **Done**: Localization system (translations + localization service)
+- **Partial**: Custom holiday management (store logic exists; UI integration is incomplete)
+
+### Phase 3: Design Editor (Weeks 5-7)
+- **Done**: Fabric.js canvas integration (editor store + `/editor` route)
+- **Partial**: Toolbar/tools (core tools exist; advanced manipulation polish TBD)
+- **Done**: Layer panel exists and is used (`EditorLayers`)
+- **Done**: Properties panel exists and is used (`EditorProperties`)
+- **Partial**: Image upload & asset management (local uploads working; Firebase Storage-backed asset library not implemented)
+- **Done**: Undo/redo history (store-level history with UI controls)
+- **Done**: Unified editor routes (`/editor` and `/editor/:id` share the same editor page/store)
+
+### Phase 4: Export System (Weeks 8-9)
+- **Done (services)**: PNG/JPG export support (`image.service.ts` + store)
+- **Done (services)**: PDF generation support (`pdf.service.ts` + store)
+- **Done**: Export modal wired to export store (real export, tier gating, progress/errors)
+- **Done**: Print-ready settings UI wiring (bleed/crop marks/safe zone)
+- **Done**: Batch export end-to-end (multi-page PDF)
+- **Done**: PDF pages selection (current page vs all months)
+- **Done**: Custom month range selection (e.g. Jan–Jun) via `pages: number[]`
+- **Done**: Long-running export progress + status feedback
+- **Done**: Multi-page export toggle to include/exclude user-added objects per month
+- **Partial**: Download works via export store; cloud storage upload/export history persistence not implemented
+
+### Next Milestones (to complete Phases 1–4 end-to-end)
+- **Project persistence**: implement Firestore CRUD for projects (and Storage for assets if needed).
+- **Project persistence**: complete Firestore CRUD end-to-end in the editor (create/load/update/list) and ensure the dashboard uses real project data.
+- **Editor reliability**: refactor layer actions (select/hide/lock/delete) through editor store so history + dirty state stay consistent.
+- **Optional batch export add-ons**: zip images, month selection UI (checkbox grid), cover page / inserts.
+- **Optional**: upload exports to Storage and write export records to Firestore for download history.
 
 ---
 
@@ -77,7 +113,6 @@ Phase 7: Launch (Weeks 15-16)
 ├── Security hardening
 ├── Documentation
 └── Production deployment
-```
 
 ---
 

@@ -9,6 +9,7 @@ export interface ExportConfig {
   safeZone: boolean
   transparent: boolean
   pages: 'all' | 'current' | number[]
+  includeUserObjectsAllMonths?: boolean
 }
 
 export type ExportFormat = 'pdf' | 'png' | 'jpg' | 'svg' | 'tiff'

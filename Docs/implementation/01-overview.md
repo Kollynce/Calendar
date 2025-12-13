@@ -122,33 +122,42 @@ A SaaS platform enabling creators and print shops to design, customize, and expo
 ## 2. Development Phases
 
 ### Phase 1: Foundation (Weeks 1-2)
-- Project scaffolding with Vue 3 + TypeScript + Vite
-- Tailwind CSS configuration with custom design tokens
-- Firebase project setup (Auth, Firestore, Storage, Functions)
-- Core type definitions and Pinia stores
-- Basic routing and layout components
+Status legend:
+- **Done**: implemented and wired end-to-end
+- **Partial**: implemented but incomplete, not wired, or not production-ready
+- **Not started**: not implemented
+
+- **Done**: Project scaffolding with Vue 3 + TypeScript + Vite
+- **Done**: Tailwind CSS configuration with custom design tokens
+- **Partial**: Firebase project setup (Auth, Firestore, Storage, Functions) (initialized; full persistence rules/collections not yet fully in use)
+- **Done**: Core type definitions and Pinia stores
+- **Done**: Basic routing and layout components
 
 ### Phase 2: Calendar Engine (Weeks 3-4)
-- Holiday service with API + static fallback
-- Calendar generator service
-- CalendarGrid, CalendarMonth, CalendarDay components
-- Localization system (8 African languages)
-- Custom holiday management
+- **Partial**: Holiday service with API + static fallback (implemented via `date-holidays` + static fallback; not an external HTTP API)
+- **Done**: Calendar generator service
+- **Optional (hybrid approach)**: `CalendarGrid`, `CalendarMonth`, `CalendarDay` Vue components for non-editor previews (the editor/export pipeline renders calendars via Fabric smart elements)
+- **Done**: Localization system (8 African languages)
+- **Partial**: Custom holiday management (store logic exists; UI integration incomplete)
 
 ### Phase 3: Design Editor (Weeks 5-7)
-- Fabric.js canvas integration
-- Toolbar with object manipulation tools
-- Layer panel with z-index management
-- Properties panel for selected objects
-- Image upload and asset management
-- Undo/redo history
+- **Done**: Fabric.js canvas integration
+- **Partial**: Toolbar with object manipulation tools
+- **Done**: Layer panel with z-index management
+- **Done**: Properties panel for selected objects
+- **Partial**: Image upload and asset management (local uploads work; Firebase Storage-backed asset library not implemented)
+- **Done**: Undo/redo history
 
 ### Phase 4: Export System (Weeks 8-9)
-- PNG/JPG export with html2canvas
-- PDF generation with jsPDF
-- Print-ready settings (bleed, crop marks, color profiles)
-- Batch export functionality
-- Download and cloud storage options
+- **Done (services)**: PNG/JPG export with html2canvas
+- **Done (services)**: PDF generation with jsPDF
+- **Done**: Print-ready settings UI wiring (bleed, crop marks, safe zone)
+- **Done**: Batch export end-to-end (multi-page PDF)
+- **Done**: Pages selection for PDF export (current page vs all months)
+- **Done**: Custom month range selection for PDF export (e.g. Jan–Jun) via `pages: number[]`
+- **Done**: Export progress + status feedback for long-running multi-page exports
+- **Done**: Multi-page export toggle for including/excluding user-added objects per month
+- **Partial**: Download and cloud storage options (download via store exists; cloud storage persistence not implemented)
 
 ### Phase 5: Marketplace (Weeks 10-12)
 - Template CRUD operations

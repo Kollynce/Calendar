@@ -63,7 +63,7 @@ export const routes: RouteRecordRaw[] = [
   {
     path: '/editor/:id',
     name: 'editor',
-    component: () => import('@/pages/editor/[id].vue'),
+    component: () => import('@/pages/editor/index.vue'),
     meta: { layout: 'editor', requiresAuth: true },
   },
   {

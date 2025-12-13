@@ -67,13 +67,27 @@ const layers = computed(() => {
   // Fabric.js types are a bit weak here, casting to any
   return canvas.value.getObjects().map((obj: any, index: number) => ({
     id: obj.id || `layer-${index}`,
-    name: obj.name || getObjectTypeName(obj.type),
+    name: getLayerDisplayName(obj) || obj.name || getObjectTypeName(obj.type),
     type: obj.type,
     visible: obj.visible !== false,
     locked: obj.selectable === false,
     index,
   })).reverse() // Reverse to show top layers first
 })
+
+function getLayerDisplayName(obj: any): string {
+  const metadata = obj?.data?.elementMetadata as any
+  if (!metadata?.kind) return ''
+
+  if (metadata.kind === 'planner-note') return `Notes: ${metadata.title ?? 'Notes'}`
+  if (metadata.kind === 'schedule') return `Schedule: ${metadata.title ?? 'Schedule'}`
+  if (metadata.kind === 'checklist') return `Checklist: ${metadata.title ?? 'Checklist'}`
+  if (metadata.kind === 'photo-block') return `Photo: ${metadata.label ?? 'Add photo'}`
+  if (metadata.kind === 'week-strip') return `Week Strip: ${metadata.label ?? 'Week Plan'}`
+  if (metadata.kind === 'calendar-grid') return 'Calendar Grid'
+  if (metadata.kind === 'date-cell') return 'Date Cell'
+  return ''
+}
 
 function getObjectTypeName(type: string): string {
   const names: Record<string, string> = {
@@ -87,44 +101,19 @@ function getObjectTypeName(type: string): string {
 }
 
 function selectLayer(id: string): void {
-  if (!canvas.value) return
-  
-  const obj = canvas.value.getObjects().find((o: any) => o.id === id)
-  if (obj) {
-    canvas.value.setActiveObject(obj)
-    canvas.value.renderAll()
-  }
+  editorStore.selectObjectById(id)
 }
 
 function toggleVisibility(id: string): void {
-  if (!canvas.value) return
-  
-  const obj = canvas.value.getObjects().find((o: any) => o.id === id)
-  if (obj) {
-    obj.visible = !obj.visible
-    canvas.value.renderAll()
-  }
+  editorStore.toggleObjectVisibility(id)
 }
 
 function toggleLock(id: string): void {
-  if (!canvas.value) return
-  
-  const obj = canvas.value.getObjects().find((o: any) => o.id === id)
-  if (obj) {
-    obj.selectable = !obj.selectable
-    obj.evented = obj.selectable
-    canvas.value.renderAll()
-  }
+  editorStore.toggleObjectLock(id)
 }
 
 function deleteLayer(id: string): void {
-  if (!canvas.value) return
-  
-  const obj = canvas.value.getObjects().find((o: any) => o.id === id)
-  if (obj) {
-    canvas.value.remove(obj)
-    canvas.value.renderAll()
-  }
+  editorStore.deleteObjectById(id)
 }
 </script>
 

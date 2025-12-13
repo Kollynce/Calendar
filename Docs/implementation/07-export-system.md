@@ -1,5 +1,35 @@
 # Phase 4: Export & Print Production System
 
+## Current Implementation (Fabric-first)
+
+The export pipeline is implemented end-to-end using the Fabric editor canvas as the source of truth.
+
+- **UI**: `src/components/export/ExportModal.vue`
+  - Format selection with tier gating
+  - Print settings UI wiring: bleed, crop marks, safe zone
+  - Pages selection for PDF:
+    - current page
+    - all months (Jan–Dec)
+    - custom month range (e.g. Jan–Jun)
+  - Multi-page option: include/exclude user-added objects across months
+  - Live progress and status feedback during long-running exports
+
+- **State / orchestration**: `src/stores/export.store.ts`
+  - Central `ExportConfig` + tier enforcement
+  - `exportProject()` drives real export and download
+  - Multi-page PDF export renders template pages onto the Fabric canvas and appends them into a single PDF
+  - Custom month selection uses `pages: number[]`
+
+- **PDF rendering**: `src/services/export/pdf.service.ts`
+  - Single-page export uses Fabric canvas rasterization
+  - Multi-page export uses a single jsPDF document and appends pages per month
+  - Export uses PNG rasterization to preserve thin/light strokes (e.g. photo frame)
+  - Orientation is inferred from the Fabric canvas dimensions for the single-page export
+
+Notes:
+- Some sections below describe an earlier html2canvas/DOM-based approach and are kept for historical reference.
+  The current implementation prefers Fabric-first export for correctness and consistency.
+
 ## 1. Export Service
 
 ```typescript

@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useAuthStore } from '@/stores'
 import AppLayout from '@/layouts/AppLayout.vue'
+import { projectsService } from '@/services/projects/projects.service'
+import type { Project } from '@/types'
 import { 
   PlusIcon, 
   ArrowUpTrayIcon, 
@@ -14,18 +16,52 @@ import {
 
 const authStore = useAuthStore()
 
-// Mock data for widgets
-const stats = [
-  { name: 'Total Projects', value: '12', icon: CalendarDaysIcon, color: 'text-blue-500', bg: 'bg-blue-100 dark:bg-blue-900/20' },
-  { name: 'Storage Used', value: '75%', icon: ChartPieIcon, color: 'text-purple-500', bg: 'bg-purple-100 dark:bg-purple-900/20' },
-  { name: 'Days Active', value: '24', icon: ClockIcon, color: 'text-green-500', bg: 'bg-green-100 dark:bg-green-900/20' },
-]
+const recentProjects = ref<Project[]>([])
+const recentProjectsLoading = ref(false)
 
-const recentProjects = ref([
-  { id: '1', name: '2025 Corporate Calendar', updatedAt: '2 hours ago', thumbnail: null, status: 'Draft' },
-  { id: '2', name: 'Family Photo Planner', updatedAt: '1 day ago', thumbnail: null, status: 'Completed' },
-  { id: '3', name: 'Marketing Schedule Q1', updatedAt: '3 days ago', thumbnail: null, status: 'Printed' },
+const stats = computed(() => [
+  {
+    name: 'Total Projects',
+    value: String(recentProjects.value.length),
+    icon: CalendarDaysIcon,
+    color: 'text-blue-500',
+    bg: 'bg-blue-100 dark:bg-blue-900/20',
+  },
+  {
+    name: 'Storage Used',
+    value: '—',
+    icon: ChartPieIcon,
+    color: 'text-purple-500',
+    bg: 'bg-purple-100 dark:bg-purple-900/20',
+  },
+  {
+    name: 'Days Active',
+    value: '—',
+    icon: ClockIcon,
+    color: 'text-green-500',
+    bg: 'bg-green-100 dark:bg-green-900/20',
+  },
 ])
+
+function formatUpdatedAt(value: string): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString()
+}
+
+watch(
+  () => authStore.user?.id,
+  async (userId) => {
+    if (!userId) return
+    recentProjectsLoading.value = true
+    try {
+      recentProjects.value = await projectsService.listForUser(userId, 8)
+    } finally {
+      recentProjectsLoading.value = false
+    }
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
@@ -94,6 +130,18 @@ const recentProjects = ref([
       <div>
         <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">Recent Projects</h2>
         <div class="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          <div
+            v-if="recentProjectsLoading"
+            class="col-span-full text-sm text-gray-500 dark:text-gray-400"
+          >
+            Loading projects...
+          </div>
+          <div
+            v-else-if="recentProjects.length === 0"
+            class="col-span-full text-sm text-gray-500 dark:text-gray-400"
+          >
+            No projects yet. Create your first one in the editor.
+          </div>
           <RouterLink
             v-for="project in recentProjects"
             :key="project.id"
@@ -105,7 +153,16 @@ const recentProjects = ref([
               <div class="absolute inset-0 bg-linear-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-4">
                 <span class="text-white text-sm font-medium">Click to edit</span>
               </div>
-              <CalendarDaysIcon class="w-12 h-12 text-gray-300 dark:text-gray-600 group-hover:scale-110 transition-transform duration-300" />
+              <img
+                v-if="project.thumbnail"
+                :src="project.thumbnail"
+                class="absolute inset-0 w-full h-full object-cover"
+                alt=""
+              />
+              <CalendarDaysIcon
+                v-else
+                class="w-12 h-12 text-gray-300 dark:text-gray-600 group-hover:scale-110 transition-transform duration-300"
+              />
             </div>
             
             <!-- Card Footer -->
@@ -116,7 +173,7 @@ const recentProjects = ref([
                   {{ project.status }}
                 </span>
               </div>
-              <p class="text-xs text-gray-500 dark:text-gray-400">Edited {{ project.updatedAt }}</p>
+              <p class="text-xs text-gray-500 dark:text-gray-400">Edited {{ formatUpdatedAt(project.updatedAt) }}</p>
             </div>
           </RouterLink>
         </div>

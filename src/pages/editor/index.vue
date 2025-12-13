@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, computed, watch, nextTick } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useEditorStore } from '@/stores/editor.store'
 import { storeToRefs } from 'pinia'
 import { calendarTemplates, templateCategories, type CalendarTemplate } from '@/data/templates/calendar-templates'
@@ -26,8 +26,17 @@ import EditorLayers from '@/components/editor/EditorLayers.vue'
 import TemplatePanel from '@/components/editor/TemplatePanel.vue'
 import EditorRulers from '@/components/editor/EditorRulers.vue'
 import { renderTemplateOnCanvas, generateTemplateThumbnail } from '@/services/editor/template-renderer'
+import type {
+  CanvasElementMetadata,
+  PlannerNoteMetadata,
+  PlannerPatternVariant,
+  PlannerHeaderStyle,
+  ScheduleMetadata,
+  ChecklistMetadata,
+} from '@/types'
 
 const router = useRouter()
+const route = useRoute()
 const editorStore = useEditorStore()
 const RULER_SIZE = 32
 
@@ -61,11 +70,19 @@ const templateOverrides = ref({
   hasNotesArea: false,
 })
 const isApplyingTemplate = ref(false)
+const isSyncingTemplateUiFromProject = ref(false)
 let overridesRenderTimer: ReturnType<typeof setTimeout> | null = null
 
 const PAPER_SIZES = {
   portrait: { width: 744, height: 1052 },
   landscape: { width: 1052, height: 744 },
+}
+
+async function handleSaveProject(): Promise<void> {
+  await editorStore.saveProject()
+  if (!routeProjectId.value && editorStore.project?.id) {
+    router.replace(`/editor/${editorStore.project.id}`)
+  }
 }
 
 const DEFAULT_CANVAS = PAPER_SIZES.portrait
@@ -179,7 +196,9 @@ function resetTemplateOverrides() {
 watch(
   templateOverrides,
   async () => {
-    if (!activeTemplate.value || isApplyingTemplate.value) return
+    if (!activeTemplate.value || isApplyingTemplate.value || isSyncingTemplateUiFromProject.value) return
+
+    editorStore.updateTemplateOptions({ ...templateOverrides.value })
 
     if (overridesRenderTimer) clearTimeout(overridesRenderTimer)
     overridesRenderTimer = setTimeout(async () => {
@@ -206,10 +225,54 @@ const activeTemplate = computed(() => {
   return calendarTemplates.find((t) => t.id === activeTemplateId.value) || null
 })
 
+async function syncTemplateUiFromProject(): Promise<void> {
+  const templateId = editorStore.project?.templateId
+  if (!templateId) return
+
+  const template = calendarTemplates.find((t) => t.id === templateId) || null
+  if (!template) return
+
+  isApplyingTemplate.value = true
+  isSyncingTemplateUiFromProject.value = true
+  activeTemplateId.value = template.id
+
+  const options = editorStore.project?.config.templateOptions
+  templateOverrides.value = {
+    highlightToday: options?.highlightToday ?? template.config.highlightToday,
+    highlightWeekends: options?.highlightWeekends ?? template.config.highlightWeekends,
+    hasPhotoArea: options?.hasPhotoArea ?? template.preview.hasPhotoArea,
+    hasNotesArea: options?.hasNotesArea ?? template.preview.hasNotesArea,
+  }
+
+  await nextTick()
+  isSyncingTemplateUiFromProject.value = false
+  isApplyingTemplate.value = false
+}
+
+watch(
+  () => editorStore.project?.templateId,
+  (next, prev) => {
+    if (isApplyingTemplate.value) return
+    if (!next || next === prev) return
+    void syncTemplateUiFromProject()
+  },
+  { immediate: true },
+)
+
+watch(
+  () => editorStore.project?.config.templateOptions,
+  () => {
+    if (isApplyingTemplate.value) return
+    if (!editorStore.project?.templateId) return
+    void syncTemplateUiFromProject()
+  },
+  { deep: true },
+)
+
 const templateSupportsPhoto = computed(() => !!activeTemplate.value?.preview.photoPosition)
 const templateSupportsNotes = computed(() => !!activeTemplate.value?.preview.notesPosition)
 
-type ElementType = 'shape' | 'calendar' | 'planner'
+type ElementType = 'shape' | 'calendar' | 'planner' | 'preset'
 
 interface ElementItem {
   id: string
@@ -219,7 +282,8 @@ interface ElementItem {
   description?: string
   shapeType?: string
   calendarType?: 'month-grid' | 'week-strip' | 'date-cell'
-  plannerType?: 'notes-panel' | 'photo-block'
+  plannerType?: 'notes-panel' | 'photo-block' | 'schedule' | 'checklist'
+  presetId?: 'daily-pastel' | 'daily-minimal'
   options?: Record<string, any>
 }
 
@@ -232,9 +296,31 @@ const elementPlacementDefaults: Record<ElementType, { x: number; y: number }> = 
   shape: { x: 140, y: 140 },
   calendar: { x: 80, y: 220 },
   planner: { x: 420, y: 160 },
+  preset: { x: 0, y: 0 },
 }
 
 const elementCategories: ElementCategory[] = [
+  {
+    name: 'Planner Presets',
+    items: [
+      {
+        id: 'daily-pastel',
+        name: 'Daily Planner (Pastel)',
+        icon: '🗓️',
+        type: 'preset',
+        presetId: 'daily-pastel',
+        description: 'Schedule + to-do + gratitude + important sections',
+      },
+      {
+        id: 'daily-minimal',
+        name: 'Daily Planner (Minimal)',
+        icon: '📓',
+        type: 'preset',
+        presetId: 'daily-minimal',
+        description: 'Focus + date + to-do + notes sections',
+      },
+    ],
+  },
   {
     name: 'Basic Shapes',
     items: [
@@ -330,6 +416,39 @@ const elementCategories: ElementCategory[] = [
         plannerType: 'photo-block',
         description: 'Framed photo or inspiration block',
         options: { label: 'Add photo', accentColor: '#0ea5e9', width: 320, height: 240 },
+      },
+      {
+        id: 'schedule-block',
+        name: 'Schedule',
+        icon: '🕒',
+        type: 'planner',
+        plannerType: 'schedule',
+        description: 'Timeline schedule with time slots',
+        options: {
+          title: 'Schedule',
+          accentColor: '#a855f7',
+          startHour: 6,
+          endHour: 20,
+          intervalMinutes: 60,
+          width: 320,
+          height: 640,
+        },
+      },
+      {
+        id: 'checklist-block',
+        name: 'Checklist',
+        icon: '☑️',
+        type: 'planner',
+        plannerType: 'checklist',
+        description: 'To-do list with optional checkboxes',
+        options: {
+          title: 'To Do',
+          accentColor: '#ec4899',
+          rows: 8,
+          showCheckboxes: true,
+          width: 320,
+          height: 420,
+        },
       },
     ],
   },
@@ -452,10 +571,137 @@ const opacity = computed({
   set: (value) => editorStore.updateObjectProperty('opacity', value / 100),
 })
 
-// Initialize editor with a new project
-onMounted(() => {
-  // Create a new project if none exists
-  if (!editorStore.project) {
+const positionX = computed({
+  get: () => Math.round(((selectedObject.value as any)?.left ?? 0) as number),
+  set: (value) => editorStore.updateObjectProperty('left', Number(value) || 0),
+})
+
+const positionY = computed({
+  get: () => Math.round(((selectedObject.value as any)?.top ?? 0) as number),
+  set: (value) => editorStore.updateObjectProperty('top', Number(value) || 0),
+})
+
+const elementMetadata = computed<CanvasElementMetadata | null>(() => {
+  // Ensure this recomputes on selection changes (Fabric active object isn't reactive).
+  void selectedObjects.value
+  return editorStore.getActiveElementMetadata()
+})
+
+const scheduleMetadata = computed<ScheduleMetadata | null>(() =>
+  elementMetadata.value?.kind === 'schedule' ? elementMetadata.value : null,
+)
+
+const checklistMetadata = computed<ChecklistMetadata | null>(() =>
+  elementMetadata.value?.kind === 'checklist' ? elementMetadata.value : null,
+)
+
+const plannerNoteMetadata = computed<PlannerNoteMetadata | null>(() =>
+  elementMetadata.value?.kind === 'planner-note' ? elementMetadata.value : null,
+)
+
+function updateScheduleMetadata(updater: (draft: ScheduleMetadata) => void) {
+  editorStore.updateSelectedElementMetadata((metadata) => {
+    if (metadata.kind !== 'schedule') return null
+    updater(metadata)
+    return metadata
+  })
+}
+
+function updateChecklistMetadata(updater: (draft: ChecklistMetadata) => void) {
+  editorStore.updateSelectedElementMetadata((metadata) => {
+    if (metadata.kind !== 'checklist') return null
+    updater(metadata)
+    return metadata
+  })
+}
+
+function updatePlannerMetadata(updater: (draft: PlannerNoteMetadata) => void) {
+  editorStore.updateSelectedElementMetadata((metadata) => {
+    if (metadata.kind !== 'planner-note') return null
+    updater(metadata)
+    return metadata
+  })
+}
+
+const elementSize = computed(() => {
+  const meta = elementMetadata.value as any
+  if (!meta || !meta.size) return null
+  return meta.size as { width: number; height: number }
+})
+
+function updateElementSize(next: { width: number; height: number }) {
+  editorStore.updateSelectedElementMetadata((metadata) => {
+    const draft: any = metadata as any
+    if (!draft.size) return null
+    draft.size.width = Math.max(10, Number(next.width) || draft.size.width)
+    draft.size.height = Math.max(10, Number(next.height) || draft.size.height)
+    return metadata
+  })
+}
+
+const objectWidth = computed({
+  get: () => {
+    if (!selectedObject.value) return 0
+    return Math.round(selectedObject.value.getScaledWidth())
+  },
+  set: (value) => {
+    if (!selectedObject.value) return
+    const target = Math.max(1, Number(value) || 1)
+    const base = (selectedObject.value as any).width || selectedObject.value.getScaledWidth() || 1
+    const nextScale = target / base
+    editorStore.updateObjectProperty('scaleX', nextScale)
+  },
+})
+
+const objectHeight = computed({
+  get: () => {
+    if (!selectedObject.value) return 0
+    return Math.round(selectedObject.value.getScaledHeight())
+  },
+  set: (value) => {
+    if (!selectedObject.value) return
+    const target = Math.max(1, Number(value) || 1)
+    const base = (selectedObject.value as any).height || selectedObject.value.getScaledHeight() || 1
+    const nextScale = target / base
+    editorStore.updateObjectProperty('scaleY', nextScale)
+  },
+})
+
+const scheduleIntervalOptions: { value: ScheduleMetadata['intervalMinutes']; label: string }[] = [
+  { value: 30, label: '30 min' },
+  { value: 60, label: '60 min' },
+]
+
+const headerStyleOptions: { value: PlannerHeaderStyle; label: string }[] = [
+  { value: 'none', label: 'None' },
+  { value: 'minimal', label: 'Minimal' },
+  { value: 'tint', label: 'Tint' },
+  { value: 'filled', label: 'Filled' },
+]
+
+const plannerPatternOptions: { value: PlannerPatternVariant; label: string }[] = [
+  { value: 'hero', label: 'Hero Banner' },
+  { value: 'ruled', label: 'Ruled Lines' },
+  { value: 'grid', label: 'Grid' },
+  { value: 'dot', label: 'Dot Grid' },
+]
+
+const projectName = computed({
+  get: () => editorStore.project?.name || 'Untitled Calendar',
+  set: (value: string) => editorStore.setProjectName(value),
+})
+
+const routeProjectId = computed(() => {
+  const raw = route.params.id
+  return typeof raw === 'string' && raw.length > 0 ? raw : null
+})
+
+async function ensureProjectForRoute(): Promise<void> {
+  const id = routeProjectId.value
+
+  if (id) {
+    await editorStore.loadProjectById(id)
+  } else if (!editorStore.project) {
     editorStore.createNewProject({
       year: new Date().getFullYear(),
       country: 'ZA',
@@ -464,37 +710,69 @@ onMounted(() => {
       startDay: 0,
       showHolidays: true,
       showCustomHolidays: false,
-      showWeekNumbers: false
+      showWeekNumbers: false,
     })
   }
-  
-  // Set canvas dimensions
+
   const project = editorStore.project
   if (project) {
-    project.canvas.width = DEFAULT_CANVAS.width
-    project.canvas.height = DEFAULT_CANVAS.height
+    project.canvas.width = project.canvas.width || DEFAULT_CANVAS.width
+    project.canvas.height = project.canvas.height || DEFAULT_CANVAS.height
   }
-  
-  // Initialize canvas after a tick to ensure DOM is ready
-  setTimeout(() => {
-    if (canvasRef.value && !editorStore.canvas) {
-      editorStore.initializeCanvas(canvasRef.value)
-      
-      // Add a welcome text
-      setTimeout(() => {
-        editorStore.addObject('text', {
-          content: 'Start Designing Your Calendar',
-          x: 100,
-          y: 100,
-          fontSize: 32,
-          fontFamily: 'Outfit',
-          color: '#1a1a1a'
-        })
-      }, 100)
-    }
-  }, 50)
+}
 
+function shouldAddWelcomeText(): boolean {
+  if (routeProjectId.value) return false
+  if (!editorStore.project) return false
+  if (editorStore.project.canvas.objects?.length) return false
+  return true
+}
+
+async function initializeEditorCanvas(): Promise<void> {
+  await nextTick()
+
+  if (!canvasRef.value) return
+  if (editorStore.canvas) return
+
+  editorStore.initializeCanvas(canvasRef.value)
+
+  if (shouldAddWelcomeText()) {
+    setTimeout(() => {
+      editorStore.addObject('text', {
+        content: 'Start Designing Your Calendar',
+        x: 100,
+        y: 100,
+        fontSize: 32,
+        fontFamily: 'Outfit',
+        color: '#1a1a1a',
+      })
+    }, 100)
+  }
+}
+
+onMounted(() => {
+  void (async () => {
+    await ensureProjectForRoute()
+    setTimeout(() => {
+      void initializeEditorCanvas()
+    }, 50)
+  })()
   loadTemplateThumbnails()
+})
+
+watch(routeProjectId, (next, prev) => {
+  if (next === prev) return
+  editorStore.destroyCanvas()
+  void (async () => {
+    await ensureProjectForRoute()
+    setTimeout(() => {
+      void initializeEditorCanvas()
+    }, 50)
+  })()
+})
+
+onBeforeUnmount(() => {
+  editorStore.destroyCanvas()
 })
 
 // Template Functions
@@ -502,6 +780,7 @@ async function applyTemplate(template: CalendarTemplate) {
   if (!editorStore.canvas) return
   isApplyingTemplate.value = true
   activeTemplateId.value = template.id
+  editorStore.setProjectTemplateId(template.id)
   templateOverrides.value = {
     highlightToday: template.config.highlightToday,
     highlightWeekends: template.config.highlightWeekends,
@@ -509,7 +788,10 @@ async function applyTemplate(template: CalendarTemplate) {
     hasNotesArea: template.preview.hasNotesArea,
   }
 
+  editorStore.updateTemplateOptions({ ...templateOverrides.value })
+
   await renderTemplateWithOverrides(template)
+  await nextTick()
   isApplyingTemplate.value = false
 }
 
@@ -527,6 +809,13 @@ async function loadTemplateThumbnails() {
 
 // Element Functions
 function addElement(element: ElementItem) {
+  if (element.type === 'preset') {
+    if (element.presetId) {
+      void applyPlannerPreset(element.presetId)
+    }
+    return
+  }
+
   const placement = elementPlacementDefaults[element.type]
   const baseOptions = {
     x: placement?.x,
@@ -558,8 +847,205 @@ function addElement(element: ElementItem) {
       editorStore.addObject('notes-panel', options)
     } else if (element.plannerType === 'photo-block') {
       editorStore.addObject('photo-block', options)
+    } else if (element.plannerType === 'schedule') {
+      editorStore.addObject('schedule', options)
+    } else if (element.plannerType === 'checklist') {
+      editorStore.addObject('checklist', options)
     }
   }
+}
+
+async function applyPlannerPreset(presetId: 'daily-pastel' | 'daily-minimal') {
+  if (!editorStore.canvas) return
+
+  editorStore.setCanvasSize(PAPER_SIZES.portrait.width, PAPER_SIZES.portrait.height)
+  await nextTick()
+  editorStore.canvas.calcOffset()
+
+  editorStore.canvas.clear()
+  editorStore.canvas.backgroundColor = '#ffffff'
+
+  if (presetId === 'daily-pastel') {
+    editorStore.addObject('text', {
+      content: 'Today is a good day!',
+      x: 372,
+      y: 54,
+      fontSize: 34,
+      fontFamily: 'Outfit',
+      fontWeight: 700,
+      textAlign: 'center',
+      originX: 'center',
+      color: '#1f2937',
+    })
+    editorStore.addObject('text', {
+      content: 'Daily Planner',
+      x: 372,
+      y: 96,
+      fontSize: 18,
+      fontFamily: 'Inter',
+      fontWeight: 600,
+      textAlign: 'center',
+      originX: 'center',
+      color: '#ec4899',
+    })
+
+    editorStore.addObject('text', {
+      content: 'Date:',
+      x: 540,
+      y: 140,
+      fontSize: 12,
+      fontFamily: 'Inter',
+      fontWeight: 700,
+      color: '#6b7280',
+    })
+    editorStore.addObject('shape', {
+      x: 580,
+      y: 156,
+      width: 120,
+      stroke: '#cbd5e1',
+      strokeWidth: 2,
+      shapeType: 'line',
+    })
+
+    editorStore.addObject('schedule', {
+      x: 60,
+      y: 170,
+      width: 380,
+      height: 650,
+      title: 'Schedule',
+      accentColor: '#a855f7',
+      startHour: 6,
+      endHour: 20,
+      intervalMinutes: 60,
+    })
+
+    editorStore.addObject('notes-panel', {
+      x: 468,
+      y: 170,
+      width: 216,
+      height: 180,
+      pattern: 'ruled',
+      title: 'Grateful for',
+      accentColor: '#60a5fa',
+    })
+
+    editorStore.addObject('checklist', {
+      x: 468,
+      y: 376,
+      width: 216,
+      height: 440,
+      title: 'To Do',
+      accentColor: '#ec4899',
+      rows: 8,
+      showCheckboxes: true,
+    })
+
+    editorStore.addObject('notes-panel', {
+      x: 60,
+      y: 850,
+      width: 624,
+      height: 160,
+      pattern: 'grid',
+      title: 'Important',
+      accentColor: '#93c5fd',
+    })
+  }
+
+  if (presetId === 'daily-minimal') {
+    editorStore.addObject('text', {
+      content: 'Daily Planner',
+      x: 60,
+      y: 54,
+      fontSize: 46,
+      fontFamily: 'Outfit',
+      fontWeight: 700,
+      color: '#111827',
+    })
+
+    editorStore.addObject('text', {
+      content: 'Date:',
+      x: 520,
+      y: 70,
+      fontSize: 12,
+      fontFamily: 'Inter',
+      fontWeight: 700,
+      color: '#6b7280',
+    })
+    editorStore.addObject('shape', {
+      x: 560,
+      y: 88,
+      width: 140,
+      stroke: '#cbd5e1',
+      strokeWidth: 2,
+      shapeType: 'line',
+    })
+
+    editorStore.addObject('notes-panel', {
+      x: 60,
+      y: 140,
+      width: 380,
+      height: 740,
+      pattern: 'ruled',
+      title: "Today's Focus",
+      accentColor: '#f59e0b',
+    })
+
+    editorStore.addObject('notes-panel', {
+      x: 468,
+      y: 140,
+      width: 216,
+      height: 240,
+      pattern: 'dot',
+      title: 'Top Priority',
+      accentColor: '#84cc16',
+    })
+
+    editorStore.addObject('checklist', {
+      x: 468,
+      y: 406,
+      width: 216,
+      height: 300,
+      title: 'To-Do List',
+      accentColor: '#f59e0b',
+      rows: 6,
+      showCheckboxes: true,
+    })
+
+    editorStore.addObject('notes-panel', {
+      x: 468,
+      y: 730,
+      width: 216,
+      height: 240,
+      pattern: 'ruled',
+      title: 'Notes',
+      accentColor: '#94a3b8',
+    })
+
+    // Simple mood row (editable shapes)
+    editorStore.addObject('text', {
+      content: 'Mood:',
+      x: 468,
+      y: 1006,
+      fontSize: 12,
+      fontFamily: 'Inter',
+      fontWeight: 700,
+      color: '#6b7280',
+    })
+    for (let i = 0; i < 5; i++) {
+      editorStore.addObject('shape', {
+        x: 520 + i * 32,
+        y: 1000,
+        radius: 10,
+        fill: '#f3f4f6',
+        stroke: '#cbd5e1',
+        strokeWidth: 2,
+        shapeType: 'circle',
+      })
+    }
+  }
+
+  editorStore.canvas.renderAll()
+  editorStore.snapshotCanvasState()
 }
 
 // Text Functions
@@ -677,7 +1163,11 @@ function handleZoom(delta: number) {
         </button>
         <div class="h-6 w-px bg-gray-200 dark:bg-gray-700"></div>
         <div>
-          <h1 class="font-semibold text-gray-900 dark:text-white text-sm">{{ editorStore.project?.name || 'Untitled Calendar' }}</h1>
+          <input
+            v-model="projectName"
+            class="font-semibold text-gray-900 dark:text-white text-sm bg-transparent border-0 p-0 focus:ring-0 focus:outline-none w-64 max-w-[40vw]"
+            aria-label="Project name"
+          />
           <p class="text-xs text-gray-500">
             <span v-if="isDirty" class="text-amber-500">● Unsaved changes</span>
             <span v-else class="text-green-500">✓ All changes saved</span>
@@ -717,7 +1207,7 @@ function handleZoom(delta: number) {
           <ShareIcon class="w-4 h-4" /> Share
         </button>
         <button 
-          @click="editorStore.saveProject()" 
+          @click="handleSaveProject()" 
           :disabled="!isDirty || saving"
           class="bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs px-3 py-1.5 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50"
         >
@@ -1093,6 +1583,346 @@ function handleZoom(delta: number) {
                   <TrashIcon class="w-4 h-4 text-white/50 group-hover:text-red-200" />
                 </button>
               </div>
+
+              <!-- Layout (Position & Size) -->
+              <div class="space-y-3">
+                <div class="flex items-center justify-between">
+                  <p class="text-xs font-semibold uppercase tracking-widest text-white/60">Layout</p>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                    <label class="text-xs font-medium text-white/60 mb-1.5 block">X</label>
+                    <input
+                      v-model.number="positionX"
+                      type="number"
+                      class="w-full px-3 py-2 text-sm border border-white/10 rounded-xl bg-white/10 text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label class="text-xs font-medium text-white/60 mb-1.5 block">Y</label>
+                    <input
+                      v-model.number="positionY"
+                      type="number"
+                      class="w-full px-3 py-2 text-sm border border-white/10 rounded-xl bg-white/10 text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+
+                <div v-if="elementSize" class="grid grid-cols-2 gap-3">
+                  <div>
+                    <label class="text-xs font-medium text-white/60 mb-1.5 block">W</label>
+                    <input
+                      type="number"
+                      min="10"
+                      class="w-full px-3 py-2 text-sm border border-white/10 rounded-xl bg-white/10 text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      :value="Math.round(elementSize.width)"
+                      @change="updateElementSize({ width: Number(($event.target as HTMLInputElement).value), height: elementSize.height })"
+                    />
+                  </div>
+                  <div>
+                    <label class="text-xs font-medium text-white/60 mb-1.5 block">H</label>
+                    <input
+                      type="number"
+                      min="10"
+                      class="w-full px-3 py-2 text-sm border border-white/10 rounded-xl bg-white/10 text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      :value="Math.round(elementSize.height)"
+                      @change="updateElementSize({ width: elementSize.width, height: Number(($event.target as HTMLInputElement).value) })"
+                    />
+                  </div>
+                </div>
+
+                <div v-else class="grid grid-cols-2 gap-3">
+                  <div>
+                    <label class="text-xs font-medium text-white/60 mb-1.5 block">W</label>
+                    <input
+                      v-model.number="objectWidth"
+                      type="number"
+                      min="1"
+                      class="w-full px-3 py-2 text-sm border border-white/10 rounded-xl bg-white/10 text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label class="text-xs font-medium text-white/60 mb-1.5 block">H</label>
+                    <input
+                      v-model.number="objectHeight"
+                      type="number"
+                      min="1"
+                      class="w-full px-3 py-2 text-sm border border-white/10 rounded-xl bg-white/10 text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <!-- Schedule Block -->
+              <template v-if="scheduleMetadata">
+                <div class="pt-4 border-t border-white/10 space-y-4">
+                  <div class="flex items-center justify-between">
+                    <p class="text-xs font-semibold uppercase tracking-widest text-white/60">Schedule</p>
+                    <select
+                      class="text-xs px-2 py-1 rounded-lg bg-white/10 border border-white/10 text-white"
+                      :value="scheduleMetadata.intervalMinutes"
+                      @change="updateScheduleMetadata((draft) => { draft.intervalMinutes = Number(($event.target as HTMLSelectElement).value) as ScheduleMetadata['intervalMinutes'] })"
+                    >
+                      <option v-for="opt in scheduleIntervalOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label class="text-xs font-medium text-white/60 mb-1.5 block">Title</label>
+                    <input
+                      type="text"
+                      class="w-full px-3 py-2 text-sm border border-white/10 rounded-xl bg-white/10 text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      :value="scheduleMetadata.title"
+                      @input="updateScheduleMetadata((draft) => { draft.title = ($event.target as HTMLInputElement).value })"
+                    />
+                  </div>
+
+                  <div>
+                    <label class="text-xs font-medium text-white/60 mb-1.5 block">Header Style</label>
+                    <select
+                      class="w-full px-3 py-2 text-sm border border-white/10 rounded-xl bg-white/10 text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      :value="scheduleMetadata.headerStyle ?? 'minimal'"
+                      @change="updateScheduleMetadata((draft) => { draft.headerStyle = ($event.target as HTMLSelectElement).value as PlannerHeaderStyle })"
+                    >
+                      <option v-for="opt in headerStyleOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                    </select>
+                  </div>
+
+                  <div class="grid grid-cols-2 gap-3">
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Accent</label>
+                      <ColorPicker
+                        :model-value="scheduleMetadata.accentColor"
+                        @update:model-value="(c) => updateScheduleMetadata((draft) => { draft.accentColor = c })"
+                      />
+                    </div>
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Lines</label>
+                      <ColorPicker
+                        :model-value="scheduleMetadata.lineColor ?? '#e2e8f0'"
+                        @update:model-value="(c) => updateScheduleMetadata((draft) => { draft.lineColor = c })"
+                      />
+                    </div>
+                  </div>
+
+                  <div class="grid grid-cols-2 gap-3">
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Background</label>
+                      <ColorPicker
+                        :model-value="scheduleMetadata.backgroundColor ?? '#ffffff'"
+                        @update:model-value="(c) => updateScheduleMetadata((draft) => { draft.backgroundColor = c })"
+                      />
+                    </div>
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Border</label>
+                      <ColorPicker
+                        :model-value="scheduleMetadata.borderColor ?? '#e2e8f0'"
+                        @update:model-value="(c) => updateScheduleMetadata((draft) => { draft.borderColor = c })"
+                      />
+                    </div>
+                  </div>
+
+                  <div class="grid grid-cols-2 gap-3">
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Radius</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="80"
+                        class="w-full px-3 py-2 text-sm border border-white/10 rounded-xl bg-white/10 text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        :value="scheduleMetadata.cornerRadius ?? 22"
+                        @change="updateScheduleMetadata((draft) => { draft.cornerRadius = Math.max(0, Math.min(80, Number(($event.target as HTMLInputElement).value) || 0)) })"
+                      />
+                    </div>
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Border Width</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="10"
+                        class="w-full px-3 py-2 text-sm border border-white/10 rounded-xl bg-white/10 text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        :value="scheduleMetadata.borderWidth ?? 1"
+                        @change="updateScheduleMetadata((draft) => { draft.borderWidth = Math.max(0, Math.min(10, Number(($event.target as HTMLInputElement).value) || 0)) })"
+                      />
+                    </div>
+                  </div>
+
+                  <div class="grid grid-cols-2 gap-3">
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Start Hour</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="23"
+                        class="w-full px-3 py-2 text-sm border border-white/10 rounded-xl bg-white/10 text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        :value="scheduleMetadata.startHour"
+                        @change="updateScheduleMetadata((draft) => { draft.startHour = Math.max(0, Math.min(23, Number(($event.target as HTMLInputElement).value) || draft.startHour)) })"
+                      />
+                    </div>
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">End Hour</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="23"
+                        class="w-full px-3 py-2 text-sm border border-white/10 rounded-xl bg-white/10 text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        :value="scheduleMetadata.endHour"
+                        @change="updateScheduleMetadata((draft) => { draft.endHour = Math.max(0, Math.min(23, Number(($event.target as HTMLInputElement).value) || draft.endHour)) })"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </template>
+
+              <!-- Checklist Block -->
+              <template v-if="checklistMetadata">
+                <div class="pt-4 border-t border-white/10 space-y-4">
+                  <p class="text-xs font-semibold uppercase tracking-widest text-white/60">Checklist</p>
+
+                  <div>
+                    <label class="text-xs font-medium text-white/60 mb-1.5 block">Title</label>
+                    <input
+                      type="text"
+                      class="w-full px-3 py-2 text-sm border border-white/10 rounded-xl bg-white/10 text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      :value="checklistMetadata.title"
+                      @input="updateChecklistMetadata((draft) => { draft.title = ($event.target as HTMLInputElement).value })"
+                    />
+                  </div>
+
+                  <div>
+                    <label class="text-xs font-medium text-white/60 mb-1.5 block">Header Style</label>
+                    <select
+                      class="w-full px-3 py-2 text-sm border border-white/10 rounded-xl bg-white/10 text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      :value="checklistMetadata.headerStyle ?? 'tint'"
+                      @change="updateChecklistMetadata((draft) => { draft.headerStyle = ($event.target as HTMLSelectElement).value as PlannerHeaderStyle })"
+                    >
+                      <option v-for="opt in headerStyleOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                    </select>
+                  </div>
+
+                  <div class="grid grid-cols-2 gap-3">
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Accent</label>
+                      <ColorPicker
+                        :model-value="checklistMetadata.accentColor"
+                        @update:model-value="(c) => updateChecklistMetadata((draft) => { draft.accentColor = c })"
+                      />
+                    </div>
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Checkbox</label>
+                      <ColorPicker
+                        :model-value="checklistMetadata.checkboxColor ?? checklistMetadata.accentColor"
+                        @update:model-value="(c) => updateChecklistMetadata((draft) => { draft.checkboxColor = c })"
+                      />
+                    </div>
+                  </div>
+
+                  <div class="grid grid-cols-2 gap-3">
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Background</label>
+                      <ColorPicker
+                        :model-value="checklistMetadata.backgroundColor ?? '#ffffff'"
+                        @update:model-value="(c) => updateChecklistMetadata((draft) => { draft.backgroundColor = c })"
+                      />
+                    </div>
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Border</label>
+                      <ColorPicker
+                        :model-value="checklistMetadata.borderColor ?? '#e2e8f0'"
+                        @update:model-value="(c) => updateChecklistMetadata((draft) => { draft.borderColor = c })"
+                      />
+                    </div>
+                  </div>
+
+                  <div class="grid grid-cols-2 gap-3">
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Rows</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="30"
+                        class="w-full px-3 py-2 text-sm border border-white/10 rounded-xl bg-white/10 text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        :value="checklistMetadata.rows"
+                        @change="updateChecklistMetadata((draft) => { draft.rows = Math.max(1, Math.min(30, Number(($event.target as HTMLInputElement).value) || draft.rows)) })"
+                      />
+                    </div>
+                    <div class="flex items-end">
+                      <label class="flex items-center gap-2 text-sm text-white/80">
+                        <input
+                          type="checkbox"
+                          class="accent-primary-400"
+                          :checked="checklistMetadata.showCheckboxes"
+                          @change="updateChecklistMetadata((draft) => { draft.showCheckboxes = ($event.target as HTMLInputElement).checked })"
+                        >
+                        <span>Checkboxes</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </template>
+
+              <!-- Notes Block (Planner Note) -->
+              <template v-if="plannerNoteMetadata">
+                <div class="pt-4 border-t border-white/10 space-y-4">
+                  <div class="flex items-center justify-between">
+                    <p class="text-xs font-semibold uppercase tracking-widest text-white/60">Notes</p>
+                    <select
+                      class="text-xs px-2 py-1 rounded-lg bg-white/10 border border-white/10 text-white"
+                      :value="plannerNoteMetadata.pattern"
+                      @change="updatePlannerMetadata((draft) => { draft.pattern = ($event.target as HTMLSelectElement).value as PlannerPatternVariant })"
+                    >
+                      <option v-for="opt in plannerPatternOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label class="text-xs font-medium text-white/60 mb-1.5 block">Title</label>
+                    <input
+                      type="text"
+                      class="w-full px-3 py-2 text-sm border border-white/10 rounded-xl bg-white/10 text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      :value="plannerNoteMetadata.title"
+                      @input="updatePlannerMetadata((draft) => { draft.title = ($event.target as HTMLInputElement).value })"
+                    />
+                  </div>
+
+                  <div>
+                    <label class="text-xs font-medium text-white/60 mb-1.5 block">Header Style</label>
+                    <select
+                      class="w-full px-3 py-2 text-sm border border-white/10 rounded-xl bg-white/10 text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      :value="plannerNoteMetadata.headerStyle ?? (plannerNoteMetadata.pattern === 'hero' ? 'filled' : 'minimal')"
+                      @change="updatePlannerMetadata((draft) => { draft.headerStyle = ($event.target as HTMLSelectElement).value as PlannerHeaderStyle })"
+                    >
+                      <option v-for="opt in headerStyleOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label class="text-xs font-medium text-white/60 mb-1.5 block">Accent</label>
+                    <ColorPicker
+                      :model-value="plannerNoteMetadata.accentColor"
+                      @update:model-value="(c) => updatePlannerMetadata((draft) => { draft.accentColor = c })"
+                    />
+                  </div>
+
+                  <div class="grid grid-cols-2 gap-3">
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Background</label>
+                      <ColorPicker
+                        :model-value="plannerNoteMetadata.backgroundColor ?? '#ffffff'"
+                        @update:model-value="(c) => updatePlannerMetadata((draft) => { draft.backgroundColor = c })"
+                      />
+                    </div>
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Border</label>
+                      <ColorPicker
+                        :model-value="plannerNoteMetadata.borderColor ?? '#e2e8f0'"
+                        @update:model-value="(c) => updatePlannerMetadata((draft) => { draft.borderColor = c })"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </template>
               
               <!-- Text Properties -->
               <template v-if="objectType === 'textbox'">

@@ -15,6 +15,7 @@ class PDFExportService {
     config: ExportConfig,
     filename: string
   ): Promise<Blob> {
+    void filename
     const { paperSize, orientation, bleed, cropMarks, quality } = config
     
     // Get paper dimensions
@@ -76,21 +77,24 @@ class PDFExportService {
     config: ExportConfig,
     filename: string
   ): Promise<Blob> {
-    const { paperSize, orientation, bleed, cropMarks, quality } = config
-    const dimensions = this.getPaperDimensions(paperSize, orientation)
+    void filename
+    const { paperSize, bleed, cropMarks, quality } = config
+    const width = typeof fabricCanvas?.getWidth === 'function' ? fabricCanvas.getWidth() : fabricCanvas?.width
+    const height = typeof fabricCanvas?.getHeight === 'function' ? fabricCanvas.getHeight() : fabricCanvas?.height
+    const inferredOrientation: 'portrait' | 'landscape' = width && height && width > height ? 'landscape' : 'portrait'
+    const dimensions = this.getPaperDimensions(paperSize, inferredOrientation)
     const dpi = QUALITY_DPI[quality]
     const multiplier = dpi / 72
 
     // Get canvas data URL at high resolution
     const dataURL = fabricCanvas.toDataURL({
-      format: 'jpeg',
-      quality: 0.95,
+      format: 'png',
       multiplier: multiplier,
     })
 
     // Create PDF
     const pdf = new jsPDF({
-      orientation: orientation === 'landscape' ? 'l' : 'p',
+      orientation: inferredOrientation === 'landscape' ? 'l' : 'p',
       unit: 'mm',
       format: [dimensions.width + (bleed * 2), dimensions.height + (bleed * 2)],
     })
@@ -98,7 +102,7 @@ class PDFExportService {
     // Add image to PDF
     pdf.addImage(
       dataURL,
-      'JPEG',
+      'PNG',
       bleed, // Offset by bleed
       bleed,
       dimensions.width,
@@ -118,6 +122,43 @@ class PDFExportService {
     return pdf.output('blob')
   }
 
+  createPDFDocument(config: ExportConfig): jsPDF {
+    const { paperSize, orientation, bleed } = config
+    const dimensions = this.getPaperDimensions(paperSize, orientation)
+
+    return new jsPDF({
+      orientation: orientation === 'landscape' ? 'l' : 'p',
+      unit: 'mm',
+      format: [dimensions.width + bleed * 2, dimensions.height + bleed * 2],
+    })
+  }
+
+  appendFabricCanvasPage(pdf: jsPDF, fabricCanvas: any, config: ExportConfig, addPage: boolean): void {
+    const { paperSize, orientation, bleed, cropMarks, quality } = config
+    const dimensions = this.getPaperDimensions(paperSize, orientation)
+    const dpi = QUALITY_DPI[quality]
+    const multiplier = dpi / 72
+
+    if (addPage) {
+      pdf.addPage()
+    }
+
+    const dataURL = fabricCanvas.toDataURL({
+      format: 'png',
+      multiplier,
+    })
+
+    pdf.addImage(dataURL, 'PNG', bleed, bleed, dimensions.width, dimensions.height)
+
+    if (cropMarks) {
+      this.addCropMarks(pdf, dimensions, bleed)
+    }
+
+    if (config.safeZone) {
+      this.addSafeZoneMarks(pdf, dimensions, bleed)
+    }
+  }
+
   /**
    * Export multi-page PDF (e.g., monthly calendar)
    */
@@ -126,6 +167,7 @@ class PDFExportService {
     config: ExportConfig,
     filename: string
   ): Promise<Blob> {
+    void filename
     const { paperSize, orientation, bleed, cropMarks, quality } = config
     const dimensions = this.getPaperDimensions(paperSize, orientation)
     const dpi = QUALITY_DPI[quality]
@@ -141,7 +183,10 @@ class PDFExportService {
         pdf.addPage()
       }
 
-      const canvas = await html2canvas(pages[i], {
+      const page = pages[i]
+      if (!page) continue
+
+      const canvas = await html2canvas(page, {
         scale: dpi / 72,
         useCORS: true,
         allowTaint: false,

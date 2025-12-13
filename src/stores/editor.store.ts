@@ -14,10 +14,24 @@ import type {
   PlannerNoteMetadata,
   PhotoBlockMetadata,
   DateCellMetadata,
-  PlannerPatternVariant
+  PlannerPatternVariant,
+  ScheduleMetadata,
+  ChecklistMetadata
 } from '@/types'
 import { mergeTemplateOptions } from '@/config/editor-defaults'
 import { calendarGeneratorService } from '@/services/calendar/generator.service'
+import { projectsService } from '@/services/projects/projects.service'
+import { useAuthStore } from '@/stores/auth.store'
+
+function generateObjectId(prefix: string): string {
+  try {
+    const uuid = globalThis.crypto?.randomUUID?.()
+    if (uuid) return `${prefix}-${uuid}`
+  } catch {
+    // ignore
+  }
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+}
 
 export const useEditorStore = defineStore('editor', () => {
   // ═══════════════════════════════════════════════════════════════
@@ -47,6 +61,7 @@ export const useEditorStore = defineStore('editor', () => {
   const isDirty = ref(false)
 
   const today = new Date()
+  const authStore = useAuthStore()
 
   function getISODateString(date: Date = new Date()): string {
     return date.toISOString()
@@ -94,6 +109,18 @@ export const useEditorStore = defineStore('editor', () => {
       pattern: overrides.pattern ?? pattern,
       title: overrides.title ?? 'Notes',
       accentColor: overrides.accentColor ?? '#2563eb',
+      headerStyle:
+        overrides.headerStyle ??
+        ((overrides.pattern ?? pattern) === 'hero' ? 'filled' : 'minimal'),
+      backgroundColor: overrides.backgroundColor ?? '#ffffff',
+      borderColor: overrides.borderColor ?? '#e2e8f0',
+      borderWidth: overrides.borderWidth ?? 1,
+      cornerRadius: overrides.cornerRadius ?? 22,
+      titleColor: overrides.titleColor,
+      headerBackgroundColor: overrides.headerBackgroundColor,
+      headerBackgroundOpacity: overrides.headerBackgroundOpacity,
+      guideColor: overrides.guideColor,
+      dotColor: overrides.dotColor,
       size,
     }
   }
@@ -121,6 +148,57 @@ export const useEditorStore = defineStore('editor', () => {
       date: overrides.date ?? getISODateString(),
       highlightAccent: overrides.highlightAccent ?? '#fef3c7',
       notePlaceholder: overrides.notePlaceholder ?? 'Add event',
+      size,
+    }
+  }
+
+  function getDefaultScheduleMetadata(
+    overrides: Partial<ScheduleMetadata> = {},
+  ): ScheduleMetadata {
+    const defaultSize = { width: 320, height: 640 }
+    const size = overrides.size ? { ...defaultSize, ...overrides.size } : defaultSize
+    return {
+      kind: 'schedule',
+      title: overrides.title ?? 'Schedule',
+      accentColor: overrides.accentColor ?? '#a855f7',
+      startHour: overrides.startHour ?? 6,
+      endHour: overrides.endHour ?? 20,
+      intervalMinutes: overrides.intervalMinutes ?? 60,
+      headerStyle: overrides.headerStyle ?? 'minimal',
+      backgroundColor: overrides.backgroundColor ?? '#ffffff',
+      borderColor: overrides.borderColor ?? '#e2e8f0',
+      borderWidth: overrides.borderWidth ?? 1,
+      cornerRadius: overrides.cornerRadius ?? 22,
+      titleColor: overrides.titleColor,
+      headerBackgroundColor: overrides.headerBackgroundColor,
+      headerBackgroundOpacity: overrides.headerBackgroundOpacity,
+      lineColor: overrides.lineColor,
+      timeLabelColor: overrides.timeLabelColor,
+      size,
+    }
+  }
+
+  function getDefaultChecklistMetadata(
+    overrides: Partial<ChecklistMetadata> = {},
+  ): ChecklistMetadata {
+    const defaultSize = { width: 320, height: 420 }
+    const size = overrides.size ? { ...defaultSize, ...overrides.size } : defaultSize
+    return {
+      kind: 'checklist',
+      title: overrides.title ?? 'To Do',
+      accentColor: overrides.accentColor ?? '#ec4899',
+      rows: overrides.rows ?? 8,
+      showCheckboxes: overrides.showCheckboxes ?? true,
+      headerStyle: overrides.headerStyle ?? 'tint',
+      backgroundColor: overrides.backgroundColor ?? '#ffffff',
+      borderColor: overrides.borderColor ?? '#e2e8f0',
+      borderWidth: overrides.borderWidth ?? 1,
+      cornerRadius: overrides.cornerRadius ?? 22,
+      titleColor: overrides.titleColor,
+      headerBackgroundColor: overrides.headerBackgroundColor,
+      headerBackgroundOpacity: overrides.headerBackgroundOpacity,
+      lineColor: overrides.lineColor,
+      checkboxColor: overrides.checkboxColor,
       size,
     }
   }
@@ -158,6 +236,12 @@ export const useEditorStore = defineStore('editor', () => {
       case 'photo-block':
         rebuilt = buildPhotoBlockGraphics(metadata)
         break
+      case 'schedule':
+        rebuilt = buildScheduleGraphics(metadata)
+        break
+      case 'checklist':
+        rebuilt = buildChecklistGraphics(metadata)
+        break
       default:
         rebuilt = null
     }
@@ -172,6 +256,7 @@ export const useEditorStore = defineStore('editor', () => {
       angle: target.angle,
       flipX: (target as any).flipX,
       flipY: (target as any).flipY,
+      name: getLayerNameForMetadata(metadata),
     })
 
     ;(rebuilt as any).id = (target as any).id
@@ -495,58 +580,83 @@ export const useEditorStore = defineStore('editor', () => {
     const { width, height } = metadata.size
     const objects: FabricObject[] = []
 
+    const cornerRadius = Math.max(0, metadata.cornerRadius ?? 22)
+    const borderWidth = Math.max(0, metadata.borderWidth ?? 1)
+    const borderColor = metadata.borderColor ?? '#e2e8f0'
+    const backgroundColor = metadata.backgroundColor ?? '#ffffff'
+    const headerStyle = metadata.headerStyle ?? (metadata.pattern === 'hero' ? 'filled' : 'minimal')
+
+    const paddingX = 24
+    const paddingTop = 18
+    const headerHeight = headerStyle === 'none' ? 0 : 48
+    const bodyTop = paddingTop + (headerStyle === 'none' ? 18 : headerHeight)
+    const headerRectRadius = Math.min(cornerRadius, 12)
+
     objects.push(
       new Rect({
         width,
         height,
-        rx: 28,
-        ry: 28,
-        fill: '#ffffff',
-        stroke: '#e2e8f0',
-        strokeWidth: 1,
+        rx: cornerRadius,
+        ry: cornerRadius,
+        fill: backgroundColor,
+        stroke: borderColor,
+        strokeWidth: borderWidth,
       }),
     )
 
-    if (metadata.pattern === 'hero') {
+    if (headerStyle === 'filled' || headerStyle === 'tint') {
+      const fill = metadata.headerBackgroundColor ?? metadata.accentColor
+      const opacity =
+        headerStyle === 'filled'
+          ? metadata.headerBackgroundOpacity ?? 1
+          : metadata.headerBackgroundOpacity ?? 0.12
+
       objects.push(
         new Rect({
           width,
-          height: 68,
-          rx: 28,
-          ry: 28,
-          fill: metadata.accentColor,
+          height: headerHeight,
+          rx: headerRectRadius,
+          ry: headerRectRadius,
+          fill,
+          opacity,
         }),
       )
+    }
+
+    const titleColor =
+      metadata.titleColor ??
+      (headerStyle === 'filled' ? '#ffffff' : '#0f172a')
+
+    objects.push(
+      new Textbox(metadata.title, {
+        left: paddingX,
+        top: paddingTop + (headerStyle === 'none' ? 2 : 12),
+        width: width - paddingX * 2,
+        fontSize: 15,
+        fontFamily: 'Inter',
+        fontWeight: 700,
+        fill: titleColor,
+        selectable: false,
+      }),
+    )
+
+    if (headerStyle === 'minimal') {
       objects.push(
-        new Textbox(metadata.title, {
-          left: 24,
-          top: 24,
-          width: width - 48,
-          fontSize: 18,
-          fontWeight: 600,
-          fill: '#ffffff',
+        new Line([paddingX, paddingTop + 34, width - paddingX, paddingTop + 34], {
+          stroke: metadata.accentColor,
+          strokeWidth: 2,
           selectable: false,
-        }),
-      )
-    } else {
-      objects.push(
-        new Textbox(metadata.title, {
-          left: 24,
-          top: 18,
-          width: width - 48,
-          fontSize: 16,
-          fontWeight: 600,
-          fill: '#0f172a',
-          selectable: false,
+          opacity: 0.9,
         }),
       )
     }
 
     if (metadata.pattern === 'ruled') {
-      for (let y = 80; y < height - 24; y += 26) {
+      const guideColor = metadata.guideColor ?? '#e2e8f0'
+      for (let y = bodyTop + 16; y < height - 24; y += 26) {
         objects.push(
           new Line([24, y, width - 24, y], {
-            stroke: '#e2e8f0',
+            stroke: guideColor,
             strokeWidth: 1,
             selectable: false,
           }),
@@ -555,19 +665,20 @@ export const useEditorStore = defineStore('editor', () => {
     }
 
     if (metadata.pattern === 'grid') {
+      const guideColor = metadata.guideColor ?? '#eff6ff'
       for (let x = 24; x < width - 24; x += 24) {
         objects.push(
-          new Line([x, 70, x, height - 24], {
-            stroke: '#eff6ff',
+          new Line([x, bodyTop + 6, x, height - 24], {
+            stroke: guideColor,
             strokeWidth: 1,
             selectable: false,
           }),
         )
       }
-      for (let y = 70; y < height - 24; y += 24) {
+      for (let y = bodyTop + 6; y < height - 24; y += 24) {
         objects.push(
           new Line([24, y, width - 24, y], {
-            stroke: '#eff6ff',
+            stroke: guideColor,
             strokeWidth: 1,
             selectable: false,
           }),
@@ -576,8 +687,9 @@ export const useEditorStore = defineStore('editor', () => {
     }
 
     if (metadata.pattern === 'dot') {
+      const dotColor = metadata.dotColor ?? '#cbd5f5'
       for (let x = 28; x < width - 28; x += 20) {
-        for (let y = 80; y < height - 28; y += 20) {
+        for (let y = bodyTop + 16; y < height - 28; y += 20) {
           objects.push(
             new Rect({
               left: x,
@@ -586,7 +698,7 @@ export const useEditorStore = defineStore('editor', () => {
               height: 2,
               rx: 1,
               ry: 1,
-              fill: '#cbd5f5',
+              fill: dotColor,
               selectable: false,
             }),
           )
@@ -596,7 +708,7 @@ export const useEditorStore = defineStore('editor', () => {
 
     return new Group(objects, {
       subTargetCheck: false,
-      hoverCursor: 'text',
+      hoverCursor: 'move',
     })
   }
 
@@ -646,6 +758,245 @@ export const useEditorStore = defineStore('editor', () => {
     return new Group(objects, {
       subTargetCheck: false,
       hoverCursor: 'pointer',
+    })
+  }
+
+  function buildScheduleGraphics(metadata: ScheduleMetadata): Group {
+    const { width, height } = metadata.size
+    const objects: FabricObject[] = []
+
+    const paddingX = 24
+    const paddingTop = 18
+    const cornerRadius = Math.max(0, metadata.cornerRadius ?? 22)
+    const borderWidth = Math.max(0, metadata.borderWidth ?? 1)
+    const borderColor = metadata.borderColor ?? '#e2e8f0'
+    const backgroundColor = metadata.backgroundColor ?? '#ffffff'
+    const headerStyle = metadata.headerStyle ?? 'minimal'
+    const headerHeight = headerStyle === 'none' ? 0 : 48
+    const bodyTop = paddingTop + (headerStyle === 'none' ? 18 : headerHeight)
+    const headerRectRadius = Math.min(cornerRadius, 12)
+
+    objects.push(
+      new Rect({
+        width,
+        height,
+        rx: cornerRadius,
+        ry: cornerRadius,
+        fill: backgroundColor,
+        stroke: borderColor,
+        strokeWidth: borderWidth,
+      }),
+    )
+
+    if (headerStyle === 'filled' || headerStyle === 'tint') {
+      const fill = metadata.headerBackgroundColor ?? metadata.accentColor
+      const opacity =
+        headerStyle === 'filled'
+          ? metadata.headerBackgroundOpacity ?? 1
+          : metadata.headerBackgroundOpacity ?? 0.12
+      objects.push(
+        new Rect({
+          width,
+          height: headerHeight,
+          rx: headerRectRadius,
+          ry: headerRectRadius,
+          fill,
+          opacity,
+        }),
+      )
+    }
+
+    const titleColor =
+      metadata.titleColor ?? (headerStyle === 'filled' ? '#ffffff' : '#0f172a')
+
+    objects.push(
+      new Textbox(metadata.title, {
+        left: paddingX,
+        top: paddingTop + (headerStyle === 'none' ? 2 : 12),
+        width: width - paddingX * 2,
+        fontSize: 15,
+        fontFamily: 'Inter',
+        fontWeight: 700,
+        fill: titleColor,
+        selectable: false,
+      }),
+    )
+
+    if (headerStyle === 'minimal') {
+      objects.push(
+        new Line([paddingX, paddingTop + 34, width - paddingX, paddingTop + 34], {
+          stroke: metadata.accentColor,
+          strokeWidth: 2,
+          selectable: false,
+          opacity: 0.9,
+        }),
+      )
+    }
+
+    const totalMinutes = Math.max(0, (metadata.endHour - metadata.startHour) * 60)
+    const step = metadata.intervalMinutes
+    const slots = Math.max(1, Math.floor(totalMinutes / step) + 1)
+    const availableHeight = Math.max(1, height - bodyTop - 22)
+    const rowHeight = availableHeight / slots
+
+    const timeLabelWidth = 56
+    const lineLeft = paddingX + timeLabelWidth
+    const lineRight = width - paddingX
+
+    const lineColor = metadata.lineColor ?? '#e2e8f0'
+    const timeLabelColor = metadata.timeLabelColor ?? '#64748b'
+
+    for (let i = 0; i < slots; i++) {
+      const minutes = metadata.startHour * 60 + i * step
+      const hour = Math.floor(minutes / 60)
+      const minute = minutes % 60
+      const label = `${hour % 12 === 0 ? 12 : hour % 12}:${String(minute).padStart(2, '0')} ${hour < 12 ? 'AM' : 'PM'}`
+      const y = bodyTop + i * rowHeight
+
+      objects.push(
+        new Textbox(label, {
+          left: paddingX,
+          top: y - 8,
+          width: timeLabelWidth - 8,
+          fontSize: 10,
+          fontFamily: 'Inter',
+          fontWeight: 600,
+          fill: timeLabelColor,
+          selectable: false,
+        }),
+      )
+
+      objects.push(
+        new Line([lineLeft, y, lineRight, y], {
+          stroke: lineColor,
+          strokeWidth: 1,
+          selectable: false,
+        }),
+      )
+    }
+
+    return new Group(objects, {
+      subTargetCheck: false,
+      hoverCursor: 'move',
+    })
+  }
+
+  function buildChecklistGraphics(metadata: ChecklistMetadata): Group {
+    const { width, height } = metadata.size
+    const objects: FabricObject[] = []
+
+    const paddingX = 24
+    const paddingTop = 18
+    const cornerRadius = Math.max(0, metadata.cornerRadius ?? 22)
+    const borderWidth = Math.max(0, metadata.borderWidth ?? 1)
+    const borderColor = metadata.borderColor ?? '#e2e8f0'
+    const backgroundColor = metadata.backgroundColor ?? '#ffffff'
+    const headerStyle = metadata.headerStyle ?? 'tint'
+    const headerHeight = headerStyle === 'none' ? 0 : 48
+    const bodyTop = paddingTop + (headerStyle === 'none' ? 18 : headerHeight)
+    const headerRectRadius = Math.min(cornerRadius, 12)
+
+    objects.push(
+      new Rect({
+        width,
+        height,
+        rx: cornerRadius,
+        ry: cornerRadius,
+        fill: backgroundColor,
+        stroke: borderColor,
+        strokeWidth: borderWidth,
+      }),
+    )
+
+    if (headerStyle === 'filled' || headerStyle === 'tint') {
+      const fill = metadata.headerBackgroundColor ?? metadata.accentColor
+      const opacity =
+        headerStyle === 'filled'
+          ? metadata.headerBackgroundOpacity ?? 1
+          : metadata.headerBackgroundOpacity ?? 0.12
+      objects.push(
+        new Rect({
+          width,
+          height: headerHeight,
+          rx: headerRectRadius,
+          ry: headerRectRadius,
+          fill,
+          opacity,
+        }),
+      )
+    }
+
+    const titleColor =
+      metadata.titleColor ?? (headerStyle === 'filled' ? '#ffffff' : '#0f172a')
+
+    objects.push(
+      new Textbox(metadata.title, {
+        left: paddingX,
+        top: paddingTop + (headerStyle === 'none' ? 2 : 12),
+        width: width - paddingX * 2,
+        fontSize: 15,
+        fontFamily: 'Inter',
+        fontWeight: 700,
+        fill: titleColor,
+        selectable: false,
+      }),
+    )
+
+    if (headerStyle === 'minimal') {
+      objects.push(
+        new Line([paddingX, paddingTop + 34, width - paddingX, paddingTop + 34], {
+          stroke: metadata.accentColor,
+          strokeWidth: 2,
+          selectable: false,
+          opacity: 0.9,
+        }),
+      )
+    }
+
+    const rows = Math.max(1, metadata.rows)
+    const availableHeight = Math.max(1, height - bodyTop - 22)
+    const rowHeight = availableHeight / rows
+
+    const checkboxSize = 14
+    const checkboxLeft = paddingX
+    const lineLeft = metadata.showCheckboxes ? checkboxLeft + checkboxSize + 12 : paddingX
+    const lineRight = width - paddingX
+
+    const lineColor = metadata.lineColor ?? '#e2e8f0'
+    const checkboxColor = metadata.checkboxColor ?? metadata.accentColor
+
+    for (let i = 0; i < rows; i++) {
+      const y = bodyTop + i * rowHeight + rowHeight / 2
+
+      if (metadata.showCheckboxes) {
+        objects.push(
+          new Rect({
+            left: checkboxLeft,
+            top: y - checkboxSize / 2,
+            width: checkboxSize,
+            height: checkboxSize,
+            rx: 4,
+            ry: 4,
+            fill: '#ffffff',
+            stroke: checkboxColor,
+            strokeWidth: 2,
+            selectable: false,
+          }),
+        )
+      }
+
+      objects.push(
+        new Line([lineLeft, y + 6, lineRight, y + 6], {
+          stroke: lineColor,
+          strokeWidth: 1,
+          selectable: false,
+        }),
+      )
+    }
+
+    return new Group(objects, {
+      subTargetCheck: false,
+      hoverCursor: 'move',
     })
   }
 
@@ -711,7 +1062,9 @@ export const useEditorStore = defineStore('editor', () => {
   }
 
   function handleSelectionChange(e: any): void {
-    selectedObjectIds.value = e.selected?.map((obj: any) => obj.id) || []
+    const selected = (e.selected || []) as any[]
+    selected.forEach((obj) => ensureObjectIdentity(obj))
+    selectedObjectIds.value = selected.map((obj) => obj.id).filter(Boolean)
   }
 
   function handleSelectionCleared(): void {
@@ -724,6 +1077,11 @@ export const useEditorStore = defineStore('editor', () => {
   }
 
   function handleObjectAdded(): void {
+    if (canvas.value) {
+      const objects = canvas.value.getObjects() as any[]
+      const last = objects[objects.length - 1]
+      if (last) ensureObjectIdentity(last)
+    }
     isDirty.value = true
   }
 
@@ -739,6 +1097,65 @@ export const useEditorStore = defineStore('editor', () => {
     }
   }
 
+  function getObjectTypeName(type: string): string {
+    const names: Record<string, string> = {
+      textbox: 'Text',
+      rect: 'Rectangle',
+      circle: 'Circle',
+      line: 'Line',
+      image: 'Image',
+      group: 'Group',
+    }
+    return names[type] || type
+  }
+
+  function getFriendlyObjectName(obj: any): string {
+    const metadata = obj?.data?.elementMetadata as CanvasElementMetadata | undefined
+    if (metadata?.kind === 'calendar-grid') return 'Calendar Grid'
+    if (metadata?.kind === 'week-strip') return 'Week Strip'
+    if (metadata?.kind === 'date-cell') return 'Date Cell'
+    if (metadata?.kind === 'planner-note') return 'Notes Panel'
+    if (metadata?.kind === 'photo-block') return 'Photo Block'
+    if (metadata?.kind === 'schedule') return 'Schedule'
+    if (metadata?.kind === 'checklist') return 'Checklist'
+    return getObjectTypeName(obj?.type)
+  }
+
+  function getLayerNameForMetadata(metadata: CanvasElementMetadata): string {
+    if (metadata.kind === 'planner-note') return `Notes: ${metadata.title}`
+    if (metadata.kind === 'schedule') return `Schedule: ${metadata.title}`
+    if (metadata.kind === 'checklist') return `Checklist: ${metadata.title}`
+    if (metadata.kind === 'photo-block') return `Photo: ${metadata.label}`
+    if (metadata.kind === 'week-strip') return `Week Strip: ${metadata.label ?? 'Week Plan'}`
+    return getFriendlyObjectName({ data: { elementMetadata: metadata } })
+  }
+
+  function ensureObjectIdentity(obj: any): void {
+    if (!obj) return
+    if (!obj.id) {
+      obj.set?.('id', generateObjectId(obj.type || 'object'))
+      if (!obj.id) obj.id = generateObjectId(obj.type || 'object')
+    }
+    const metadata = obj?.data?.elementMetadata as CanvasElementMetadata | undefined
+    const friendly = getFriendlyObjectName(obj)
+    const shouldReplaceName =
+      !obj.name ||
+      obj.name === friendly ||
+      obj.name === 'Group'
+
+    if (metadata && shouldReplaceName) {
+      const next = getLayerNameForMetadata(metadata)
+      obj.set?.('name', next)
+      if (!obj.name) obj.name = next
+      return
+    }
+
+    if (!obj.name) {
+      obj.set?.('name', friendly)
+      if (!obj.name) obj.name = friendly
+    }
+  }
+
   // ═══════════════════════════════════════════════════════════════
   // OBJECT OPERATIONS
   // ═══════════════════════════════════════════════════════════════
@@ -746,7 +1163,7 @@ export const useEditorStore = defineStore('editor', () => {
   function addObject(type: ObjectType, options: Partial<any> = {}): void {
     if (!canvas.value) return
 
-    const id = `${type}-${Date.now()}`
+    const id = generateObjectId(type)
     let fabricObject: FabricObject | null = null
 
     switch (type) {
@@ -774,13 +1191,20 @@ export const useEditorStore = defineStore('editor', () => {
       case 'photo-block':
         fabricObject = createPhotoBlockObject(id, options)
         break
+      case 'schedule':
+        fabricObject = createScheduleObject(id, options)
+        break
+      case 'checklist':
+        fabricObject = createChecklistObject(id, options)
+        break
     }
 
     if (fabricObject) {
+      ensureObjectIdentity(fabricObject as any)
       canvas.value.add(fabricObject)
       canvas.value.setActiveObject(fabricObject)
       canvas.value.renderAll()
-      saveToHistory()
+      snapshotCanvasState()
     }
   }
 
@@ -814,6 +1238,7 @@ export const useEditorStore = defineStore('editor', () => {
 
     const textbox = new Textbox(content, {
       id,
+      name: options.name ?? 'Text',
       left: x ?? left ?? 100,
       top: y ?? top ?? 100,
       fontFamily: fontFamily ?? 'Inter',
@@ -876,6 +1301,7 @@ export const useEditorStore = defineStore('editor', () => {
       case 'circle':
         return new Circle({
           id,
+          name: options.name ?? 'Circle',
           radius: radius ?? (width ? width / 2 : 50),
           fill: fill ?? '#3b82f6',
           stroke: stroke ?? '',
@@ -892,6 +1318,7 @@ export const useEditorStore = defineStore('editor', () => {
       case 'line':
         return new Line([0, 0, width ?? 100, 0], {
           id,
+          name: options.name ?? 'Line',
           stroke: stroke ?? '#000000',
           strokeWidth: strokeWidth ?? 2,
           ...basePosition,
@@ -900,6 +1327,7 @@ export const useEditorStore = defineStore('editor', () => {
       default:
         return new Rect({
           id,
+          name: options.name ?? 'Rectangle',
           width: width ?? 100,
           height: height ?? 100,
           fill: fill ?? '#3b82f6',
@@ -912,6 +1340,7 @@ export const useEditorStore = defineStore('editor', () => {
         })
     }
   }
+
   function createCalendarGridObject(id: string, options: any): FabricObject {
     const metadata = getDefaultCalendarMetadata({
       mode: options.calendarMode,
@@ -927,6 +1356,7 @@ export const useEditorStore = defineStore('editor', () => {
       left: options.x ?? options.left ?? 100,
       top: options.y ?? options.top ?? 120,
       id,
+      name: options.name ?? 'Calendar Grid',
       subTargetCheck: false,
       hoverCursor: 'move',
     })
@@ -946,6 +1376,7 @@ export const useEditorStore = defineStore('editor', () => {
       left: options.x ?? options.left ?? 80,
       top: options.y ?? options.top ?? 120,
       id,
+      name: options.name ?? 'Week Strip',
       subTargetCheck: false,
       hoverCursor: 'move',
     })
@@ -965,6 +1396,7 @@ export const useEditorStore = defineStore('editor', () => {
       left: options.x ?? options.left ?? 120,
       top: options.y ?? options.top ?? 140,
       id,
+      name: options.name ?? 'Date Cell',
       subTargetCheck: false,
       hoverCursor: 'move',
     })
@@ -976,6 +1408,16 @@ export const useEditorStore = defineStore('editor', () => {
     const metadata = getDefaultPlannerNoteMetadata(options.pattern ?? 'hero', {
       title: options.title,
       accentColor: options.accentColor,
+      headerStyle: options.headerStyle,
+      backgroundColor: options.backgroundColor,
+      borderColor: options.borderColor,
+      borderWidth: options.borderWidth,
+      cornerRadius: options.cornerRadius,
+      titleColor: options.titleColor,
+      headerBackgroundColor: options.headerBackgroundColor,
+      headerBackgroundOpacity: options.headerBackgroundOpacity,
+      guideColor: options.guideColor,
+      dotColor: options.dotColor,
       size: options.width && options.height ? { width: options.width, height: options.height } : undefined,
     })
     const group = buildPlannerNoteGraphics(metadata)
@@ -983,8 +1425,9 @@ export const useEditorStore = defineStore('editor', () => {
       left: options.x ?? options.left ?? 80,
       top: options.y ?? options.top ?? 80,
       id,
+      name: options.name ?? getLayerNameForMetadata(metadata),
       subTargetCheck: false,
-      hoverCursor: 'text',
+      hoverCursor: 'move',
     })
     attachElementMetadata(group, metadata)
     return group
@@ -1001,8 +1444,72 @@ export const useEditorStore = defineStore('editor', () => {
       left: options.x ?? options.left ?? 160,
       top: options.y ?? options.top ?? 140,
       id,
+      name: options.name ?? 'Photo Block',
       subTargetCheck: false,
       hoverCursor: 'pointer',
+    })
+    attachElementMetadata(group, metadata)
+    return group
+  }
+
+  function createScheduleObject(id: string, options: any): FabricObject {
+    const metadata = getDefaultScheduleMetadata({
+      title: options.title,
+      accentColor: options.accentColor,
+      startHour: options.startHour,
+      endHour: options.endHour,
+      intervalMinutes: options.intervalMinutes,
+      headerStyle: options.headerStyle,
+      backgroundColor: options.backgroundColor,
+      borderColor: options.borderColor,
+      borderWidth: options.borderWidth,
+      cornerRadius: options.cornerRadius,
+      titleColor: options.titleColor,
+      headerBackgroundColor: options.headerBackgroundColor,
+      headerBackgroundOpacity: options.headerBackgroundOpacity,
+      lineColor: options.lineColor,
+      timeLabelColor: options.timeLabelColor,
+      size: options.width && options.height ? { width: options.width, height: options.height } : undefined,
+    })
+    const group = buildScheduleGraphics(metadata)
+    group.set({
+      left: options.x ?? options.left ?? 80,
+      top: options.y ?? options.top ?? 120,
+      id,
+      name: options.name ?? getLayerNameForMetadata(metadata),
+      subTargetCheck: false,
+      hoverCursor: 'move',
+    })
+    attachElementMetadata(group, metadata)
+    return group
+  }
+
+  function createChecklistObject(id: string, options: any): FabricObject {
+    const metadata = getDefaultChecklistMetadata({
+      title: options.title,
+      accentColor: options.accentColor,
+      rows: options.rows,
+      showCheckboxes: options.showCheckboxes,
+      headerStyle: options.headerStyle,
+      backgroundColor: options.backgroundColor,
+      borderColor: options.borderColor,
+      borderWidth: options.borderWidth,
+      cornerRadius: options.cornerRadius,
+      titleColor: options.titleColor,
+      headerBackgroundColor: options.headerBackgroundColor,
+      headerBackgroundOpacity: options.headerBackgroundOpacity,
+      lineColor: options.lineColor,
+      checkboxColor: options.checkboxColor,
+      size: options.width && options.height ? { width: options.width, height: options.height } : undefined,
+    })
+    const group = buildChecklistGraphics(metadata)
+    group.set({
+      left: options.x ?? options.left ?? 420,
+      top: options.y ?? options.top ?? 160,
+      id,
+      name: options.name ?? getLayerNameForMetadata(metadata),
+      subTargetCheck: false,
+      hoverCursor: 'move',
     })
     attachElementMetadata(group, metadata)
     return group
@@ -1016,7 +1523,8 @@ export const useEditorStore = defineStore('editor', () => {
         crossOrigin: 'anonymous',
       }).then((img: FabricImage) => {
         img.set({
-          id: `image-${Date.now()}`,
+          id: generateObjectId('image'),
+          name: options.name ?? 'Image',
           left: options.x || 100,
           top: options.y || 100,
           // FabricImage might not have scaleX/Y directly in some versions or needs type assertion if strict
@@ -1034,7 +1542,7 @@ export const useEditorStore = defineStore('editor', () => {
         canvas.value!.add(img)
         canvas.value!.setActiveObject(img)
         canvas.value!.renderAll()
-        saveToHistory()
+        snapshotCanvasState()
         resolve()
       }).catch(reject)
     })
@@ -1052,7 +1560,7 @@ export const useEditorStore = defineStore('editor', () => {
 
     canvas.value.discardActiveObject()
     canvas.value.renderAll()
-    saveToHistory()
+    snapshotCanvasState()
   }
 
   function duplicateSelected(): void {
@@ -1066,12 +1574,13 @@ export const useEditorStore = defineStore('editor', () => {
         left: (cloned.left || 0) + 20,
         top: (cloned.top || 0) + 20,
         // @ts-ignore - id is added custom prop
-        id: `${activeObject.type}-${Date.now()}`,
+        id: generateObjectId(activeObject.type || 'object'),
       })
+      ensureObjectIdentity(cloned as any)
       canvas.value!.add(cloned)
       canvas.value!.setActiveObject(cloned)
       canvas.value!.renderAll()
-      saveToHistory()
+      snapshotCanvasState()
     })
   }
 
@@ -1095,12 +1604,13 @@ export const useEditorStore = defineStore('editor', () => {
         left: (pasted.left || 0) + 20,
         top: (pasted.top || 0) + 20,
         // @ts-ignore
-        id: `${pasted.type}-${Date.now()}`,
+        id: generateObjectId(pasted.type || 'object'),
       })
+      ensureObjectIdentity(pasted as any)
       canvas.value!.add(pasted)
       canvas.value!.setActiveObject(pasted)
       canvas.value!.renderAll()
-      saveToHistory()
+      snapshotCanvasState()
     })
   }
 
@@ -1117,6 +1627,51 @@ export const useEditorStore = defineStore('editor', () => {
     activeObject.set(property as any, value)
     canvas.value.renderAll()
     isDirty.value = true
+  }
+
+  function getCanvasObjectById(id: string): FabricObject | null {
+    if (!canvas.value) return null
+    const target = (canvas.value.getObjects() as any[]).find((obj) => obj.id === id)
+    return (target as FabricObject) ?? null
+  }
+
+  function selectObjectById(id: string): void {
+    if (!canvas.value) return
+    const obj = getCanvasObjectById(id)
+    if (!obj) return
+    canvas.value.setActiveObject(obj)
+    canvas.value.renderAll()
+  }
+
+  function toggleObjectVisibility(id: string): void {
+    if (!canvas.value) return
+    const obj: any = getCanvasObjectById(id)
+    if (!obj) return
+    obj.visible = obj.visible === false
+    canvas.value.renderAll()
+    snapshotCanvasState()
+  }
+
+  function toggleObjectLock(id: string): void {
+    if (!canvas.value) return
+    const obj: any = getCanvasObjectById(id)
+    if (!obj) return
+    const nextSelectable = obj.selectable === false
+    obj.selectable = nextSelectable
+    obj.evented = nextSelectable
+    obj.hasControls = nextSelectable
+    canvas.value.renderAll()
+    snapshotCanvasState()
+  }
+
+  function deleteObjectById(id: string): void {
+    if (!canvas.value) return
+    const obj = getCanvasObjectById(id)
+    if (!obj) return
+    canvas.value.remove(obj)
+    canvas.value.discardActiveObject()
+    canvas.value.renderAll()
+    snapshotCanvasState()
   }
 
   function bringForward(): void {
@@ -1246,7 +1801,7 @@ export const useEditorStore = defineStore('editor', () => {
   function saveToHistory(): void {
     if (!canvas.value) return
 
-    const state = (canvas.value as any).toJSON(['id']) as unknown as CanvasState
+    const state = (canvas.value as any).toJSON(['id', 'name', 'data', 'visible', 'selectable', 'evented']) as unknown as CanvasState
 
     // Remove any redo states
     if (historyIndex.value < history.value.length - 1) {
@@ -1282,6 +1837,7 @@ export const useEditorStore = defineStore('editor', () => {
     if (!canvas.value) return
 
     canvas.value.loadFromJSON(state).then(() => {
+      ;(canvas.value!.getObjects() as any[]).forEach((obj) => ensureObjectIdentity(obj))
       canvas.value!.renderAll()
     })
   }
@@ -1296,15 +1852,15 @@ export const useEditorStore = defineStore('editor', () => {
   // PROJECT OPERATIONS
   // ═══════════════════════════════════════════════════════════════
 
-  function ensureTemplateOptions(options?: TemplateOptions): TemplateOptions {
+  function ensureTemplateOptions(options?: Partial<TemplateOptions>): TemplateOptions {
     return mergeTemplateOptions(options)
   }
 
   function createNewProject(config: CalendarConfig): void {
     config.templateOptions = ensureTemplateOptions(config.templateOptions)
     project.value = {
-      id: `project-${Date.now()}`,
-      userId: '', // Set from auth store
+      id: generateObjectId('project'),
+      userId: authStore.user?.id || '',
       name: 'Untitled Calendar',
       config,
       canvas: {
@@ -1324,6 +1880,48 @@ export const useEditorStore = defineStore('editor', () => {
     history.value = []
     historyIndex.value = -1
     isDirty.value = false
+
+    selectedObjectIds.value = []
+    clipboard.value = null
+  }
+
+  function setProjectName(name: string): void {
+    if (!project.value) return
+    project.value.name = name
+    project.value.updatedAt = new Date().toISOString()
+    isDirty.value = true
+  }
+
+  function setProjectTemplateId(templateId: string | undefined): void {
+    if (!project.value) return
+    project.value.templateId = templateId
+    project.value.updatedAt = new Date().toISOString()
+    isDirty.value = true
+  }
+
+  async function loadProjectById(id: string): Promise<void> {
+    loading.value = true
+    try {
+      const found = await projectsService.getById(id)
+      if (!found) {
+        createNewProject({
+          year: new Date().getFullYear(),
+          country: 'ZA',
+          language: 'en',
+          layout: 'monthly',
+          startDay: 0,
+          showHolidays: true,
+          showCustomHolidays: false,
+          showWeekNumbers: false,
+        })
+        if (project.value) project.value.id = id
+        return
+      }
+
+      loadProject(found)
+    } finally {
+      loading.value = false
+    }
   }
 
   function loadProject(loadedProject: Project): void {
@@ -1339,11 +1937,14 @@ export const useEditorStore = defineStore('editor', () => {
     history.value = []
     historyIndex.value = -1
     isDirty.value = false
+
+    selectedObjectIds.value = []
+    clipboard.value = null
   }
 
   function getCanvasState(): CanvasState | null {
     if (!canvas.value) return null
-    const json = (canvas.value as any).toJSON(['id', 'width', 'height', 'backgroundColor'])
+    const json = (canvas.value as any).toJSON(['id', 'name', 'data', 'visible', 'selectable', 'evented', 'width', 'height', 'backgroundColor'])
     return {
       ...json,
       width: canvas.value.width,
@@ -1370,8 +1971,11 @@ export const useEditorStore = defineStore('editor', () => {
       })
       project.value.thumbnail = thumbnail
 
-      // Save to Firestore (implement in service)
-      // await projectsService.save(project.value)
+      if (!project.value.userId) {
+        project.value.userId = authStore.user?.id || ''
+      }
+
+      await projectsService.save(project.value)
 
       isDirty.value = false
     } finally {
@@ -1448,6 +2052,11 @@ export const useEditorStore = defineStore('editor', () => {
     copySelected,
     paste,
     updateObjectProperty,
+    // Object access/helpers
+    selectObjectById,
+    toggleObjectVisibility,
+    toggleObjectLock,
+    deleteObjectById,
     // Layers
     bringForward,
     sendBackward,
@@ -1468,6 +2077,9 @@ export const useEditorStore = defineStore('editor', () => {
     // Project
     createNewProject,
     loadProject,
+    loadProjectById,
+    setProjectName,
+    setProjectTemplateId,
     saveProject,
     getCanvasState,
     // Settings
