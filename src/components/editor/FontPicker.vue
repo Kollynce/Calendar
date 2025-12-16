@@ -23,8 +23,8 @@ const fonts = [
 <template>
   <select
     :value="modelValue"
-    @input="$emit('update:modelValue', ($event.target as HTMLSelectElement).value)"
-    class="font-picker w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+    @change="$emit('update:modelValue', ($event.target as HTMLSelectElement).value)"
+    class="select font-picker"
   >
     <option 
       v-for="font in fonts" 

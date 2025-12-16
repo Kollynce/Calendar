@@ -8,6 +8,7 @@ export interface CalendarTemplate {
   category: TemplateCategory
   preview: TemplatePreview
   config: TemplateConfig
+  presetId?: 'daily-pastel' | 'daily-minimal'
   rating?: number
   popular?: boolean
 }
@@ -57,6 +58,61 @@ export const templateCategories = [
 
 // Pre-defined templates
 export const calendarTemplates: CalendarTemplate[] = [
+  {
+    id: 'daily-pastel',
+    name: 'Daily Planner (Pastel)',
+    description: 'Schedule + to-do + gratitude + important sections',
+    category: 'planner',
+    presetId: 'daily-pastel',
+    rating: 4.9,
+    popular: true,
+    preview: {
+      hasPhotoArea: false,
+      hasNotesArea: true,
+      notesPosition: 'side',
+      gridStyle: 'minimal',
+      colorScheme: ['#a855f7', '#ec4899', '#93c5fd'],
+    },
+    config: {
+      layout: 'portrait',
+      monthsPerPage: 1,
+      showWeekNumbers: false,
+      weekStartsOn: 1,
+      fontSize: 'medium',
+      fontFamily: 'Inter',
+      headerStyle: 'minimal',
+      gridBorders: false,
+      highlightToday: false,
+      highlightWeekends: false,
+    },
+  },
+  {
+    id: 'daily-minimal',
+    name: 'Daily Planner (Minimal)',
+    description: 'Focus + date + to-do + notes sections',
+    category: 'planner',
+    presetId: 'daily-minimal',
+    rating: 4.8,
+    preview: {
+      hasPhotoArea: false,
+      hasNotesArea: true,
+      notesPosition: 'right',
+      gridStyle: 'minimal',
+      colorScheme: ['#111827', '#f59e0b', '#84cc16'],
+    },
+    config: {
+      layout: 'portrait',
+      monthsPerPage: 1,
+      showWeekNumbers: false,
+      weekStartsOn: 1,
+      fontSize: 'medium',
+      fontFamily: 'Inter',
+      headerStyle: 'minimal',
+      gridBorders: false,
+      highlightToday: false,
+      highlightWeekends: false,
+    },
+  },
   // MONTHLY TEMPLATES
   {
     id: 'classic-monthly',

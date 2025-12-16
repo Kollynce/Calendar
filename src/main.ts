@@ -7,7 +7,8 @@ import { useThemeStore } from './stores/theme.store'
 import { useAuthStore } from './stores/auth.store'
 
 // Styles
-import './assets/styles/base.css'
+import './style.css'
+import './assets/main.css'
 
 async function bootstrap() {
   // Initialize Firebase

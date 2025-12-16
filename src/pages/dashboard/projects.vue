@@ -3,6 +3,7 @@ import { ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useAuthStore } from '@/stores'
 import { projectsService } from '@/services/projects/projects.service'
+import AppButton from '@/components/ui/AppButton.vue'
 import type { Project } from '@/types'
 
 const authStore = useAuthStore()
@@ -34,7 +35,7 @@ watch(
   <div class="container mx-auto px-4 py-8">
     <div class="flex items-center justify-between gap-4 mb-6">
       <h1 class="text-2xl font-bold text-gray-900 dark:text-white">My Projects</h1>
-      <RouterLink to="/editor" class="btn-primary">New Project</RouterLink>
+      <AppButton to="/editor" variant="primary">New Project</AppButton>
     </div>
 
     <div v-if="loading" class="text-sm text-gray-500 dark:text-gray-400">Loading...</div>

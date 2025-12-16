@@ -2,6 +2,9 @@
 import { ref } from 'vue'
 import { useRouter, RouterLink } from 'vue-router'
 import { useAuthStore } from '@/stores'
+import AppButton from '@/components/ui/AppButton.vue'
+import AppInput from '@/components/ui/AppInput.vue'
+import AppAlert from '@/components/ui/AppAlert.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -50,24 +53,20 @@ async function handleGoogleSignIn() {
         </div>
 
         <!-- Error Message -->
-        <div
-          v-if="authStore.error"
-          class="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-400 text-sm"
-        >
+        <AppAlert v-if="authStore.error" variant="danger" class="mb-4">
           {{ authStore.error }}
-        </div>
+        </AppAlert>
 
         <form @submit.prevent="handleSubmit" class="space-y-4">
           <div>
             <label for="name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Name
             </label>
-            <input
+            <AppInput
               id="name"
               v-model="displayName"
               type="text"
               required
-              class="input"
               placeholder="Your name"
             />
           </div>
@@ -76,12 +75,11 @@ async function handleGoogleSignIn() {
             <label for="email" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Email
             </label>
-            <input
+            <AppInput
               id="email"
               v-model="email"
               type="email"
               required
-              class="input"
               placeholder="you@example.com"
             />
           </div>
@@ -90,25 +88,20 @@ async function handleGoogleSignIn() {
             <label for="password" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Password
             </label>
-            <input
+            <AppInput
               id="password"
               v-model="password"
               type="password"
               required
               minlength="6"
-              class="input"
               placeholder="••••••••"
             />
           </div>
 
-          <button
-            type="submit"
-            :disabled="loading"
-            class="btn btn-primary w-full"
-          >
+          <AppButton type="submit" :disabled="loading" class="w-full">
             <span v-if="loading">Creating account...</span>
             <span v-else>Create Account</span>
-          </button>
+          </AppButton>
         </form>
 
         <div class="mt-6">
@@ -121,10 +114,11 @@ async function handleGoogleSignIn() {
             </div>
           </div>
 
-          <button
+          <AppButton
             type="button"
             :disabled="loading"
-            class="mt-4 btn btn-secondary w-full"
+            variant="secondary"
+            class="mt-4 w-full"
             @click="handleGoogleSignIn"
           >
             <svg class="w-5 h-5 mr-2" viewBox="0 0 24 24">
@@ -134,12 +128,12 @@ async function handleGoogleSignIn() {
               <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
             </svg>
             Google
-          </button>
+          </AppButton>
         </div>
 
         <p class="mt-6 text-center text-sm text-gray-600 dark:text-gray-400">
           Already have an account?
-          <RouterLink to="/login" class="text-blue-600 hover:text-blue-500 font-medium">
+          <RouterLink to="/login" class="text-primary-600 hover:text-primary-500 font-medium">
             Sign in
           </RouterLink>
         </p>

@@ -1,8 +1,5 @@
 @import "tailwindcss";
 
-/* Import Google Fonts */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;700;800&display=swap');
-
 @theme {
   /* Premium Color Palette (OKLCH) */
   --color-primary-50: oklch(0.97 0.02 260);
@@ -19,6 +16,28 @@
   --color-accent-50: oklch(0.97 0.02 320);
   --color-accent-500: oklch(0.60 0.25 320); /* Pink Accent */
   --color-accent-900: oklch(0.20 0.15 320);
+
+  --color-success-50: oklch(0.97 0.03 145);
+  --color-success-500: oklch(0.62 0.20 145);
+  --color-warning-50: oklch(0.98 0.04 85);
+  --color-warning-500: oklch(0.72 0.18 85);
+  --color-danger-50: oklch(0.97 0.03 25);
+  --color-danger-500: oklch(0.62 0.22 25);
+
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.06);
+  --shadow-md: 0 8px 20px rgb(0 0 0 / 0.10);
+  --shadow-lg: 0 25px 60px rgb(0 0 0 / 0.18);
+
+  --z-base: 0;
+  --z-navbar: 40;
+  --z-dropdown: 50;
+  --z-modal: 100;
+  --z-toast: 200;
   
   --font-display: "Outfit", sans-serif;
   --font-body: "Inter", sans-serif;
@@ -62,15 +81,20 @@ h1, h2, h3, h4, h5, h6 {
   @apply glass rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300;
 }
 
-@utility btn-primary {
-  @apply bg-primary-500 text-white font-medium px-6 py-2.5 rounded-xl 
-         hover:bg-primary-600 hover:-translate-y-0.5 active:translate-y-0 transition-all 
-         shadow-lg shadow-primary-500/30;
+@utility z-dropdown {
+  z-index: var(--z-dropdown);
 }
 
-@utility btn-secondary {
-  @apply glass text-gray-800 dark:text-white font-medium px-6 py-2.5 rounded-xl
-         hover:bg-white/90 dark:hover:bg-gray-800/90 hover:-translate-y-0.5 active:translate-y-0 transition-all;
+@utility z-navbar {
+  z-index: var(--z-navbar);
+}
+
+@utility z-modal {
+  z-index: var(--z-modal);
+}
+
+@utility z-toast {
+  z-index: var(--z-toast);
 }
 
 /* Custom Scrollbar */

@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed, shallowRef } from 'vue'
-import { Canvas, Object as FabricObject, Textbox, Rect, Circle, Line, Group, FabricImage } from 'fabric'
+import { Canvas, Object as FabricObject, Textbox, Rect, Circle, Line, Group, Polygon, FabricImage } from 'fabric'
 import type { 
   Project, 
   CanvasState, 
@@ -12,16 +12,18 @@ import type {
   CalendarGridMetadata,
   WeekStripMetadata,
   PlannerNoteMetadata,
-  PhotoBlockMetadata,
   DateCellMetadata,
   PlannerPatternVariant,
   ScheduleMetadata,
-  ChecklistMetadata
+  ChecklistMetadata,
+  Holiday,
 } from '@/types'
 import { mergeTemplateOptions } from '@/config/editor-defaults'
 import { calendarGeneratorService } from '@/services/calendar/generator.service'
+import { holidayService } from '@/services/calendar/holiday.service'
 import { projectsService } from '@/services/projects/projects.service'
 import { useAuthStore } from '@/stores/auth.store'
+import { useCalendarStore } from '@/stores/calendar.store'
 
 function generateObjectId(prefix: string): string {
   try {
@@ -34,6 +36,18 @@ function generateObjectId(prefix: string): string {
 }
 
 export const useEditorStore = defineStore('editor', () => {
+  const DEFAULT_CANVAS_WIDTH = 744
+  const DEFAULT_CANVAS_HEIGHT = 1052
+
+  function normalizeCanvasSize(input: { width?: number; height?: number } | null | undefined) {
+    const w = Number(input?.width)
+    const h = Number(input?.height)
+    return {
+      width: Number.isFinite(w) && w > 0 ? w : DEFAULT_CANVAS_WIDTH,
+      height: Number.isFinite(h) && h > 0 ? h : DEFAULT_CANVAS_HEIGHT,
+    }
+  }
+
   // ═══════════════════════════════════════════════════════════════
   // STATE
   // ═══════════════════════════════════════════════════════════════
@@ -62,6 +76,196 @@ export const useEditorStore = defineStore('editor', () => {
 
   const today = new Date()
   const authStore = useAuthStore()
+  const calendarStore = useCalendarStore()
+
+  const loadedFontKeys = new Set<string>()
+  const requestedFontKeys = new Set<string>()
+  const holidayCacheByYear = new Map<number, Holiday[]>()
+  const holidayLoadInFlight = new Set<number>()
+
+  let fontsStylesheetReady: Promise<void> | null = null
+
+  function ensureFontsStylesheetInjected(): Promise<void> {
+    if (typeof document === 'undefined') return Promise.resolve()
+    const id = 'calendar-google-fonts-bundle'
+    const existing = document.getElementById(id) as HTMLLinkElement | null
+    if (existing) {
+      if (fontsStylesheetReady) return fontsStylesheetReady
+      const isLoaded = !!existing.sheet
+      fontsStylesheetReady = isLoaded
+        ? Promise.resolve()
+        : new Promise<void>((resolve) => {
+            existing.addEventListener('load', () => resolve(), { once: true })
+            existing.addEventListener('error', () => resolve(), { once: true })
+          })
+      return fontsStylesheetReady
+    }
+
+    const link = document.createElement('link')
+    link.id = id
+    link.rel = 'stylesheet'
+    link.href =
+      'https://fonts.googleapis.com/css2?'
+      + 'family=Inter:wght@300;400;500;600;700&'
+      + 'family=Outfit:wght@400;500;600;700;800&'
+      + 'family=Roboto:wght@300;400;500;700&'
+      + 'family=Open+Sans:wght@300;400;500;600;700&'
+      + 'family=Lato:wght@100;300;400;700;900&'
+      + 'family=Montserrat:wght@300;400;500;600;700;800&'
+      + 'family=Playfair+Display:wght@400;500;600;700;800&'
+      + 'family=Merriweather:wght@300;400;700;900&'
+      + 'family=Oswald:wght@300;400;500;600;700&'
+      + 'family=Poppins:wght@300;400;500;600;700;800&'
+      + 'display=swap'
+
+    fontsStylesheetReady = new Promise<void>((resolve) => {
+      link.addEventListener('load', () => resolve(), { once: true })
+      link.addEventListener('error', () => resolve(), { once: true })
+    })
+
+    document.head.appendChild(link)
+    return fontsStylesheetReady
+  }
+
+  function rebuildActiveElementFromMetadata(metadata?: CanvasElementMetadata): void {
+    if (!canvas.value) return
+    const active = canvas.value.getActiveObject()
+    if (!active) return
+    const meta = metadata ?? ((active as any).data?.elementMetadata as CanvasElementMetadata | undefined)
+    if (!meta) return
+    const rebuilt = rebuildElementWithMetadata(active, meta)
+    if (!rebuilt) return
+    canvas.value.remove(active)
+    canvas.value.add(rebuilt)
+    canvas.value.setActiveObject(rebuilt)
+    canvas.value.renderAll()
+  }
+
+  function requestFontLoad(fontFamily: string, fontWeight?: string | number, fontSize?: number): void {
+    if (!fontFamily) return
+    if (typeof document === 'undefined') return
+    const safeSize = Math.max(8, Number(fontSize ?? 16) || 16)
+    const safeWeight = String(fontWeight ?? 400)
+    const key = `${fontFamily}::${safeWeight}::${safeSize}`
+
+    if (loadedFontKeys.has(key) || requestedFontKeys.has(key)) return
+    requestedFontKeys.add(key)
+
+    const fonts = (document as any).fonts as FontFaceSet | undefined
+    if (!fonts?.load) {
+      loadedFontKeys.add(key)
+      requestedFontKeys.delete(key)
+      return
+    }
+
+    const ready = ensureFontsStylesheetInjected()
+    Promise.resolve(ready)
+      .then(() => {
+        const promises: Promise<unknown>[] = []
+
+        // Load the family without a weight requirement. This resolves as soon as ANY face is available,
+        // and avoids hanging on unsupported weights (e.g. Lato 600).
+        promises.push(fonts.load(`${safeSize}px "${fontFamily}"`))
+
+        // Also try requested weight (best effort)
+        promises.push(fonts.load(`${safeWeight} ${safeSize}px "${fontFamily}"`))
+
+        // Common fallbacks for missing weights
+        promises.push(fonts.load(`400 ${safeSize}px "${fontFamily}"`))
+        promises.push(fonts.load(`700 ${safeSize}px "${fontFamily}"`))
+
+        return Promise.allSettled(promises)
+      })
+      .then(() => {
+        loadedFontKeys.add(key)
+        requestedFontKeys.delete(key)
+
+        const active = canvas.value?.getActiveObject() ?? null
+        const meta = (active as any)?.data?.elementMetadata as CanvasElementMetadata | undefined
+        if (meta) {
+          const usesFamily = JSON.stringify(meta).includes(fontFamily)
+          if (usesFamily) rebuildActiveElementFromMetadata(meta)
+        }
+
+        // Also force a canvas render to refresh text metrics.
+        canvas.value?.requestRenderAll()
+      })
+      .catch(() => {
+        requestedFontKeys.delete(key)
+      })
+  }
+
+  function requestFontsForMetadata(metadata: CanvasElementMetadata): void {
+    if (metadata.kind === 'calendar-grid') {
+      requestFontLoad(metadata.headerFontFamily ?? 'Outfit', metadata.headerFontWeight, metadata.headerFontSize)
+      requestFontLoad(metadata.weekdayFontFamily ?? 'Inter', metadata.weekdayFontWeight, metadata.weekdayFontSize)
+      requestFontLoad(metadata.dayNumberFontFamily ?? 'Inter', metadata.dayNumberFontWeight, metadata.dayNumberFontSize)
+      return
+    }
+    if (metadata.kind === 'week-strip') {
+      requestFontLoad(metadata.labelFontFamily ?? 'Inter', metadata.labelFontWeight, metadata.labelFontSize)
+      requestFontLoad(metadata.weekdayFontFamily ?? 'Inter', metadata.weekdayFontWeight, metadata.weekdayFontSize)
+      requestFontLoad(metadata.dayNumberFontFamily ?? 'Inter', metadata.dayNumberFontWeight, metadata.dayNumberFontSize)
+      return
+    }
+    if (metadata.kind === 'date-cell') {
+      requestFontLoad(metadata.weekdayFontFamily ?? 'Inter', metadata.weekdayFontWeight, metadata.weekdayFontSize)
+      requestFontLoad(metadata.dayNumberFontFamily ?? 'Inter', metadata.dayNumberFontWeight, metadata.dayNumberFontSize)
+      requestFontLoad(metadata.placeholderFontFamily ?? 'Inter', metadata.placeholderFontWeight, metadata.placeholderFontSize)
+    }
+  }
+
+  function requestHolidaysForYear(year: number): void {
+    const y = Number(year)
+    if (!Number.isFinite(y)) return
+    if (holidayCacheByYear.has(y)) return
+    if (holidayLoadInFlight.has(y)) return
+
+    holidayLoadInFlight.add(y)
+
+    const country = calendarStore.config?.value?.country ?? 'KE'
+    holidayService
+      .getHolidays(country, y)
+      .then(({ holidays }) => {
+        const showHolidays = calendarStore.config?.value?.showHolidays ?? true
+        const showCustom = calendarStore.config?.value?.showCustomHolidays ?? true
+        const base = showHolidays ? holidays : ([] as Holiday[])
+        const merged =
+          showCustom
+            ? holidayService.mergeWithCustomHolidays(
+                base,
+                (calendarStore.customHolidays as any)?.value ?? [],
+                y,
+              )
+            : base
+
+        holidayCacheByYear.set(y, merged)
+
+        const active = canvas.value?.getActiveObject() ?? null
+        const meta = (active as any)?.data?.elementMetadata as CanvasElementMetadata | undefined
+        if (meta?.kind === 'calendar-grid' && meta.year === y) {
+          rebuildActiveElementFromMetadata(meta)
+        }
+      })
+      .finally(() => {
+        holidayLoadInFlight.delete(y)
+      })
+  }
+
+  function getHolidaysForCalendarYear(year: number): Holiday[] {
+    const y = Number(year)
+    if (!Number.isFinite(y)) return []
+
+    const cfgYear = calendarStore.config?.value?.year
+    if (cfgYear === y) {
+      return (calendarStore.allHolidays?.value ?? []) as Holiday[]
+    }
+
+    const cached = holidayCacheByYear.get(y)
+    if (cached) return cached
+    requestHolidaysForYear(y)
+    return []
+  }
 
   function getISODateString(date: Date = new Date()): string {
     return date.toISOString()
@@ -80,6 +284,38 @@ export const useEditorStore = defineStore('editor', () => {
       startDay: overrides.startDay ?? 0,
       showHeader: overrides.showHeader ?? true,
       showWeekdays: overrides.showWeekdays ?? true,
+      title: overrides.title,
+      backgroundColor: overrides.backgroundColor ?? '#ffffff',
+      borderColor: overrides.borderColor ?? '#e5e7eb',
+      borderWidth: overrides.borderWidth ?? 1,
+      cornerRadius: overrides.cornerRadius ?? 26,
+      headerHeight: overrides.headerHeight ?? 60,
+      weekdayHeight: overrides.weekdayHeight ?? 36,
+      cellGap: overrides.cellGap ?? 0,
+      dayNumberInsetX: overrides.dayNumberInsetX ?? 12,
+      dayNumberInsetY: overrides.dayNumberInsetY ?? 8,
+      headerBackgroundColor: overrides.headerBackgroundColor ?? '#111827',
+      headerBackgroundOpacity: overrides.headerBackgroundOpacity ?? 0.95,
+      headerTextColor: overrides.headerTextColor ?? '#ffffff',
+      headerFontFamily: overrides.headerFontFamily ?? 'Outfit',
+      headerFontSize: overrides.headerFontSize ?? 24,
+      headerFontWeight: overrides.headerFontWeight ?? 600,
+      weekdayTextColor: overrides.weekdayTextColor ?? '#6b7280',
+      weekdayFontFamily: overrides.weekdayFontFamily ?? 'Inter',
+      weekdayFontSize: overrides.weekdayFontSize ?? 12,
+      weekdayFontWeight: overrides.weekdayFontWeight ?? 600,
+      gridLineColor: overrides.gridLineColor ?? '#e5e7eb',
+      gridLineWidth: overrides.gridLineWidth ?? 1,
+      dayNumberColor: overrides.dayNumberColor ?? '#1f2937',
+      dayNumberMutedColor: overrides.dayNumberMutedColor ?? '#9ca3af',
+      dayNumberFontFamily: overrides.dayNumberFontFamily ?? 'Inter',
+      dayNumberFontSize: overrides.dayNumberFontSize ?? 16,
+      dayNumberFontWeight: overrides.dayNumberFontWeight ?? 600,
+      weekendBackgroundColor: overrides.weekendBackgroundColor,
+      todayBackgroundColor: overrides.todayBackgroundColor,
+      showHolidayMarkers: overrides.showHolidayMarkers ?? true,
+      holidayMarkerColor: overrides.holidayMarkerColor ?? '#ef4444',
+      holidayMarkerHeight: overrides.holidayMarkerHeight ?? 4,
       size,
     }
   }
@@ -94,6 +330,24 @@ export const useEditorStore = defineStore('editor', () => {
       startDate: overrides.startDate ?? getISODateString(),
       startDay: overrides.startDay ?? 0,
       label: overrides.label ?? 'Week Plan',
+      backgroundColor: overrides.backgroundColor ?? '#ffffff',
+      borderColor: overrides.borderColor ?? '#e5e7eb',
+      borderWidth: overrides.borderWidth ?? 1,
+      cornerRadius: overrides.cornerRadius ?? 24,
+      cellBorderColor: overrides.cellBorderColor ?? '#f1f5f9',
+      cellBorderWidth: overrides.cellBorderWidth ?? 1,
+      labelColor: overrides.labelColor ?? '#0f172a',
+      labelFontFamily: overrides.labelFontFamily ?? 'Inter',
+      labelFontSize: overrides.labelFontSize ?? 16,
+      labelFontWeight: overrides.labelFontWeight ?? 600,
+      weekdayColor: overrides.weekdayColor ?? '#64748b',
+      weekdayFontFamily: overrides.weekdayFontFamily ?? 'Inter',
+      weekdayFontSize: overrides.weekdayFontSize ?? 12,
+      weekdayFontWeight: overrides.weekdayFontWeight ?? 600,
+      dayNumberColor: overrides.dayNumberColor ?? '#0f172a',
+      dayNumberFontFamily: overrides.dayNumberFontFamily ?? 'Inter',
+      dayNumberFontSize: overrides.dayNumberFontSize ?? 22,
+      dayNumberFontWeight: overrides.dayNumberFontWeight ?? 700,
       size,
     }
   }
@@ -125,19 +379,6 @@ export const useEditorStore = defineStore('editor', () => {
     }
   }
 
-  function getDefaultPhotoBlockMetadata(
-    overrides: Partial<PhotoBlockMetadata> = {},
-  ): PhotoBlockMetadata {
-    const defaultSize = { width: 280, height: 220 }
-    const size = overrides.size ? { ...defaultSize, ...overrides.size } : defaultSize
-    return {
-      kind: 'photo-block',
-      label: overrides.label ?? 'Add photo',
-      accentColor: overrides.accentColor ?? '#0ea5e9',
-      size,
-    }
-  }
-
   function getDefaultDateCellMetadata(
     overrides: Partial<DateCellMetadata> = {},
   ): DateCellMetadata {
@@ -148,6 +389,23 @@ export const useEditorStore = defineStore('editor', () => {
       date: overrides.date ?? getISODateString(),
       highlightAccent: overrides.highlightAccent ?? '#fef3c7',
       notePlaceholder: overrides.notePlaceholder ?? 'Add event',
+      backgroundColor: overrides.backgroundColor ?? '#ffffff',
+      borderColor: overrides.borderColor ?? '#e2e8f0',
+      borderWidth: overrides.borderWidth ?? 1,
+      cornerRadius: overrides.cornerRadius ?? 24,
+      accentHeightRatio: overrides.accentHeightRatio ?? 0.4,
+      weekdayColor: overrides.weekdayColor ?? '#78350f',
+      weekdayFontFamily: overrides.weekdayFontFamily ?? 'Inter',
+      weekdayFontSize: overrides.weekdayFontSize ?? 13,
+      weekdayFontWeight: overrides.weekdayFontWeight ?? 600,
+      dayNumberColor: overrides.dayNumberColor ?? '#92400e',
+      dayNumberFontFamily: overrides.dayNumberFontFamily ?? 'Inter',
+      dayNumberFontSize: overrides.dayNumberFontSize ?? 52,
+      dayNumberFontWeight: overrides.dayNumberFontWeight ?? 700,
+      placeholderColor: overrides.placeholderColor ?? '#475569',
+      placeholderFontFamily: overrides.placeholderFontFamily ?? 'Inter',
+      placeholderFontSize: overrides.placeholderFontSize ?? 13,
+      placeholderFontWeight: overrides.placeholderFontWeight ?? 400,
       size,
     }
   }
@@ -219,6 +477,7 @@ export const useEditorStore = defineStore('editor', () => {
     target: FabricObject,
     metadata: CanvasElementMetadata,
   ): FabricObject | null {
+    requestFontsForMetadata(metadata)
     let rebuilt: FabricObject | null = null
     switch (metadata.kind) {
       case 'calendar-grid':
@@ -232,9 +491,6 @@ export const useEditorStore = defineStore('editor', () => {
         break
       case 'planner-note':
         rebuilt = buildPlannerNoteGraphics(metadata)
-        break
-      case 'photo-block':
-        rebuilt = buildPhotoBlockGraphics(metadata)
         break
       case 'schedule':
         rebuilt = buildScheduleGraphics(metadata)
@@ -278,6 +534,33 @@ export const useEditorStore = defineStore('editor', () => {
     return JSON.parse(JSON.stringify(metadata)) as CanvasElementMetadata
   }
 
+  let queuedMetadataUpdate: {
+    targetId: string | number | null
+    metadata: CanvasElementMetadata
+  } | null = null
+
+  function flushQueuedMetadataUpdate(): void {
+    if (!canvas.value) return
+    if (!queuedMetadataUpdate) return
+    const update = queuedMetadataUpdate
+    queuedMetadataUpdate = null
+
+    const active = canvas.value.getActiveObject()
+    const target =
+      (active && ((active as any).id ?? null) === update.targetId)
+        ? active
+        : canvas.value.getObjects().find((obj) => ((obj as any).id ?? null) === update.targetId) ?? null
+    if (!target) return
+
+    const rebuilt = rebuildElementWithMetadata(target, update.metadata)
+    if (!rebuilt) return
+    canvas.value.remove(target)
+    canvas.value.add(rebuilt)
+    canvas.value.setActiveObject(rebuilt)
+    canvas.value.renderAll()
+    queueHistorySave()
+  }
+
   function updateSelectedElementMetadata(
     updater: (metadata: CanvasElementMetadata) => CanvasElementMetadata | null,
   ): void {
@@ -286,62 +569,113 @@ export const useEditorStore = defineStore('editor', () => {
     if (!active) return
     const existingMetadata = (active as any).data?.elementMetadata as CanvasElementMetadata | undefined
     if (!existingMetadata) return
-    const draft = JSON.parse(JSON.stringify(existingMetadata)) as CanvasElementMetadata
+
+    const targetId = ((active as any).id ?? null) as string | number | null
+    const baseMetadata =
+      queuedMetadataUpdate && queuedMetadataUpdate.targetId === targetId
+        ? queuedMetadataUpdate.metadata
+        : existingMetadata
+
+    const draft = JSON.parse(JSON.stringify(baseMetadata)) as CanvasElementMetadata
     const nextMetadata = updater(draft)
     if (!nextMetadata) return
-    const rebuilt = rebuildElementWithMetadata(active, nextMetadata)
-    if (!rebuilt) return
-    canvas.value.remove(active)
-    canvas.value.add(rebuilt)
-    canvas.value.setActiveObject(rebuilt)
-    canvas.value.renderAll()
-    saveToHistory()
+
+    queuedMetadataUpdate = {
+      targetId,
+      metadata: nextMetadata,
+    }
+
+    flushQueuedMetadataUpdate()
+  }
+
+  let queuedHistorySaveTimeout: ReturnType<typeof setTimeout> | null = null
+
+  function queueHistorySave(): void {
+    if (queuedHistorySaveTimeout) {
+      clearTimeout(queuedHistorySaveTimeout)
+    }
+    queuedHistorySaveTimeout = setTimeout(() => {
+      queuedHistorySaveTimeout = null
+      saveToHistory()
+    }, 250)
   }
 
   function buildCalendarGridGraphics(metadata: CalendarGridMetadata): Group {
     const { width, height } = metadata.size
     const objects: FabricObject[] = []
-    const headerHeight = metadata.showHeader ? 60 : 0
-    const weekdayHeight = metadata.showWeekdays ? 36 : 0
+
+    const cornerRadius = Math.max(0, metadata.cornerRadius ?? 26)
+    const borderWidth = Math.max(0, metadata.borderWidth ?? 1)
+    const borderColor = metadata.borderColor ?? '#e5e7eb'
+    const backgroundColor = metadata.backgroundColor ?? '#ffffff'
+    const headerHeight = metadata.showHeader ? Math.max(0, metadata.headerHeight ?? 60) : 0
+    const weekdayHeight = metadata.showWeekdays ? Math.max(0, metadata.weekdayHeight ?? 36) : 0
+    const gridLineColor = metadata.gridLineColor ?? '#e5e7eb'
+    const gridLineWidth = Math.max(0, metadata.gridLineWidth ?? 1)
+
+    const headerBackgroundColor = metadata.headerBackgroundColor ?? '#111827'
+    const headerBackgroundOpacity = metadata.headerBackgroundOpacity ?? 0.95
+    const headerTextColor = metadata.headerTextColor ?? '#ffffff'
+    const headerFontFamily = metadata.headerFontFamily ?? 'Outfit'
+    const headerFontSize = metadata.headerFontSize ?? 24
+    const headerFontWeight = metadata.headerFontWeight ?? 600
+
+    const weekdayTextColor = metadata.weekdayTextColor ?? '#6b7280'
+    const weekdayFontFamily = metadata.weekdayFontFamily ?? 'Inter'
+    const weekdayFontSize = metadata.weekdayFontSize ?? 12
+    const weekdayFontWeight = metadata.weekdayFontWeight ?? 600
+
+    const dayNumberColor = metadata.dayNumberColor ?? '#1f2937'
+    const dayNumberMutedColor = metadata.dayNumberMutedColor ?? '#9ca3af'
+    const dayNumberFontFamily = metadata.dayNumberFontFamily ?? 'Inter'
+    const dayNumberFontSize = metadata.dayNumberFontSize ?? 16
+    const dayNumberFontWeight = metadata.dayNumberFontWeight ?? 600
+
+    const cellGap = Math.max(0, Number(metadata.cellGap ?? 0) || 0)
+    const dayNumberInsetX = Math.max(0, Number(metadata.dayNumberInsetX ?? 12) || 0)
+    const dayNumberInsetY = Math.max(0, Number(metadata.dayNumberInsetY ?? 8) || 0)
+
     const gridHeight = height - headerHeight - weekdayHeight
-    const cellHeight = gridHeight / 6
-    const cellWidth = width / 7
+    const cellHeight = (gridHeight - cellGap * 5) / 6
+    const cellWidth = (width - cellGap * 6) / 7
 
     objects.push(
       new Rect({
         width,
         height,
-        rx: 26,
-        ry: 26,
-        fill: '#ffffff',
-        stroke: '#e5e7eb',
-        strokeWidth: 1,
+        rx: cornerRadius,
+        ry: cornerRadius,
+        fill: backgroundColor,
+        stroke: borderColor,
+        strokeWidth: borderWidth,
       }),
     )
 
     if (metadata.showHeader) {
       const monthName = calendarGeneratorService.getMonthName(metadata.month)
+      const headerText = metadata.title ?? `${monthName} ${metadata.year}`
+      const headerTextTop = Math.max(0, (headerHeight - headerFontSize) / 2)
       objects.push(
         new Rect({
           top: 0,
           left: 0,
           width,
           height: headerHeight,
-          rx: 26,
-          ry: 26,
-          fill: '#111827',
-          opacity: 0.95,
+          rx: cornerRadius,
+          ry: cornerRadius,
+          fill: headerBackgroundColor,
+          opacity: headerBackgroundOpacity,
         }),
       )
       objects.push(
-        new Textbox(`${monthName} ${metadata.year}`, {
+        new Textbox(headerText, {
           left: 32,
-          top: headerHeight / 2 - 12,
+          top: headerTextTop,
           width: width - 64,
-          fontSize: 24,
-          fontFamily: 'Outfit',
-          fontWeight: 600,
-          fill: '#ffffff',
+          fontSize: headerFontSize,
+          fontFamily: headerFontFamily,
+          fontWeight: headerFontWeight,
+          fill: headerTextColor,
           selectable: false,
         }),
       )
@@ -349,15 +683,17 @@ export const useEditorStore = defineStore('editor', () => {
 
     if (metadata.showWeekdays) {
       const labels = calendarGeneratorService.getWeekdayNames(metadata.startDay, 'en', 'short')
+      const weekdayTextTop = headerHeight + Math.max(0, (weekdayHeight - weekdayFontSize) / 2)
       labels.forEach((label, index) => {
         objects.push(
           new Textbox(label.toUpperCase(), {
-            left: index * cellWidth + 12,
-            top: headerHeight + 8,
+            left: index * (cellWidth + cellGap) + 12,
+            top: weekdayTextTop,
             width: cellWidth - 24,
-            fontSize: 12,
-            fontWeight: 600,
-            fill: '#6b7280',
+            fontSize: weekdayFontSize,
+            fontFamily: weekdayFontFamily,
+            fontWeight: weekdayFontWeight,
+            fill: weekdayTextColor,
             textAlign: 'center',
             selectable: false,
           }),
@@ -365,17 +701,51 @@ export const useEditorStore = defineStore('editor', () => {
       })
     }
 
+    const holidays = getHolidaysForCalendarYear(metadata.year)
     const monthData =
       metadata.mode === 'month'
-        ? calendarGeneratorService.generateMonth(metadata.year, metadata.month, [], metadata.startDay)
+        ? calendarGeneratorService.generateMonth(metadata.year, metadata.month, holidays, metadata.startDay)
         : null
     const weeks = monthData?.weeks ?? Array.from({ length: 6 }, () => Array(7).fill(null))
 
     weeks.forEach((week, weekIndex) => {
       week.forEach((maybeDay, dayIndex) => {
         const top =
-          headerHeight + weekdayHeight + weekIndex * cellHeight
-        const left = dayIndex * cellWidth
+          headerHeight + weekdayHeight + weekIndex * (cellHeight + cellGap)
+        const left = dayIndex * (cellWidth + cellGap)
+
+        if (
+          maybeDay &&
+          metadata.weekendBackgroundColor &&
+          maybeDay.isWeekend &&
+          maybeDay.isCurrentMonth
+        ) {
+          objects.push(
+            new Rect({
+              top,
+              left,
+              width: cellWidth,
+              height: cellHeight,
+              fill: metadata.weekendBackgroundColor,
+              selectable: false,
+              evented: false,
+            }),
+          )
+        }
+
+        if (maybeDay && metadata.todayBackgroundColor && maybeDay.isToday) {
+          objects.push(
+            new Rect({
+              top,
+              left,
+              width: cellWidth,
+              height: cellHeight,
+              fill: metadata.todayBackgroundColor,
+              selectable: false,
+              evented: false,
+            }),
+          )
+        }
 
         objects.push(
           new Rect({
@@ -384,36 +754,39 @@ export const useEditorStore = defineStore('editor', () => {
             width: cellWidth,
             height: cellHeight,
             fill: 'transparent',
-            stroke: '#e5e7eb',
-            strokeWidth: 1,
+            stroke: gridLineColor,
+            strokeWidth: gridLineWidth,
             selectable: false,
           }),
         )
 
         if (maybeDay) {
+          const dayNumberBoxWidth = Math.max(18, Math.min(40, dayNumberFontSize * 2))
           objects.push(
             new Textbox(String(maybeDay.dayOfMonth), {
-              left: left + cellWidth - 28,
-              top: top + 8,
-              width: 24,
-              fontSize: 16,
-              fontWeight: 600,
-              fill: maybeDay.isCurrentMonth ? '#1f2937' : '#9ca3af',
+              left: left + cellWidth - dayNumberInsetX - dayNumberBoxWidth,
+              top: top + dayNumberInsetY,
+              width: dayNumberBoxWidth,
+              fontSize: dayNumberFontSize,
+              fontFamily: dayNumberFontFamily,
+              fontWeight: dayNumberFontWeight,
+              fill: maybeDay.isCurrentMonth ? dayNumberColor : dayNumberMutedColor,
               textAlign: 'right',
               selectable: false,
             }),
           )
 
-          if (maybeDay.holidays?.length) {
+          if (metadata.showHolidayMarkers !== false && maybeDay.holidays?.length) {
+            const markerHeight = Math.max(1, metadata.holidayMarkerHeight ?? 4)
             objects.push(
               new Rect({
                 left: left + 12,
-                top: top + cellHeight - 16,
+                top: top + cellHeight - 12 - markerHeight,
                 width: cellWidth - 24,
-                height: 4,
+                height: markerHeight,
                 rx: 2,
                 ry: 2,
-                fill: '#ef4444',
+                fill: metadata.holidayMarkerColor ?? '#ef4444',
                 selectable: false,
               }),
             )
@@ -433,34 +806,96 @@ export const useEditorStore = defineStore('editor', () => {
     const { width, height } = metadata.size
     const objects: FabricObject[] = []
 
+    const cornerRadius = Math.max(0, metadata.cornerRadius ?? 24)
+    const borderWidth = Math.max(0, metadata.borderWidth ?? 1)
+    const backgroundColor = metadata.backgroundColor ?? '#ffffff'
+    const borderColor = metadata.borderColor ?? '#e5e7eb'
+    const cellBorderColor = metadata.cellBorderColor ?? '#f1f5f9'
+    const cellBorderWidth = Math.max(0, metadata.cellBorderWidth ?? 1)
+
+    const labelColor = metadata.labelColor ?? '#0f172a'
+    const labelFontFamily = metadata.labelFontFamily ?? 'Inter'
+    const labelFontSize = metadata.labelFontSize ?? 16
+    const labelFontWeight = metadata.labelFontWeight ?? 600
+
+    const weekdayColor = metadata.weekdayColor ?? '#64748b'
+    const weekdayFontFamily = metadata.weekdayFontFamily ?? 'Inter'
+    const weekdayFontSize = metadata.weekdayFontSize ?? 12
+    const weekdayFontWeight = metadata.weekdayFontWeight ?? 600
+
+    const dayNumberColor = metadata.dayNumberColor ?? '#0f172a'
+    const dayNumberFontFamily = metadata.dayNumberFontFamily ?? 'Inter'
+    const dayNumberFontSize = metadata.dayNumberFontSize ?? 22
+    const dayNumberFontWeight = metadata.dayNumberFontWeight ?? 700
+
     objects.push(
       new Rect({
         width,
         height,
-        rx: 24,
-        ry: 24,
-        fill: '#ffffff',
-        stroke: '#e5e7eb',
-        strokeWidth: 1,
+        rx: cornerRadius,
+        ry: cornerRadius,
+        fill: backgroundColor,
+        stroke: borderColor,
+        strokeWidth: borderWidth,
       }),
     )
 
     const label = metadata.label ?? 'Weekly Focus'
+
+    const paddingX = 24
+    const paddingBottom = Math.max(12, Math.round(height * 0.12))
+    const headerHeight = Math.min(
+      Math.max(40, Math.round(labelFontSize + 24)),
+      Math.max(44, Math.round(height * 0.45)),
+    )
+    const labelTop = Math.max(12, Math.min(20, Math.round((headerHeight - labelFontSize) / 2)))
     objects.push(
       new Textbox(label, {
-        left: 24,
-        top: 20,
-        width: width - 48,
-        fontSize: 16,
-        fontWeight: 600,
-        fill: '#0f172a',
+        left: paddingX,
+        top: labelTop,
+        width: width - paddingX * 2,
+        fontSize: labelFontSize,
+        fontFamily: labelFontFamily,
+        fontWeight: labelFontWeight,
+        fill: labelColor,
         selectable: false,
       }),
     )
 
     const days = calendarGeneratorService.generateWeek(new Date(metadata.startDate), [], metadata.startDay)
-    const bodyTop = 60
     const cellWidth = width / days.length
+
+    const weekdayRowHeightRaw = Math.max(18, Math.round(height * 0.16))
+    const weekdayRowHeight = Math.max(0, Math.min(34, Math.min(weekdayRowHeightRaw, height - headerHeight - paddingBottom)))
+    const bodyTop = headerHeight + weekdayRowHeight
+    const cellHeight = Math.max(0, height - bodyTop - paddingBottom)
+
+    const cellInsetX = 12
+    const dayNumberInsetX = 12
+    const dayNumberInsetY = 8
+
+    if (weekdayRowHeight > 0) {
+      const weekdayFontSizeEff = Math.min(weekdayFontSize, Math.max(8, Math.floor(weekdayRowHeight * 0.55)))
+      const weekdayTextTop = headerHeight + Math.max(0, (weekdayRowHeight - weekdayFontSizeEff) / 2)
+      days.forEach((day, index) => {
+        objects.push(
+          new Textbox(day.date.toLocaleDateString('en', { weekday: 'short' }).toUpperCase(), {
+            left: index * cellWidth + cellInsetX,
+            top: weekdayTextTop,
+            width: cellWidth - cellInsetX * 2,
+            fontSize: weekdayFontSizeEff,
+            fontFamily: weekdayFontFamily,
+            fontWeight: weekdayFontWeight,
+            fill: weekdayColor,
+            textAlign: 'center',
+            selectable: false,
+          }),
+        )
+      })
+    }
+
+    const dayNumberFontSizeEff = Math.min(dayNumberFontSize, Math.max(10, Math.floor(cellHeight * 0.42)))
+    const dayNumberBoxWidth = Math.max(18, Math.min(40, dayNumberFontSizeEff * 2))
 
     days.forEach((day, index) => {
       const left = index * cellWidth
@@ -469,35 +904,24 @@ export const useEditorStore = defineStore('editor', () => {
           left,
           top: bodyTop,
           width: cellWidth,
-          height: height - bodyTop - 16,
+          height: cellHeight,
           fill: 'transparent',
-          stroke: '#f1f5f9',
-          strokeWidth: 1,
+          stroke: cellBorderColor,
+          strokeWidth: cellBorderWidth,
           selectable: false,
-        }),
-      )
-      objects.push(
-        new Textbox(day.date.toLocaleDateString('en', { weekday: 'short' }), {
-          left: left + 8,
-          top: bodyTop + 8,
-          width: cellWidth - 16,
-          fontSize: 12,
-          fontWeight: 600,
-          fill: '#64748b',
-          selectable: false,
-          textAlign: 'center',
         }),
       )
       objects.push(
         new Textbox(String(day.dayOfMonth), {
-          left: left + cellWidth / 2 - 12,
-          top: bodyTop + 28,
-          width: 24,
-          fontSize: 22,
-          fontWeight: 700,
-          fill: '#0f172a',
+          left: left + cellWidth - dayNumberInsetX - dayNumberBoxWidth,
+          top: bodyTop + dayNumberInsetY,
+          width: dayNumberBoxWidth,
+          fontSize: dayNumberFontSizeEff,
+          fontFamily: dayNumberFontFamily,
+          fontWeight: dayNumberFontWeight,
+          fill: dayNumberColor,
+          textAlign: 'right',
           selectable: false,
-          textAlign: 'center',
         }),
       )
     })
@@ -513,59 +937,98 @@ export const useEditorStore = defineStore('editor', () => {
     const objects: FabricObject[] = []
     const date = new Date(metadata.date)
 
+    const cornerRadius = Math.max(0, metadata.cornerRadius ?? 24)
+    const borderWidth = Math.max(0, metadata.borderWidth ?? 1)
+    const backgroundColor = metadata.backgroundColor ?? '#ffffff'
+    const borderColor = metadata.borderColor ?? '#e2e8f0'
+    const accentRatioRaw = metadata.accentHeightRatio ?? 0.4
+    const accentRatio = Math.max(0.05, Math.min(0.85, Number(accentRatioRaw) || 0.4))
+    const accentHeight = height * accentRatio
+    const paddingX = 16
+    const paddingY = 16
+
+    const weekdayColor = metadata.weekdayColor ?? '#78350f'
+    const weekdayFontFamily = metadata.weekdayFontFamily ?? 'Inter'
+    const weekdayFontSize = metadata.weekdayFontSize ?? 13
+    const weekdayFontWeight = metadata.weekdayFontWeight ?? 600
+
+    const dayNumberColor = metadata.dayNumberColor ?? '#92400e'
+    const dayNumberFontFamily = metadata.dayNumberFontFamily ?? 'Inter'
+    const dayNumberFontSize = metadata.dayNumberFontSize ?? 52
+    const dayNumberFontWeight = metadata.dayNumberFontWeight ?? 700
+
+    const placeholderColor = metadata.placeholderColor ?? '#475569'
+    const placeholderFontFamily = metadata.placeholderFontFamily ?? 'Inter'
+    const placeholderFontSize = metadata.placeholderFontSize ?? 13
+    const placeholderFontWeight = metadata.placeholderFontWeight ?? 400
+
     objects.push(
       new Rect({
         width,
         height,
-        rx: 24,
-        ry: 24,
-        fill: '#ffffff',
-        stroke: '#e2e8f0',
-        strokeWidth: 1,
+        rx: cornerRadius,
+        ry: cornerRadius,
+        fill: backgroundColor,
+        stroke: borderColor,
+        strokeWidth: borderWidth,
       }),
     )
 
     objects.push(
       new Rect({
         width,
-        height: height * 0.4,
-        rx: 24,
-        ry: 24,
+        height: accentHeight,
+        rx: cornerRadius,
+        ry: cornerRadius,
         fill: metadata.highlightAccent,
       }),
     )
 
+    const weekdayFontSizeEff = Math.min(weekdayFontSize, Math.max(10, Math.floor(accentHeight * 0.22)))
+    const weekdayTop = Math.max(12, Math.min(paddingY, Math.floor(accentHeight * 0.18)))
+    const dayNumberTopBase = weekdayTop + weekdayFontSizeEff + 6
+    const dayNumberFontSizeEff = Math.max(
+      18,
+      Math.min(dayNumberFontSize, Math.floor(accentHeight - dayNumberTopBase - 10)),
+    )
+
     objects.push(
       new Textbox(date.toLocaleDateString('en', { weekday: 'long' }), {
-        left: 16,
-        top: 16,
-        width: width - 32,
-        fontSize: 13,
-        fontWeight: 600,
-        fill: '#78350f',
+        left: paddingX,
+        top: weekdayTop,
+        width: width - paddingX * 2,
+        fontSize: weekdayFontSizeEff,
+        fontFamily: weekdayFontFamily,
+        fontWeight: weekdayFontWeight,
+        fill: weekdayColor,
         selectable: false,
       }),
     )
 
     objects.push(
       new Textbox(String(date.getDate()), {
-        left: 16,
-        top: 48,
-        width: width - 32,
-        fontSize: 52,
-        fontWeight: 700,
-        fill: '#92400e',
+        left: paddingX,
+        top: dayNumberTopBase,
+        width: width - paddingX * 2,
+        fontSize: dayNumberFontSizeEff,
+        fontFamily: dayNumberFontFamily,
+        fontWeight: dayNumberFontWeight,
+        fill: dayNumberColor,
         selectable: false,
       }),
     )
 
+    const placeholderTop = accentHeight + 14
+    const placeholderFontSizeEff = Math.min(placeholderFontSize, Math.max(10, Math.floor((height - placeholderTop - paddingY) * 0.22)))
     objects.push(
       new Textbox(metadata.notePlaceholder ?? 'Add event', {
-        left: 16,
-        top: height * 0.45,
-        width: width - 32,
-        fontSize: 13,
-        fill: '#475569',
+        left: paddingX,
+        top: placeholderTop,
+        width: width - paddingX * 2,
+        fontSize: placeholderFontSizeEff,
+        fontFamily: placeholderFontFamily,
+        fontWeight: placeholderFontWeight,
+        fill: placeholderColor,
         selectable: false,
       }),
     )
@@ -709,55 +1172,6 @@ export const useEditorStore = defineStore('editor', () => {
     return new Group(objects, {
       subTargetCheck: false,
       hoverCursor: 'move',
-    })
-  }
-
-  function buildPhotoBlockGraphics(metadata: PhotoBlockMetadata): Group {
-    const { width, height } = metadata.size
-    const objects: FabricObject[] = []
-
-    objects.push(
-      new Rect({
-        width,
-        height,
-        rx: 24,
-        ry: 24,
-        fill: '#f0f9ff',
-        stroke: metadata.accentColor,
-        strokeDashArray: [14, 10],
-        strokeWidth: 2,
-      }),
-    )
-
-    objects.push(
-      new Textbox('+', {
-        left: width / 2 - 20,
-        top: height / 2 - 54,
-        width: 40,
-        fontSize: 54,
-        fontWeight: 200,
-        fill: metadata.accentColor,
-        selectable: false,
-        textAlign: 'center',
-      }),
-    )
-
-    objects.push(
-      new Textbox(metadata.label, {
-        left: 0,
-        top: height / 2 + 8,
-        width,
-        fontSize: 15,
-        fontWeight: 600,
-        fill: '#0f172a',
-        textAlign: 'center',
-        selectable: false,
-      }),
-    )
-
-    return new Group(objects, {
-      subTargetCheck: false,
-      hoverCursor: 'pointer',
     })
   }
 
@@ -1030,9 +1444,13 @@ export const useEditorStore = defineStore('editor', () => {
   function initializeCanvas(canvasElement: HTMLCanvasElement): void {
     if (!project.value) return 
 
+    const normalized = normalizeCanvasSize(project.value.canvas)
+    project.value.canvas.width = normalized.width
+    project.value.canvas.height = normalized.height
+
     canvas.value = new Canvas(canvasElement, {
-      width: project.value.canvas.width || 800,
-      height: project.value.canvas.height || 600,
+      width: project.value.canvas.width,
+      height: project.value.canvas.height,
       backgroundColor: project.value.canvas.backgroundColor || '#ffffff',
       selection: true,
       preserveObjectStacking: true,
@@ -1061,6 +1479,7 @@ export const useEditorStore = defineStore('editor', () => {
     canvas.value.on('object:removed', handleObjectRemoved)
   }
 
+
   function handleSelectionChange(e: any): void {
     const selected = (e.selected || []) as any[]
     selected.forEach((obj) => ensureObjectIdentity(obj))
@@ -1071,7 +1490,53 @@ export const useEditorStore = defineStore('editor', () => {
     selectedObjectIds.value = []
   }
 
-  function handleObjectModified(): void {
+  let isBakingCalendarScale = false
+
+  function bakeScaledCalendarElementSize(target: FabricObject): void {
+    if (!canvas.value) return
+    if (isBakingCalendarScale) return
+
+    const meta = (target as any)?.data?.elementMetadata as CanvasElementMetadata | undefined
+    if (!meta) return
+    if (meta.kind !== 'calendar-grid' && meta.kind !== 'week-strip' && meta.kind !== 'date-cell') return
+
+    const scaleX = Number((target as any).scaleX ?? 1) || 1
+    const scaleY = Number((target as any).scaleY ?? 1) || 1
+    const hasScale = Math.abs(scaleX - 1) > 1e-3 || Math.abs(scaleY - 1) > 1e-3
+    if (!hasScale) return
+
+    // Convert the scaled display size into the authoritative metadata.size, then rebuild at scale 1.
+    const nextWidth = Math.max(10, Math.round(target.getScaledWidth()))
+    const nextHeight = Math.max(10, Math.round(target.getScaledHeight()))
+
+    const nextMetadata = JSON.parse(JSON.stringify(meta)) as CanvasElementMetadata
+    ;(nextMetadata as any).size = { width: nextWidth, height: nextHeight }
+
+    isBakingCalendarScale = true
+    try {
+      target.set({ scaleX: 1, scaleY: 1 })
+      ;(target as any).dirty = true
+      if (typeof (target as any).setCoords === 'function') {
+        ;(target as any).setCoords()
+      }
+
+      const rebuilt = rebuildElementWithMetadata(target, nextMetadata)
+      if (!rebuilt) return
+
+      canvas.value.remove(target)
+      canvas.value.add(rebuilt)
+      canvas.value.setActiveObject(rebuilt)
+      canvas.value.renderAll()
+    } finally {
+      isBakingCalendarScale = false
+    }
+  }
+
+  function handleObjectModified(e: any): void {
+    const target = (e?.target as FabricObject | undefined) ?? null
+    if (target) {
+      bakeScaledCalendarElementSize(target)
+    }
     isDirty.value = true
     saveToHistory()
   }
@@ -1115,7 +1580,6 @@ export const useEditorStore = defineStore('editor', () => {
     if (metadata?.kind === 'week-strip') return 'Week Strip'
     if (metadata?.kind === 'date-cell') return 'Date Cell'
     if (metadata?.kind === 'planner-note') return 'Notes Panel'
-    if (metadata?.kind === 'photo-block') return 'Photo Block'
     if (metadata?.kind === 'schedule') return 'Schedule'
     if (metadata?.kind === 'checklist') return 'Checklist'
     return getObjectTypeName(obj?.type)
@@ -1125,7 +1589,6 @@ export const useEditorStore = defineStore('editor', () => {
     if (metadata.kind === 'planner-note') return `Notes: ${metadata.title}`
     if (metadata.kind === 'schedule') return `Schedule: ${metadata.title}`
     if (metadata.kind === 'checklist') return `Checklist: ${metadata.title}`
-    if (metadata.kind === 'photo-block') return `Photo: ${metadata.label}`
     if (metadata.kind === 'week-strip') return `Week Strip: ${metadata.label ?? 'Week Plan'}`
     return getFriendlyObjectName({ data: { elementMetadata: metadata } })
   }
@@ -1153,6 +1616,19 @@ export const useEditorStore = defineStore('editor', () => {
     if (!obj.name) {
       obj.set?.('name', friendly)
       if (!obj.name) obj.name = friendly
+    }
+
+    const isArrowGroup =
+      obj?.type === 'group' &&
+      (obj?.data?.shapeKind === 'arrow' ||
+        (Array.isArray(obj?._objects) && obj._objects.some((o: any) => o?.data?.arrowPart)))
+
+    if (isArrowGroup) {
+      ;(obj as any).data = {
+        ...((obj as any).data ?? {}),
+        shapeKind: 'arrow',
+      }
+      refreshArrowGroupGeometry(obj as unknown as Group)
     }
   }
 
@@ -1187,9 +1663,6 @@ export const useEditorStore = defineStore('editor', () => {
         break
       case 'notes-panel':
         fabricObject = createNotesPanelObject(id, options)
-        break
-      case 'photo-block':
-        fabricObject = createPhotoBlockObject(id, options)
         break
       case 'schedule':
         fabricObject = createScheduleObject(id, options)
@@ -1315,6 +1788,15 @@ export const useEditorStore = defineStore('editor', () => {
           ...basePosition,
           ...other,
         })
+      case 'arrow':
+        return createArrowObject(id, {
+          name: options.name ?? 'Arrow',
+          width,
+          stroke,
+          strokeWidth,
+          ...basePosition,
+          ...other,
+        })
       case 'line':
         return new Line([0, 0, width ?? 100, 0], {
           id,
@@ -1339,6 +1821,268 @@ export const useEditorStore = defineStore('editor', () => {
           ...other,
         })
     }
+  }
+
+  function getArrowParts(group: Group): {
+    line: Line | null
+    startHead: Polygon | null
+    endHead: Polygon | null
+  } {
+    const objs = (group.getObjects?.() ?? []) as any[]
+    const line = (objs.find((o) => o?.data?.arrowPart === 'line' || o?.type === 'line') ?? null) as Line | null
+    const startHead = (objs.find((o) => o?.data?.arrowPart === 'startHead') ?? null) as Polygon | null
+    const endHead = (objs.find((o) => o?.data?.arrowPart === 'endHead') ?? null) as Polygon | null
+    return { line, startHead, endHead }
+  }
+
+  function createArrowHeadPolygon(
+    part: 'startHead' | 'endHead',
+    headLength: number,
+    headWidth: number,
+    stroke: string,
+    strokeWidth: number,
+    style: 'filled' | 'open',
+    strokeLineCap?: string,
+    strokeLineJoin?: string,
+  ): Polygon {
+    const points =
+      part === 'endHead'
+        ? [
+            { x: 0, y: 0 },
+            { x: 0, y: headWidth },
+            { x: headLength, y: headWidth / 2 },
+          ]
+        : [
+            { x: headLength, y: 0 },
+            { x: headLength, y: headWidth },
+            { x: 0, y: headWidth / 2 },
+          ]
+
+    const isOpen = style === 'open'
+
+    const poly = new Polygon(points as any, {
+      fill: isOpen ? 'transparent' : stroke,
+      stroke,
+      strokeWidth: isOpen ? strokeWidth : 0,
+      strokeLineCap,
+      strokeLineJoin,
+      selectable: false,
+      evented: false,
+      objectCaching: false,
+    })
+
+    ;(poly as any).data = { ...(poly as any).data, arrowPart: part }
+    return poly
+  }
+
+  function refreshArrowGroupGeometry(group: Group): void {
+    const data = ((group as any).data ?? {}) as any
+    const opts = (data.arrowOptions ?? {}) as any
+    const { line, startHead, endHead } = getArrowParts(group)
+
+    const stroke = (line as any)?.stroke ?? opts.stroke ?? '#000000'
+    const strokeWidth = Math.max(1, Number((line as any)?.strokeWidth ?? opts.strokeWidth ?? 2) || 2)
+    const strokeLineCap = ((line as any)?.strokeLineCap ?? opts.strokeLineCap) as string | undefined
+    const strokeLineJoin = ((line as any)?.strokeLineJoin ?? opts.strokeLineJoin) as string | undefined
+
+    const headLength = Math.max(4, Number(opts.arrowHeadLength ?? Math.max(14, strokeWidth * 4)) || Math.max(14, strokeWidth * 4))
+    const headWidth = Math.max(4, Number(opts.arrowHeadWidth ?? Math.max(10, headLength * 0.7)) || Math.max(10, headLength * 0.7))
+    const arrowEnds = (opts.arrowEnds ?? 'end') as 'none' | 'start' | 'end' | 'both'
+    const headStyle = (opts.arrowHeadStyle ?? 'filled') as 'filled' | 'open'
+
+    const hasStart = arrowEnds === 'start' || arrowEnds === 'both'
+    const hasEnd = arrowEnds === 'end' || arrowEnds === 'both'
+
+    const inferredLineLen =
+      line && typeof (line as any).x1 === 'number' && typeof (line as any).x2 === 'number'
+        ? Math.abs(Number((line as any).x2) - Number((line as any).x1))
+        : Math.max(10, Number((group as any).width ?? 140) || 140)
+
+    const inferredBaseWidth = Math.max(10, inferredLineLen + (hasStart ? headLength : 0) + (hasEnd ? headLength : 0))
+    const baseWidth = Math.max(10, Number(opts.baseWidth ?? inferredBaseWidth ?? (group as any).width ?? 140) || 140)
+
+    const offsetX = -baseWidth / 2
+    const y = 0
+    const x1 = hasStart ? headLength : 0
+    const x2 = Math.max(x1, baseWidth - (hasEnd ? headLength : 0))
+
+    if (line) {
+      const len = Math.max(0, x2 - x1)
+      line.set({
+        originX: 'left',
+        originY: 'center',
+        x1: 0,
+        y1: 0,
+        x2: len,
+        y2: 0,
+        left: offsetX + x1,
+        top: y,
+        objectCaching: false,
+      } as any)
+    }
+
+    const addHead = (part: 'startHead' | 'endHead') => {
+      const created = createArrowHeadPolygon(part, headLength, headWidth, stroke, strokeWidth, headStyle, strokeLineCap, strokeLineJoin)
+      if (typeof (group as any).addWithUpdate === 'function') {
+        ;(group as any).addWithUpdate(created)
+      } else {
+        ;(group as any).add?.(created)
+      }
+      return created
+    }
+
+    const removeHead = (head: Polygon | null) => {
+      if (!head) return
+      if (typeof (group as any).removeWithUpdate === 'function') {
+        ;(group as any).removeWithUpdate(head)
+      } else {
+        ;(group as any).remove?.(head)
+      }
+    }
+
+    if (!hasStart) {
+      removeHead(startHead)
+    }
+
+    if (!hasEnd) {
+      removeHead(endHead)
+    }
+
+    const nextStart = hasStart ? (startHead ?? addHead('startHead')) : null
+    const nextEnd = hasEnd ? (endHead ?? addHead('endHead')) : null
+
+    const updateHead = (head: Polygon, part: 'startHead' | 'endHead') => {
+      const updated = createArrowHeadPolygon(part, headLength, headWidth, stroke, strokeWidth, headStyle, strokeLineCap, strokeLineJoin)
+      head.set({
+        points: (updated as any).points,
+        fill: (updated as any).fill,
+        stroke: (updated as any).stroke,
+        strokeWidth: (updated as any).strokeWidth,
+        strokeLineCap: (updated as any).strokeLineCap,
+        strokeLineJoin: (updated as any).strokeLineJoin,
+        originX: 'left',
+        originY: 'center',
+        left: offsetX + (part === 'endHead' ? baseWidth - headLength : 0),
+        top: y,
+        objectCaching: false,
+      } as any)
+    }
+
+    if (nextStart) updateHead(nextStart, 'startHead')
+    if (nextEnd) updateHead(nextEnd, 'endHead')
+
+    ;(group as any).data = {
+      ...data,
+      shapeKind: 'arrow',
+      arrowOptions: {
+        ...opts,
+        baseWidth,
+        arrowHeadLength: headLength,
+        arrowHeadWidth: headWidth,
+        arrowHeadStyle: headStyle,
+        arrowEnds,
+        stroke,
+        strokeWidth,
+      },
+    }
+
+    ;(group as any).dirty = true
+    ;(group as any)._calcBounds?.()
+    ;(group as any)._updateObjectsCoords?.()
+    ;(group as any).setCoords?.()
+  }
+
+  function createArrowObject(id: string, options: any): FabricObject {
+    const {
+      width: providedWidth,
+      stroke: providedStroke,
+      strokeWidth: providedStrokeWidth,
+      arrowEnds: providedArrowEnds,
+      arrowHeadStyle: providedHeadStyle,
+      arrowHeadLength: providedHeadLength,
+      arrowHeadWidth: providedHeadWidth,
+      strokeDashArray,
+      strokeLineCap,
+      strokeLineJoin,
+      ...groupOther
+    } = options
+
+    const width = Math.max(10, Number(providedWidth ?? 140) || 140)
+    const stroke = providedStroke ?? '#000000'
+    const strokeWidth = Math.max(1, Number(providedStrokeWidth ?? 2) || 2)
+    const headLength = Math.max(4, Number(providedHeadLength ?? Math.max(14, strokeWidth * 4)) || Math.max(14, strokeWidth * 4))
+    const headWidth = Math.max(4, Number(providedHeadWidth ?? Math.max(10, headLength * 0.7)) || Math.max(10, headLength * 0.7))
+    const arrowEnds = (providedArrowEnds ?? 'end') as 'none' | 'start' | 'end' | 'both'
+    const headStyle = (providedHeadStyle ?? 'filled') as 'filled' | 'open'
+
+    const hasStart = arrowEnds === 'start' || arrowEnds === 'both'
+    const hasEnd = arrowEnds === 'end' || arrowEnds === 'both'
+
+    const offsetX = -width / 2
+    const y = 0
+    const x1 = hasStart ? headLength : 0
+    const x2 = Math.max(x1, width - (hasEnd ? headLength : 0))
+
+    const len = Math.max(0, x2 - x1)
+    const line = new Line([0, 0, len, 0], {
+      stroke,
+      strokeWidth,
+      strokeDashArray,
+      strokeLineCap,
+      strokeLineJoin,
+      originX: 'left',
+      originY: 'center',
+      left: offsetX + x1,
+      top: y,
+      selectable: false,
+      evented: false,
+      objectCaching: false,
+    })
+    ;(line as any).data = { ...(line as any).data, arrowPart: 'line' }
+
+    const objects: FabricObject[] = [line]
+
+    if (hasStart) {
+      const startHead = createArrowHeadPolygon('startHead', headLength, headWidth, stroke, strokeWidth, headStyle, strokeLineCap, strokeLineJoin)
+      startHead.set({ originX: 'left', originY: 'center', left: offsetX + 0, top: y } as any)
+      objects.push(startHead)
+    }
+
+    if (hasEnd) {
+      const endHead = createArrowHeadPolygon('endHead', headLength, headWidth, stroke, strokeWidth, headStyle, strokeLineCap, strokeLineJoin)
+      endHead.set({ originX: 'left', originY: 'center', left: offsetX + (width - headLength), top: y } as any)
+      objects.push(endHead)
+    }
+
+    const group = new Group(objects, {
+      id,
+      name: options.name ?? 'Arrow',
+      left: options.left ?? 100,
+      top: options.top ?? 100,
+      selectable: options.selectable ?? true,
+      evented: options.evented ?? true,
+      subTargetCheck: false,
+      hoverCursor: 'move',
+      objectCaching: false,
+      ...groupOther,
+    })
+
+    ;(group as any).data = {
+      ...((group as any).data ?? {}),
+      shapeKind: 'arrow',
+      arrowOptions: {
+        baseWidth: width,
+        arrowHeadLength: headLength,
+        arrowHeadWidth: headWidth,
+        arrowHeadStyle: headStyle,
+        arrowEnds,
+        stroke,
+        strokeWidth,
+      },
+    }
+
+    refreshArrowGroupGeometry(group)
+    return group
   }
 
   function createCalendarGridObject(id: string, options: any): FabricObject {
@@ -1428,25 +2172,6 @@ export const useEditorStore = defineStore('editor', () => {
       name: options.name ?? getLayerNameForMetadata(metadata),
       subTargetCheck: false,
       hoverCursor: 'move',
-    })
-    attachElementMetadata(group, metadata)
-    return group
-  }
-
-  function createPhotoBlockObject(id: string, options: any): FabricObject {
-    const metadata = getDefaultPhotoBlockMetadata({
-      label: options.label,
-      accentColor: options.accentColor,
-      size: options.width && options.height ? { width: options.width, height: options.height } : undefined,
-    })
-    const group = buildPhotoBlockGraphics(metadata)
-    group.set({
-      left: options.x ?? options.left ?? 160,
-      top: options.y ?? options.top ?? 140,
-      id,
-      name: options.name ?? 'Photo Block',
-      subTargetCheck: false,
-      hoverCursor: 'pointer',
     })
     attachElementMetadata(group, metadata)
     return group
@@ -1624,7 +2349,101 @@ export const useEditorStore = defineStore('editor', () => {
     const activeObject = canvas.value.getActiveObject()
     if (!activeObject) return
 
-    activeObject.set(property as any, value)
+    const isArrow =
+      (activeObject as any)?.type === 'group' &&
+      (activeObject as any)?.data?.shapeKind === 'arrow'
+
+    if (isArrow) {
+      const group = activeObject as unknown as Group
+      const data = ((group as any).data ?? {}) as any
+      const opts = (data.arrowOptions ?? {}) as any
+      const { line, startHead, endHead } = getArrowParts(group)
+
+      if (property === 'stroke' || property === 'strokeWidth') {
+        const nextStroke = property === 'stroke' ? String(value ?? '') : ((line as any)?.stroke ?? opts.stroke ?? '#000000')
+        const nextWidth = property === 'strokeWidth' ? Math.max(1, Number(value) || 1) : Math.max(1, Number((line as any)?.strokeWidth ?? opts.strokeWidth ?? 2) || 2)
+        if (line) {
+          line.set({ stroke: nextStroke, strokeWidth: nextWidth } as any)
+        }
+        const headStyle = (opts.arrowHeadStyle ?? 'filled') as 'filled' | 'open'
+        const isOpen = headStyle === 'open'
+        ;[startHead, endHead].filter(Boolean).forEach((h: any) => {
+          h.set({
+            fill: isOpen ? 'transparent' : nextStroke,
+            stroke: nextStroke,
+            strokeWidth: isOpen ? nextWidth : 0,
+          } as any)
+        })
+        ;(group as any).data = {
+          ...data,
+          arrowOptions: {
+            ...opts,
+            stroke: nextStroke,
+            strokeWidth: nextWidth,
+          },
+        }
+        refreshArrowGroupGeometry(group)
+      } else if (property === 'strokeDashArray' || property === 'strokeLineCap' || property === 'strokeLineJoin') {
+        if (line) {
+          line.set({ [property]: value } as any)
+        }
+
+        ;(group as any).data = {
+          ...data,
+          arrowOptions: {
+            ...opts,
+            [property]: value,
+          },
+        }
+
+        refreshArrowGroupGeometry(group)
+      } else if (
+        property === 'arrowEnds' ||
+        property === 'arrowHeadLength' ||
+        property === 'arrowHeadWidth' ||
+        property === 'arrowHeadStyle'
+      ) {
+        ;(group as any).data = {
+          ...data,
+          arrowOptions: {
+            ...opts,
+            [property]: value,
+          },
+        }
+        refreshArrowGroupGeometry(group)
+      } else {
+        activeObject.set(property as any, value)
+      }
+    } else {
+      activeObject.set({ [property]: value } as any)
+    }
+
+    // Calendar elements: if the user changes scale (via width/height inspector), convert it into metadata.size
+    // so internal layout is recomputed at the new size.
+    if (property === 'scaleX' || property === 'scaleY') {
+      bakeScaledCalendarElementSize(activeObject)
+      queueHistorySave()
+    }
+
+    // Fonts: make sure the font is actually available, and force Fabric to re-measure text.
+    if (property === 'fontFamily' || property === 'fontWeight' || property === 'fontSize') {
+      const family = (activeObject as any).fontFamily as string | undefined
+      const weight = (activeObject as any).fontWeight as string | number | undefined
+      const size = (activeObject as any).fontSize as number | undefined
+      if (family) {
+        requestFontLoad(family, weight, size)
+      }
+
+      ;(activeObject as any).dirty = true
+      if (typeof (activeObject as any).initDimensions === 'function') {
+        ;(activeObject as any).initDimensions()
+      }
+      if (typeof (activeObject as any).setCoords === 'function') {
+        ;(activeObject as any).setCoords()
+      }
+    }
+
+    canvas.value.requestRenderAll?.()
     canvas.value.renderAll()
     isDirty.value = true
   }
@@ -1721,35 +2540,204 @@ export const useEditorStore = defineStore('editor', () => {
   function alignObjects(alignment: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom'): void {
     if (!canvas.value) return
 
-    const activeObject = canvas.value.getActiveObject()
-    if (!activeObject) return
+    // Keep this legacy helper, but use the robust selection aligner so originX/originY
+    // and different object types (e.g. Textbox origin center) still align correctly.
+    alignSelection(alignment, 'canvas')
+  }
+
+  function alignSelection(
+    alignment: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom',
+    mode: 'selection' | 'canvas' = 'selection',
+  ): void {
+    if (!canvas.value) return
+
+    const getCanvasRect = (obj: FabricObject) => {
+      // Prefer absolute corner coords (canvas space) so zoom/viewportTransform doesn't skew bounds.
+      try {
+        obj.setCoords?.()
+        const a = (obj as any).aCoords as any
+        const points = a
+          ? [a.tl, a.tr, a.br, a.bl].filter(Boolean)
+          : (typeof (obj as any).getCoords === 'function' ? (obj as any).getCoords() : [])
+
+        if (points && points.length) {
+          const xs = points.map((p: any) => Number(p.x) || 0)
+          const ys = points.map((p: any) => Number(p.y) || 0)
+          const left = Math.min(...xs)
+          const right = Math.max(...xs)
+          const top = Math.min(...ys)
+          const bottom = Math.max(...ys)
+          return { left, top, width: right - left, height: bottom - top }
+        }
+      } catch {
+        // fall back
+      }
+
+      return obj.getBoundingRect(true, true)
+    }
+
+    const objects = canvas.value.getActiveObjects()
+    if (!objects.length) return
 
     const canvasWidth = canvas.value.width || 0
     const canvasHeight = canvas.value.height || 0
-    const objWidth = activeObject.getScaledWidth()
-    const objHeight = activeObject.getScaledHeight()
 
-    switch (alignment) {
-      case 'left':
-        activeObject.set('left', 0)
-        break
-      case 'center':
-        activeObject.set('left', (canvasWidth - objWidth) / 2)
-        break
-      case 'right':
-        activeObject.set('left', canvasWidth - objWidth)
-        break
-      case 'top':
-        activeObject.set('top', 0)
-        break
-      case 'middle':
-        activeObject.set('top', (canvasHeight - objHeight) / 2)
-        break
-      case 'bottom':
-        activeObject.set('top', canvasHeight - objHeight)
-        break
+    const rects = objects.map((obj) => ({
+      obj,
+      rect: getCanvasRect(obj),
+    }))
+
+    // For multi-select alignment, "selection" mode behaves like a key-object align:
+    // keep one object fixed (largest by bounds area) and align the others to it.
+    const keyEntry =
+      mode === 'selection' && rects.length > 1
+        ? rects.reduce(
+            (best, cur) => {
+              const bestArea = best.rect.width * best.rect.height
+              const curArea = cur.rect.width * cur.rect.height
+              return curArea > bestArea ? cur : best
+            },
+            rects[0]!,
+          )
+        : null
+
+    const bounds =
+      mode === 'canvas'
+        ? { left: 0, top: 0, right: canvasWidth, bottom: canvasHeight }
+        : keyEntry
+          ? {
+              left: keyEntry.rect.left,
+              top: keyEntry.rect.top,
+              right: keyEntry.rect.left + keyEntry.rect.width,
+              bottom: keyEntry.rect.top + keyEntry.rect.height,
+            }
+          : rects.reduce(
+              (acc, entry) => {
+                acc.left = Math.min(acc.left, entry.rect.left)
+                acc.top = Math.min(acc.top, entry.rect.top)
+                acc.right = Math.max(acc.right, entry.rect.left + entry.rect.width)
+                acc.bottom = Math.max(acc.bottom, entry.rect.top + entry.rect.height)
+                return acc
+              },
+              {
+                left: Number.POSITIVE_INFINITY,
+                top: Number.POSITIVE_INFINITY,
+                right: Number.NEGATIVE_INFINITY,
+                bottom: Number.NEGATIVE_INFINITY,
+              },
+            )
+
+    const targetCenterX = (bounds.left + bounds.right) / 2
+    const targetCenterY = (bounds.top + bounds.bottom) / 2
+
+    rects.forEach(({ obj, rect }) => {
+      if (keyEntry && obj === keyEntry.obj) return
+      const objLeft = Number((obj as any).left ?? 0) || 0
+      const objTop = Number((obj as any).top ?? 0) || 0
+
+      const rectLeft = rect.left
+      const rectTop = rect.top
+      const rectRight = rect.left + rect.width
+      const rectBottom = rect.top + rect.height
+      const rectCenterX = rect.left + rect.width / 2
+      const rectCenterY = rect.top + rect.height / 2
+
+      let nextLeft = objLeft
+      let nextTop = objTop
+
+      if (alignment === 'left') nextLeft = objLeft + (bounds.left - rectLeft)
+      if (alignment === 'center') nextLeft = objLeft + (targetCenterX - rectCenterX)
+      if (alignment === 'right') nextLeft = objLeft + (bounds.right - rectRight)
+
+      if (alignment === 'top') nextTop = objTop + (bounds.top - rectTop)
+      if (alignment === 'middle') nextTop = objTop + (targetCenterY - rectCenterY)
+      if (alignment === 'bottom') nextTop = objTop + (bounds.bottom - rectBottom)
+
+      obj.set({ left: nextLeft, top: nextTop } as any)
+      obj.setCoords?.()
+    })
+
+    // Keep the active selection box in sync
+    canvas.value.getActiveObject()?.setCoords?.()
+    canvas.value.requestRenderAll?.()
+    canvas.value.renderAll()
+    saveToHistory()
+  }
+
+  function distributeSelection(axis: 'horizontal' | 'vertical'): void {
+    if (!canvas.value) return
+
+    const getCanvasRect = (obj: FabricObject) => {
+      try {
+        obj.setCoords?.()
+        const a = (obj as any).aCoords as any
+        const points = a
+          ? [a.tl, a.tr, a.br, a.bl].filter(Boolean)
+          : (typeof (obj as any).getCoords === 'function' ? (obj as any).getCoords() : [])
+
+        if (points && points.length) {
+          const xs = points.map((p: any) => Number(p.x) || 0)
+          const ys = points.map((p: any) => Number(p.y) || 0)
+          const left = Math.min(...xs)
+          const right = Math.max(...xs)
+          const top = Math.min(...ys)
+          const bottom = Math.max(...ys)
+          return { left, top, width: right - left, height: bottom - top }
+        }
+      } catch {
+        // fall back
+      }
+
+      return obj.getBoundingRect(true, true)
     }
 
+    const objects = canvas.value.getActiveObjects()
+    if (objects.length < 3) return
+
+    const entries = objects.map((obj) => {
+      const rect = getCanvasRect(obj)
+      const left = rect.left
+      const top = rect.top
+      const right = rect.left + rect.width
+      const bottom = rect.top + rect.height
+      const centerX = rect.left + rect.width / 2
+      const centerY = rect.top + rect.height / 2
+      return { obj, rect, left, top, right, bottom, centerX, centerY, width: rect.width, height: rect.height }
+    })
+
+    if (axis === 'horizontal') {
+      const sorted = [...entries].sort((a, b) => a.centerX - b.centerX)
+      const boundsLeft = Math.min(...sorted.map((e) => e.left))
+      const boundsRight = Math.max(...sorted.map((e) => e.right))
+      const totalWidth = sorted.reduce((sum, e) => sum + e.width, 0)
+      const gap = (boundsRight - boundsLeft - totalWidth) / (sorted.length - 1)
+
+      let cursor = boundsLeft
+      sorted.forEach((e) => {
+        const objLeft = Number((e.obj as any).left ?? 0) || 0
+        const dx = cursor - e.left
+        e.obj.set({ left: objLeft + dx } as any)
+        e.obj.setCoords?.()
+        cursor += e.width + (Number.isFinite(gap) ? gap : 0)
+      })
+    } else {
+      const sorted = [...entries].sort((a, b) => a.centerY - b.centerY)
+      const boundsTop = Math.min(...sorted.map((e) => e.top))
+      const boundsBottom = Math.max(...sorted.map((e) => e.bottom))
+      const totalHeight = sorted.reduce((sum, e) => sum + e.height, 0)
+      const gap = (boundsBottom - boundsTop - totalHeight) / (sorted.length - 1)
+
+      let cursor = boundsTop
+      sorted.forEach((e) => {
+        const objTop = Number((e.obj as any).top ?? 0) || 0
+        const dy = cursor - e.top
+        e.obj.set({ top: objTop + dy } as any)
+        e.obj.setCoords?.()
+        cursor += e.height + (Number.isFinite(gap) ? gap : 0)
+      })
+    }
+
+    canvas.value.requestRenderAll?.()
     canvas.value.renderAll()
     saveToHistory()
   }
@@ -1856,16 +2844,32 @@ export const useEditorStore = defineStore('editor', () => {
     return mergeTemplateOptions(options)
   }
 
+  function syncCalendarStoreConfig(next: CalendarConfig): void {
+    calendarStore.updateConfig({
+      year: next.year,
+      country: next.country,
+      language: next.language,
+      layout: next.layout,
+      startDay: next.startDay,
+      showHolidays: next.showHolidays,
+      showCustomHolidays: next.showCustomHolidays,
+      showWeekNumbers: next.showWeekNumbers,
+    })
+    calendarStore.generateCalendar()
+  }
+
   function createNewProject(config: CalendarConfig): void {
     config.templateOptions = ensureTemplateOptions(config.templateOptions)
+
+    const normalized = normalizeCanvasSize(null)
     project.value = {
       id: generateObjectId('project'),
       userId: authStore.user?.id || '',
       name: 'Untitled Calendar',
       config,
       canvas: {
-        width: 800,
-        height: 600,
+        width: normalized.width,
+        height: normalized.height,
         unit: 'px',
         dpi: 72,
         backgroundColor: '#ffffff',
@@ -1883,6 +2887,8 @@ export const useEditorStore = defineStore('editor', () => {
 
     selectedObjectIds.value = []
     clipboard.value = null
+
+    syncCalendarStoreConfig(config)
   }
 
   function setProjectName(name: string): void {
@@ -1906,7 +2912,7 @@ export const useEditorStore = defineStore('editor', () => {
       if (!found) {
         createNewProject({
           year: new Date().getFullYear(),
-          country: 'ZA',
+          country: 'KE',
           language: 'en',
           layout: 'monthly',
           startDay: 0,
@@ -1925,11 +2931,17 @@ export const useEditorStore = defineStore('editor', () => {
   }
 
   function loadProject(loadedProject: Project): void {
+    const normalized = normalizeCanvasSize(loadedProject?.canvas)
     project.value = {
       ...loadedProject,
       config: {
         ...loadedProject.config,
         templateOptions: ensureTemplateOptions(loadedProject.config.templateOptions),
+      },
+      canvas: {
+        ...loadedProject.canvas,
+        width: normalized.width,
+        height: normalized.height,
       },
     }
     
@@ -1940,6 +2952,8 @@ export const useEditorStore = defineStore('editor', () => {
 
     selectedObjectIds.value = []
     clipboard.value = null
+
+    syncCalendarStoreConfig(project.value.config)
   }
 
   function getCanvasState(): CanvasState | null {
@@ -1995,6 +3009,7 @@ export const useEditorStore = defineStore('editor', () => {
     project.value.canvas.width = width
     project.value.canvas.height = height
     canvas.value.renderAll()
+    canvas.value.calcOffset()
     isDirty.value = true
   }
 
@@ -2064,6 +3079,8 @@ export const useEditorStore = defineStore('editor', () => {
     sendToBack,
     // Alignment
     alignObjects,
+    alignSelection,
+    distributeSelection,
     // Zoom
     setZoom,
     zoomIn,

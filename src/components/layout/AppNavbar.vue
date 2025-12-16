@@ -2,7 +2,8 @@
 import { ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useAuthStore } from '@/stores'
-import { Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/vue'
+import { MenuItem } from '@headlessui/vue'
+import AppDropdownMenu from '@/components/ui/AppDropdownMenu.vue'
 import { 
   Bars3Icon, 
   XMarkIcon, 
@@ -28,7 +29,7 @@ const userNavigation = [
 </script>
 
 <template>
-  <nav class="fixed top-0 z-50 w-full glass border-b border-gray-200/50 dark:border-gray-700/50">
+  <nav class="fixed top-0 z-navbar w-full glass border-b border-gray-200/50 dark:border-gray-700/50">
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
       <div class="flex h-16 justify-between">
         <!-- Logo & Desktop Nav -->
@@ -63,9 +64,13 @@ const userNavigation = [
           </button>
 
           <!-- Profile Dropdown -->
-          <Menu as="div" class="relative ml-3" v-if="authStore.isAuthenticated">
-            <div>
-              <MenuButton class="flex items-center gap-2 rounded-full bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2">
+          <div class="relative ml-3" v-if="authStore.isAuthenticated">
+            <AppDropdownMenu
+              :button-class="'flex items-center gap-2 rounded-full bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2'"
+              align="right"
+              width="md"
+            >
+              <template #button>
                 <span class="sr-only">Open user menu</span>
                 <img v-if="authStore.user?.photoURL" :src="authStore.user.photoURL" class="h-8 w-8 rounded-full object-cover" alt="" />
                 <UserCircleIcon v-else class="h-8 w-8 text-gray-400" />
@@ -73,17 +78,9 @@ const userNavigation = [
                   {{ authStore.user?.displayName || 'Creator' }}
                 </span>
                 <ChevronDownIcon class="h-4 w-4 text-gray-400" />
-              </MenuButton>
-            </div>
-            <transition
-              enter-active-class="transition ease-out duration-200"
-              enter-from-class="transform opacity-0 scale-95"
-              enter-to-class="transform opacity-100 scale-100"
-              leave-active-class="transition ease-in duration-75"
-              leave-from-class="transform opacity-100 scale-100"
-              leave-to-class="transform opacity-0 scale-95"
-            >
-              <MenuItems class="absolute right-0 z-10 mt-2 w-48 origin-top-right rounded-xl bg-white dark:bg-gray-800 py-1 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none border border-gray-100 dark:border-gray-700">
+              </template>
+
+              <template #items>
                 <MenuItem v-for="item in userNavigation" :key="item.name" v-slot="{ active }">
                   <a
                     :href="item.href"
@@ -93,9 +90,9 @@ const userNavigation = [
                     {{ item.name }}
                   </a>
                 </MenuItem>
-              </MenuItems>
-            </transition>
-          </Menu>
+              </template>
+            </AppDropdownMenu>
+          </div>
 
           <div v-else class="flex gap-2">
             <RouterLink to="/auth/login" class="text-sm font-medium text-gray-700 dark:text-gray-200 hover:text-primary-500 px-3 py-2">

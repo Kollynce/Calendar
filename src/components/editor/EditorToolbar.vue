@@ -3,7 +3,8 @@ import { ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useEditorStore } from '@/stores/editor.store'
 import ExportModal from '@/components/export/ExportModal.vue'
-import { Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/vue'
+import { MenuItem } from '@headlessui/vue'
+import AppDropdownMenu from '@/components/ui/AppDropdownMenu.vue'
 import { 
   ArrowUturnLeftIcon,
   ArrowUturnRightIcon,
@@ -131,65 +132,59 @@ function openExportModal(): void {
       </button>
 
       <!-- Shape Dropdown -->
-      <Menu as="div" class="relative">
-        <MenuButton
-          class="p-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center gap-1"
-          :class="{ 'bg-primary-100 text-primary-600 dark:bg-primary-900/50 dark:text-primary-400': activeTool === 'shape' }"
-        >
+      <AppDropdownMenu
+        align="left"
+        width="sm"
+        :button-class="[
+          'p-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center gap-1',
+          activeTool === 'shape' ? 'bg-primary-100 text-primary-600 dark:bg-primary-900/50 dark:text-primary-400' : '',
+        ].join(' ')"
+      >
+        <template #button>
           <Square2StackIcon class="w-5 h-5" />
-        </MenuButton>
-        <transition
-          enter-active-class="transition duration-100 ease-out"
-          enter-from-class="transform scale-95 opacity-0"
-          enter-to-class="transform scale-100 opacity-100"
-          leave-active-class="transition duration-75 ease-in"
-          leave-from-class="transform scale-100 opacity-100"
-          leave-to-class="transform scale-95 opacity-0"
-        >
-          <MenuItems
-            class="absolute left-0 mt-2 w-32 origin-top-left divide-y divide-gray-100 rounded-md bg-white dark:bg-gray-800 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none z-50"
-          >
-            <div class="px-1 py-1">
-              <MenuItem v-slot="{ active }">
-                <button
-                  :class="[
-                    active ? 'bg-primary-500 text-white' : 'text-gray-900 dark:text-gray-200',
-                    'group flex w-full items-center rounded-md px-2 py-2 text-sm',
-                  ]"
-                  @click="addShape('rect')"
-                >
-                  <StopIcon class="mr-2 h-4 w-4" />
-                  Rectangle
-                </button>
-              </MenuItem>
-              <MenuItem v-slot="{ active }">
-                <button
-                  :class="[
-                    active ? 'bg-primary-500 text-white' : 'text-gray-900 dark:text-gray-200',
-                    'group flex w-full items-center rounded-md px-2 py-2 text-sm',
-                  ]"
-                  @click="addShape('circle')"
-                >
-                  <div class="mr-2 h-4 w-4 border-2 border-current rounded-full"></div>
-                  Circle
-                </button>
-              </MenuItem>
-              <MenuItem v-slot="{ active }">
-                <button
-                  :class="[
-                    active ? 'bg-primary-500 text-white' : 'text-gray-900 dark:text-gray-200',
-                    'group flex w-full items-center rounded-md px-2 py-2 text-sm',
-                  ]"
-                  @click="addShape('line')"
-                >
-                   <ViewColumnsIcon class="mr-2 h-4 w-4 transform rotate-90" />
-                  Line
-                </button>
-              </MenuItem>
-            </div>
-          </MenuItems>
-        </transition>
-      </Menu>
+        </template>
+
+        <template #items>
+          <div class="px-1 py-1">
+            <MenuItem v-slot="{ active }">
+              <button
+                :class="[
+                  active ? 'bg-primary-500 text-white' : 'text-gray-900 dark:text-gray-200',
+                  'group flex w-full items-center rounded-md px-2 py-2 text-sm',
+                ]"
+                @click="addShape('rect')"
+              >
+                <StopIcon class="mr-2 h-4 w-4" />
+                Rectangle
+              </button>
+            </MenuItem>
+            <MenuItem v-slot="{ active }">
+              <button
+                :class="[
+                  active ? 'bg-primary-500 text-white' : 'text-gray-900 dark:text-gray-200',
+                  'group flex w-full items-center rounded-md px-2 py-2 text-sm',
+                ]"
+                @click="addShape('circle')"
+              >
+                <div class="mr-2 h-4 w-4 border-2 border-current rounded-full"></div>
+                Circle
+              </button>
+            </MenuItem>
+            <MenuItem v-slot="{ active }">
+              <button
+                :class="[
+                  active ? 'bg-primary-500 text-white' : 'text-gray-900 dark:text-gray-200',
+                  'group flex w-full items-center rounded-md px-2 py-2 text-sm',
+                ]"
+                @click="addShape('line')"
+              >
+                <ViewColumnsIcon class="mr-2 h-4 w-4 transform rotate-90" />
+                Line
+              </button>
+            </MenuItem>
+          </div>
+        </template>
+      </AppDropdownMenu>
 
       <!-- Calendar -->
       <button

@@ -24,7 +24,7 @@ const startingMonth = ref(new Date().getMonth() + 1)
 const monthsPerPage = ref(1)
 const weekStartsOn = ref<0 | 1>(0) // 0 = Sunday, 1 = Monday
 const showWeekNumbers = ref(false)
-const selectedCountry = ref<CountryCode>('ZA')
+const selectedCountry = ref<CountryCode>('KE')
 const showPublicHolidays = ref(true)
 const highlightWeekends = ref(true)
 
@@ -556,14 +556,14 @@ function renderMiniMonthGrid(monthData: any, x: number, y: number, width: number
           type="number"
           min="2020"
           max="2100"
-          class="w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+          class="input"
         />
       </div>
       <div>
         <label class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1.5 block">Start Month</label>
         <select
           v-model="startingMonth"
-          class="w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+          class="select"
         >
           <option v-for="month in monthsList" :key="month.value" :value="month.value">
             {{ month.name }}
@@ -602,7 +602,7 @@ function renderMiniMonthGrid(monthData: any, x: number, y: number, width: number
         <span class="text-sm text-gray-700 dark:text-gray-300">Week starts on</span>
         <select
           v-model="weekStartsOn"
-          class="px-3 py-1.5 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700"
+          class="select-sm w-auto"
         >
           <option :value="0">Sunday</option>
           <option :value="1">Monday</option>
@@ -639,7 +639,7 @@ function renderMiniMonthGrid(monthData: any, x: number, y: number, width: number
         <label class="text-xs text-gray-500 mb-1 block">Country</label>
         <select
           v-model="selectedCountry"
-          class="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700"
+          class="select"
         >
           <option v-for="country in countries" :key="country.code" :value="country.code">
             {{ country.flag }} {{ country.name }}
@@ -677,13 +677,13 @@ function renderMiniMonthGrid(monthData: any, x: number, y: number, width: number
           v-model="newEventName"
           type="text"
           placeholder="Event name"
-          class="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700"
+          class="input"
         />
         <div class="flex gap-2">
           <input
             v-model="newEventDate"
             type="date"
-            class="flex-1 px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700"
+            class="input"
           />
           <input
             v-model="newEventColor"
@@ -694,13 +694,13 @@ function renderMiniMonthGrid(monthData: any, x: number, y: number, width: number
         <div class="flex gap-2">
           <button
             @click="addCustomEvent"
-            class="flex-1 py-2 bg-primary-500 text-white text-sm font-medium rounded-lg hover:bg-primary-600 transition-colors"
+            class="btn btn-primary flex-1"
           >
             Add
           </button>
           <button
             @click="showAddEvent = false"
-            class="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+            class="btn btn-secondary"
           >
             Cancel
           </button>

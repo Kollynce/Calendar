@@ -47,7 +47,6 @@ export type ObjectType =
   | 'week-strip'
   | 'date-cell'
   | 'notes-panel'
-  | 'photo-block'
   | 'schedule'
   | 'checklist'
   | 'text'
@@ -104,7 +103,7 @@ export interface ShapeProperties {
 }
 
 export interface PlannerElementProperties {
-  variant: 'notes-panel' | 'photo-block' | 'week-strip' | 'date-cell' | 'schedule' | 'checklist'
+  variant: 'notes-panel' | 'week-strip' | 'date-cell' | 'schedule' | 'checklist'
   accentColor?: string
   title?: string
   [key: string]: any
@@ -119,7 +118,6 @@ export type CanvasElementMetadata =
   | WeekStripMetadata
   | DateCellMetadata
   | PlannerNoteMetadata
-  | PhotoBlockMetadata
   | ScheduleMetadata
   | ChecklistMetadata
 
@@ -131,6 +129,38 @@ export interface CalendarGridMetadata {
   startDay: WeekDay
   showHeader: boolean
   showWeekdays: boolean
+  title?: string
+  backgroundColor?: string
+  borderColor?: string
+  borderWidth?: number
+  cornerRadius?: number
+  headerHeight?: number
+  weekdayHeight?: number
+  cellGap?: number
+  dayNumberInsetX?: number
+  dayNumberInsetY?: number
+  headerBackgroundColor?: string
+  headerBackgroundOpacity?: number
+  headerTextColor?: string
+  headerFontFamily?: string
+  headerFontSize?: number
+  headerFontWeight?: string | number
+  weekdayTextColor?: string
+  weekdayFontFamily?: string
+  weekdayFontSize?: number
+  weekdayFontWeight?: string | number
+  gridLineColor?: string
+  gridLineWidth?: number
+  dayNumberColor?: string
+  dayNumberMutedColor?: string
+  dayNumberFontFamily?: string
+  dayNumberFontSize?: number
+  dayNumberFontWeight?: string | number
+  weekendBackgroundColor?: string
+  todayBackgroundColor?: string
+  showHolidayMarkers?: boolean
+  holidayMarkerColor?: string
+  holidayMarkerHeight?: number
   size: {
     width: number
     height: number
@@ -142,6 +172,24 @@ export interface WeekStripMetadata {
   startDate: string
   startDay: WeekDay
   label?: string
+  backgroundColor?: string
+  borderColor?: string
+  borderWidth?: number
+  cornerRadius?: number
+  cellBorderColor?: string
+  cellBorderWidth?: number
+  labelColor?: string
+  labelFontFamily?: string
+  labelFontSize?: number
+  labelFontWeight?: string | number
+  weekdayColor?: string
+  weekdayFontFamily?: string
+  weekdayFontSize?: number
+  weekdayFontWeight?: string | number
+  dayNumberColor?: string
+  dayNumberFontFamily?: string
+  dayNumberFontSize?: number
+  dayNumberFontWeight?: string | number
   size: {
     width: number
     height: number
@@ -153,6 +201,23 @@ export interface DateCellMetadata {
   date: string
   highlightAccent: string
   notePlaceholder: string
+  backgroundColor?: string
+  borderColor?: string
+  borderWidth?: number
+  cornerRadius?: number
+  accentHeightRatio?: number
+  weekdayColor?: string
+  weekdayFontFamily?: string
+  weekdayFontSize?: number
+  weekdayFontWeight?: string | number
+  dayNumberColor?: string
+  dayNumberFontFamily?: string
+  dayNumberFontSize?: number
+  dayNumberFontWeight?: string | number
+  placeholderColor?: string
+  placeholderFontFamily?: string
+  placeholderFontSize?: number
+  placeholderFontWeight?: string | number
   size: {
     width: number
     height: number
@@ -174,16 +239,6 @@ export interface PlannerNoteMetadata {
   headerBackgroundOpacity?: number
   guideColor?: string
   dotColor?: string
-  size: {
-    width: number
-    height: number
-  }
-}
-
-export interface PhotoBlockMetadata {
-  kind: 'photo-block'
-  label: string
-  accentColor: string
   size: {
     width: number
     height: number

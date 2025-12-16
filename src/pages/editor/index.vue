@@ -25,9 +25,13 @@ import CalendarConfigPanel from '@/components/editor/CalendarConfigPanel.vue'
 import EditorLayers from '@/components/editor/EditorLayers.vue'
 import TemplatePanel from '@/components/editor/TemplatePanel.vue'
 import EditorRulers from '@/components/editor/EditorRulers.vue'
+import AppButton from '@/components/ui/AppButton.vue'
 import { renderTemplateOnCanvas, generateTemplateThumbnail } from '@/services/editor/template-renderer'
 import type {
   CanvasElementMetadata,
+  CalendarGridMetadata,
+  WeekStripMetadata,
+  DateCellMetadata,
   PlannerNoteMetadata,
   PlannerPatternVariant,
   PlannerHeaderStyle,
@@ -69,6 +73,7 @@ const templateOverrides = ref({
   hasPhotoArea: false,
   hasNotesArea: false,
 })
+const alignTarget = ref<'canvas' | 'selection'>('canvas')
 const isApplyingTemplate = ref(false)
 const isSyncingTemplateUiFromProject = ref(false)
 let overridesRenderTimer: ReturnType<typeof setTimeout> | null = null
@@ -272,7 +277,15 @@ watch(
 const templateSupportsPhoto = computed(() => !!activeTemplate.value?.preview.photoPosition)
 const templateSupportsNotes = computed(() => !!activeTemplate.value?.preview.notesPosition)
 
-type ElementType = 'shape' | 'calendar' | 'planner' | 'preset'
+watch(
+  () => selectedObjects.value.length,
+  (len) => {
+    alignTarget.value = len > 1 ? 'selection' : 'canvas'
+  },
+  { immediate: true },
+)
+
+type ElementType = 'shape' | 'calendar' | 'planner' | 'text'
 
 interface ElementItem {
   id: string
@@ -282,8 +295,7 @@ interface ElementItem {
   description?: string
   shapeType?: string
   calendarType?: 'month-grid' | 'week-strip' | 'date-cell'
-  plannerType?: 'notes-panel' | 'photo-block' | 'schedule' | 'checklist'
-  presetId?: 'daily-pastel' | 'daily-minimal'
+  plannerType?: 'notes-panel' | 'schedule' | 'checklist'
   options?: Record<string, any>
 }
 
@@ -296,31 +308,10 @@ const elementPlacementDefaults: Record<ElementType, { x: number; y: number }> = 
   shape: { x: 140, y: 140 },
   calendar: { x: 80, y: 220 },
   planner: { x: 420, y: 160 },
-  preset: { x: 0, y: 0 },
+  text: { x: 180, y: 180 },
 }
 
 const elementCategories: ElementCategory[] = [
-  {
-    name: 'Planner Presets',
-    items: [
-      {
-        id: 'daily-pastel',
-        name: 'Daily Planner (Pastel)',
-        icon: '🗓️',
-        type: 'preset',
-        presetId: 'daily-pastel',
-        description: 'Schedule + to-do + gratitude + important sections',
-      },
-      {
-        id: 'daily-minimal',
-        name: 'Daily Planner (Minimal)',
-        icon: '📓',
-        type: 'preset',
-        presetId: 'daily-minimal',
-        description: 'Focus + date + to-do + notes sections',
-      },
-    ],
-  },
   {
     name: 'Basic Shapes',
     items: [
@@ -333,7 +324,7 @@ const elementCategories: ElementCategory[] = [
     name: 'Lines & Arrows',
     items: [
       { id: 'line', name: 'Line', icon: '—', type: 'shape', shapeType: 'line', options: { width: 260, stroke: '#0f172a', strokeWidth: 4 } },
-      { id: 'arrow', name: 'Arrow', icon: '→', type: 'shape', shapeType: 'line', options: { width: 240, stroke: '#1d4ed8', strokeWidth: 4 } },
+      { id: 'arrow', name: 'Arrow', icon: '→', type: 'shape', shapeType: 'arrow', options: { width: 240, stroke: '#1d4ed8', strokeWidth: 4, arrowEnds: 'end', arrowHeadStyle: 'filled', arrowHeadLength: 18, arrowHeadWidth: 14 } },
       { id: 'divider', name: 'Divider', icon: '┄', type: 'shape', shapeType: 'line', options: { width: 260, stroke: '#94a3b8', strokeWidth: 2, strokeDashArray: [10, 8] } },
     ],
   },
@@ -341,81 +332,27 @@ const elementCategories: ElementCategory[] = [
     name: 'Calendar Elements',
     items: [
       { id: 'month-grid', name: 'Month Grid', icon: '▦', type: 'calendar', calendarType: 'month-grid', options: { width: 460, height: 360 } },
-      { id: 'week-strip', name: 'Week Strip', icon: '▤', type: 'calendar', calendarType: 'week-strip', options: { width: 520, height: 90 } },
-      { id: 'date-cell', name: 'Date Cell', icon: '□', type: 'calendar', calendarType: 'date-cell', options: { width: 160, height: 190 } },
+      { id: 'week-strip', name: 'Week Strip', icon: '▤', type: 'calendar', calendarType: 'week-strip', options: { width: 520, height: 110 } },
+      { id: 'date-cell', name: 'Date Cell', icon: '□', type: 'calendar', calendarType: 'date-cell', options: { width: 200, height: 220 } },
     ],
   },
   {
     name: 'Planner Blocks',
     items: [
       {
-        id: 'planner-hero',
-        name: 'Hero Block',
-        icon: '🌈',
+        id: 'notes-panel',
+        name: 'Notes Panel',
+        icon: '🗒️',
         type: 'planner',
         plannerType: 'notes-panel',
-        description: 'Bold hero banner with layered heading + grid',
-        options: {
-          pattern: 'hero',
-          title: 'Weekly Focus',
-          accentColor: '#ea580c',
-          width: 360,
-          height: 220,
-        },
-      },
-      {
-        id: 'planner-ruled',
-        name: 'Ruled Notes',
-        icon: '�',
-        type: 'planner',
-        plannerType: 'notes-panel',
-        description: 'Classic ruled panel for journaling',
+        description: 'Patterned notes panel (Hero / Ruled / Grid / Dot)',
         options: {
           pattern: 'ruled',
           title: 'Notes',
           accentColor: '#2563eb',
-          width: 300,
-          height: 320,
-        },
-      },
-      {
-        id: 'planner-grid',
-        name: 'Grid Notes',
-        icon: '#️⃣',
-        type: 'planner',
-        plannerType: 'notes-panel',
-        description: 'Square grid bullet journal block',
-        options: {
-          pattern: 'grid',
-          title: 'Habit Tracker',
-          accentColor: '#22c55e',
           width: 320,
           height: 320,
         },
-      },
-      {
-        id: 'planner-dot',
-        name: 'Dot Notes',
-        icon: '⋮',
-        type: 'planner',
-        plannerType: 'notes-panel',
-        description: 'Dot grid for flexible planning',
-        options: {
-          pattern: 'dot',
-          title: 'Ideas',
-          accentColor: '#a855f7',
-          width: 300,
-          height: 300,
-        },
-      },
-      {
-        id: 'photo-block',
-        name: 'Photo Drop',
-        icon: '🖼️',
-        type: 'planner',
-        plannerType: 'photo-block',
-        description: 'Framed photo or inspiration block',
-        options: { label: 'Add photo', accentColor: '#0ea5e9', width: 320, height: 240 },
       },
       {
         id: 'schedule-block',
@@ -465,31 +402,17 @@ const elementCategories: ElementCategory[] = [
         options: { width: 240, height: 180, cornerRadius: 32, fill: '#ffffff', stroke: '#cbd5f5', strokeWidth: 3 },
       },
       {
-        id: 'streamer-banner',
-        name: 'Ribbon Banner',
-        icon: '🏷️',
-        type: 'shape',
-        shapeType: 'rect',
-        description: 'Wide pill banner for section titles',
-        options: { width: 320, height: 90, cornerRadius: 999, fill: '#fee2e2', stroke: '#f97316', strokeWidth: 2 },
-      },
-      {
-        id: 'pill-badge',
-        name: 'Pill Badge',
-        icon: '⬭',
-        type: 'shape',
-        shapeType: 'rect',
-        description: 'Accent badge for highlighting text',
-        options: { width: 180, height: 60, cornerRadius: 999, fill: '#ede9fe', stroke: '#a855f7', strokeWidth: 2 },
-      },
-      {
-        id: 'burst-badge',
-        name: 'Burst Badge',
-        icon: '✺',
-        type: 'shape',
-        shapeType: 'circle',
-        description: 'Sticker-style highlight badge',
-        options: { radius: 70, fill: '#fef9c3', stroke: '#facc15', strokeWidth: 4 },
+        id: 'emoji',
+        name: 'Emoji',
+        icon: '😊',
+        type: 'text',
+        description: 'Add an emoji sticker',
+        options: {
+          content: '😊',
+          fontSize: 64,
+          fontFamily: 'Noto Color Emoji, Segoe UI Emoji, Apple Color Emoji, sans-serif',
+          fontWeight: 400,
+        },
       },
     ],
   },
@@ -566,6 +489,108 @@ const strokeWidth = computed({
   set: (value) => editorStore.updateObjectProperty('strokeWidth', value),
 })
 
+const isArrow = computed(() => {
+  const obj: any = selectedObject.value as any
+  if (!obj) return false
+  if (obj.type === 'group' && obj?.data?.shapeKind === 'arrow') return true
+  if (obj.type !== 'group') return false
+  const parts = (obj?._objects ?? []).map((o: any) => o?.data?.arrowPart).filter(Boolean)
+  return parts.includes('line') && (parts.includes('startHead') || parts.includes('endHead'))
+})
+
+const isLineOrArrow = computed(() => {
+  const obj: any = selectedObject.value as any
+  return obj?.type === 'line' || isArrow.value
+})
+
+const lineStrokeColor = computed({
+  get: () => {
+    const obj: any = selectedObject.value as any
+    if (isArrow.value) return obj?.data?.arrowOptions?.stroke ?? '#000000'
+    return obj?.stroke ?? '#000000'
+  },
+  set: (value) => editorStore.updateObjectProperty('stroke', value),
+})
+
+const lineStrokeWidth = computed({
+  get: () => {
+    const obj: any = selectedObject.value as any
+    if (isArrow.value) return Number(obj?.data?.arrowOptions?.strokeWidth ?? 2) || 2
+    return Number(obj?.strokeWidth ?? 0) || 0
+  },
+  set: (value) => editorStore.updateObjectProperty('strokeWidth', Number(value) || 0),
+})
+
+const lineCap = computed({
+  get: () => {
+    const obj: any = selectedObject.value as any
+    const line = isArrow.value ? obj?._objects?.find((o: any) => o?.data?.arrowPart === 'line') : obj
+    return line?.strokeLineCap ?? 'butt'
+  },
+  set: (value) => editorStore.updateObjectProperty('strokeLineCap', value),
+})
+
+const lineJoin = computed({
+  get: () => {
+    const obj: any = selectedObject.value as any
+    const line = isArrow.value ? obj?._objects?.find((o: any) => o?.data?.arrowPart === 'line') : obj
+    return line?.strokeLineJoin ?? 'miter'
+  },
+  set: (value) => editorStore.updateObjectProperty('strokeLineJoin', value),
+})
+
+const dashStyle = computed({
+  get: () => {
+    const obj: any = selectedObject.value as any
+    const line = isArrow.value ? obj?._objects?.find((o: any) => o?.data?.arrowPart === 'line') : obj
+    const dash = line?.strokeDashArray
+    if (!dash || dash.length === 0) return 'solid'
+    const key = JSON.stringify(dash)
+    if (key === JSON.stringify([10, 8])) return 'dashed'
+    if (key === JSON.stringify([2, 6])) return 'dotted'
+    if (key === JSON.stringify([20, 10, 6, 10])) return 'dash-dot'
+    return 'solid'
+  },
+  set: (value) => {
+    if (value === 'solid') editorStore.updateObjectProperty('strokeDashArray', undefined)
+    else if (value === 'dashed') editorStore.updateObjectProperty('strokeDashArray', [10, 8])
+    else if (value === 'dotted') editorStore.updateObjectProperty('strokeDashArray', [2, 6])
+    else if (value === 'dash-dot') editorStore.updateObjectProperty('strokeDashArray', [20, 10, 6, 10])
+  },
+})
+
+const arrowEnds = computed({
+  get: () => {
+    const obj: any = selectedObject.value as any
+    return obj?.data?.arrowOptions?.arrowEnds ?? 'end'
+  },
+  set: (value) => editorStore.updateObjectProperty('arrowEnds', value),
+})
+
+const arrowHeadStyle = computed({
+  get: () => {
+    const obj: any = selectedObject.value as any
+    return obj?.data?.arrowOptions?.arrowHeadStyle ?? 'filled'
+  },
+  set: (value) => editorStore.updateObjectProperty('arrowHeadStyle', value),
+})
+
+const arrowHeadLength = computed({
+  get: () => {
+    const obj: any = selectedObject.value as any
+    return Number(obj?.data?.arrowOptions?.arrowHeadLength ?? 18) || 18
+  },
+  set: (value) => editorStore.updateObjectProperty('arrowHeadLength', Math.max(4, Number(value) || 4)),
+})
+
+const arrowHeadWidth = computed({
+  get: () => {
+    const obj: any = selectedObject.value as any
+    return Number(obj?.data?.arrowOptions?.arrowHeadWidth ?? 14) || 14
+  },
+  set: (value) => editorStore.updateObjectProperty('arrowHeadWidth', Math.max(4, Number(value) || 4)),
+})
+
 const opacity = computed({
   get: () => ((selectedObject.value as any)?.opacity || 1) * 100,
   set: (value) => editorStore.updateObjectProperty('opacity', value / 100),
@@ -586,6 +611,18 @@ const elementMetadata = computed<CanvasElementMetadata | null>(() => {
   void selectedObjects.value
   return editorStore.getActiveElementMetadata()
 })
+
+const calendarMetadata = computed<CalendarGridMetadata | null>(() =>
+  elementMetadata.value?.kind === 'calendar-grid' ? elementMetadata.value : null,
+)
+
+const weekStripMetadata = computed<WeekStripMetadata | null>(() =>
+  elementMetadata.value?.kind === 'week-strip' ? elementMetadata.value : null,
+)
+
+const dateCellMetadata = computed<DateCellMetadata | null>(() =>
+  elementMetadata.value?.kind === 'date-cell' ? elementMetadata.value : null,
+)
 
 const scheduleMetadata = computed<ScheduleMetadata | null>(() =>
   elementMetadata.value?.kind === 'schedule' ? elementMetadata.value : null,
@@ -622,6 +659,68 @@ function updatePlannerMetadata(updater: (draft: PlannerNoteMetadata) => void) {
     return metadata
   })
 }
+
+function updateCalendarMetadata(updater: (draft: CalendarGridMetadata) => void) {
+  editorStore.updateSelectedElementMetadata((metadata) => {
+    if (metadata.kind !== 'calendar-grid') return null
+    updater(metadata)
+    return metadata
+  })
+}
+
+function updateWeekStripMetadata(updater: (draft: WeekStripMetadata) => void) {
+  editorStore.updateSelectedElementMetadata((metadata) => {
+    if (metadata.kind !== 'week-strip') return null
+    updater(metadata)
+    return metadata
+  })
+}
+
+function updateDateCellMetadata(updater: (draft: DateCellMetadata) => void) {
+  editorStore.updateSelectedElementMetadata((metadata) => {
+    if (metadata.kind !== 'date-cell') return null
+    updater(metadata)
+    return metadata
+  })
+}
+
+const monthOptions = [
+  { value: 1, label: 'January' },
+  { value: 2, label: 'February' },
+  { value: 3, label: 'March' },
+  { value: 4, label: 'April' },
+  { value: 5, label: 'May' },
+  { value: 6, label: 'June' },
+  { value: 7, label: 'July' },
+  { value: 8, label: 'August' },
+  { value: 9, label: 'September' },
+  { value: 10, label: 'October' },
+  { value: 11, label: 'November' },
+  { value: 12, label: 'December' },
+]
+
+const weekStartOptions: { value: 0 | 1 | 2 | 3 | 4 | 5 | 6; label: string }[] = [
+  { value: 0, label: 'Sunday' },
+  { value: 1, label: 'Monday' },
+  { value: 2, label: 'Tuesday' },
+  { value: 3, label: 'Wednesday' },
+  { value: 4, label: 'Thursday' },
+  { value: 5, label: 'Friday' },
+  { value: 6, label: 'Saturday' },
+]
+
+function normalizeDateInput(value: string): string {
+  if (!value) return ''
+  return value.includes('T') ? value.split('T')[0] : value
+}
+
+const weekStripDateValue = computed(() =>
+  weekStripMetadata.value ? normalizeDateInput(weekStripMetadata.value.startDate) : '',
+)
+
+const dateCellDateValue = computed(() =>
+  dateCellMetadata.value ? normalizeDateInput(dateCellMetadata.value.date) : '',
+)
 
 const elementSize = computed(() => {
   const meta = elementMetadata.value as any
@@ -704,7 +803,7 @@ async function ensureProjectForRoute(): Promise<void> {
   } else if (!editorStore.project) {
     editorStore.createNewProject({
       year: new Date().getFullYear(),
-      country: 'ZA',
+      country: 'KE',
       language: 'en',
       layout: 'monthly',
       startDay: 0,
@@ -736,15 +835,26 @@ async function initializeEditorCanvas(): Promise<void> {
 
   editorStore.initializeCanvas(canvasRef.value)
 
+  requestAnimationFrame(() => {
+    editorStore.setZoom(1)
+    editorStore.canvas?.calcOffset()
+  })
+
   if (shouldAddWelcomeText()) {
     setTimeout(() => {
       editorStore.addObject('text', {
         content: 'Start Designing Your Calendar',
-        x: 100,
-        y: 100,
+        x: Math.round(paperWidth.value / 2),
+        y: 90,
         fontSize: 32,
         fontFamily: 'Outfit',
+        textAlign: 'center',
+        originX: 'center',
         color: '#1a1a1a',
+      })
+
+      requestAnimationFrame(() => {
+        editorStore.canvas?.calcOffset()
       })
     }, 100)
   }
@@ -777,6 +887,10 @@ onBeforeUnmount(() => {
 
 // Template Functions
 async function applyTemplate(template: CalendarTemplate) {
+  if (template.presetId) {
+    await applyPlannerPreset(template.presetId)
+    return
+  }
   if (!editorStore.canvas) return
   isApplyingTemplate.value = true
   activeTemplateId.value = template.id
@@ -799,6 +913,12 @@ async function loadTemplateThumbnails() {
   thumbnailsLoading.value = true
   const entries = await Promise.all(
     calendarTemplates.map(async (template) => {
+      if (template.presetId === 'daily-pastel') {
+        return [template.id, buildPlannerPresetThumbnail('pastel')] as const
+      }
+      if (template.presetId === 'daily-minimal') {
+        return [template.id, buildPlannerPresetThumbnail('minimal')] as const
+      }
       const dataUrl = await generateTemplateThumbnail(template, { multiplier: 0.28 })
       return [template.id, dataUrl] as const
     })
@@ -807,16 +927,122 @@ async function loadTemplateThumbnails() {
   thumbnailsLoading.value = false
 }
 
+function buildPlannerPresetThumbnail(variant: 'pastel' | 'minimal'): string {
+  const accentA = variant === 'pastel' ? '#a855f7' : '#f59e0b'
+  const accentB = variant === 'pastel' ? '#ec4899' : '#84cc16'
+  const stroke = '#e2e8f0'
+  const bg = '#ffffff'
+
+  const focusLines = Array.from({ length: 9 })
+    .map((_, i) => {
+      const y = 150 + i * 22
+      return `<rect x="68" y="${y}" width="150" height="2" fill="#e5e7eb"/>`
+    })
+    .join('')
+
+  const todoRows = Array.from({ length: 6 })
+    .map((_, i) => {
+      const y = 282 + i * 20
+      return `
+        <rect x="258" y="${y}" width="10" height="10" rx="3" fill="none" stroke="${accentA}" stroke-width="2"/>
+        <rect x="276" y="${y + 4}" width="44" height="2" fill="#e5e7eb"/>
+      `
+    })
+    .join('')
+
+  const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="480" viewBox="0 0 360 480">
+  <rect x="0" y="0" width="360" height="480" fill="#f8fafc"/>
+  <rect x="26" y="22" width="308" height="436" rx="18" ry="18" fill="${bg}" stroke="${stroke}" stroke-width="2"/>
+
+  <text x="52" y="68" font-family="Inter, Arial" font-size="22" font-weight="700" fill="#111827">Daily Planner</text>
+  <rect x="232" y="56" width="78" height="10" rx="5" fill="#cbd5e1" opacity="0.85"/>
+
+  <rect x="52" y="98" width="182" height="260" rx="16" fill="#ffffff" stroke="${stroke}" stroke-width="2"/>
+  <rect x="52" y="112" width="182" height="8" fill="${accentA}" opacity="0.9"/>
+  <text x="68" y="132" font-family="Inter, Arial" font-size="12" font-weight="700" fill="#111827">Today's Focus</text>
+  ${focusLines}
+
+  <rect x="246" y="98" width="84" height="120" rx="16" fill="#ffffff" stroke="${stroke}" stroke-width="2"/>
+  <rect x="246" y="112" width="84" height="8" fill="${accentB}" opacity="0.9"/>
+  <text x="258" y="132" font-family="Inter, Arial" font-size="12" font-weight="700" fill="#111827">Top Priority</text>
+
+  <rect x="246" y="234" width="84" height="170" rx="16" fill="#ffffff" stroke="${stroke}" stroke-width="2"/>
+  <rect x="246" y="248" width="84" height="18" rx="9" fill="${accentA}" opacity="0.18"/>
+  <text x="258" y="262" font-family="Inter, Arial" font-size="12" font-weight="700" fill="#111827">To-Do</text>
+  ${todoRows}
+
+  <rect x="246" y="416" width="84" height="28" rx="14" fill="#ffffff" stroke="${stroke}" stroke-width="2" opacity="0.0"/>
+</svg>`
+
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+}
+
 // Element Functions
-function addElement(element: ElementItem) {
-  if (element.type === 'preset') {
-    if (element.presetId) {
-      void applyPlannerPreset(element.presetId)
+function getSmartCalendarPlacement(element: ElementItem): { x: number; y: number } {
+  const fallback = elementPlacementDefaults[element.type] ?? { x: 140, y: 140 }
+
+  if (element.type !== 'calendar') return fallback
+  if (!editorStore.canvas) return fallback
+
+  const canvas = editorStore.canvas
+  const canvasWidth = canvas.width || editorStore.project?.canvas.width || 800
+  const canvasHeight = canvas.height || editorStore.project?.canvas.height || 600
+
+  const requestedWidth = Number((element.options as any)?.width ?? 0) || 0
+  const requestedHeight = Number((element.options as any)?.height ?? 0) || 0
+
+  const margin = 80
+
+  const grid = canvas
+    .getObjects()
+    .find((obj) => (obj as any)?.data?.elementMetadata?.kind === 'calendar-grid') as any
+
+  if (!grid || typeof grid.getScaledWidth !== 'function' || typeof grid.getScaledHeight !== 'function') {
+    if (element.calendarType === 'date-cell' && requestedWidth && requestedHeight) {
+      const xRaw = canvasWidth - margin - requestedWidth
+      return {
+        x: Math.max(margin, Math.min(canvasWidth - margin - requestedWidth, xRaw)),
+        y: Math.max(margin, fallback.y),
+      }
     }
-    return
+
+    if (element.calendarType === 'week-strip' && requestedWidth && requestedHeight) {
+      const yRaw = canvasHeight - margin - requestedHeight
+      return {
+        x: Math.max(margin, Math.min(canvasWidth - margin - requestedWidth, fallback.x)),
+        y: Math.max(margin, Math.min(canvasHeight - margin - requestedHeight, yRaw)),
+      }
+    }
+
+    return fallback
   }
 
-  const placement = elementPlacementDefaults[element.type]
+  const gridLeft = Number(grid.left ?? 0) || 0
+  const gridTop = Number(grid.top ?? 0) || 0
+  const gridWidth = Number(grid.getScaledWidth()) || 0
+  const gridHeight = Number(grid.getScaledHeight()) || 0
+
+  if (element.calendarType === 'date-cell' && requestedWidth && requestedHeight) {
+    const xRaw = gridLeft + gridWidth + margin
+    const x = Math.max(margin, Math.min(canvasWidth - margin - requestedWidth, xRaw))
+    const yRaw = gridTop + Math.max(0, (gridHeight - requestedHeight) / 2)
+    const y = Math.max(margin, Math.min(canvasHeight - margin - requestedHeight, yRaw))
+    return { x, y }
+  }
+
+  if (element.calendarType === 'week-strip' && requestedWidth && requestedHeight) {
+    const x = Math.max(margin, Math.min(canvasWidth - margin - requestedWidth, gridLeft))
+    const yRaw = gridTop + gridHeight + margin
+    const y = Math.max(margin, Math.min(canvasHeight - margin - requestedHeight, yRaw))
+    return { x, y }
+  }
+
+  return fallback
+}
+
+function addElement(element: ElementItem) {
+  const placement = element.type === 'calendar' ? getSmartCalendarPlacement(element) : elementPlacementDefaults[element.type]
   const baseOptions = {
     x: placement?.x,
     y: placement?.y,
@@ -824,6 +1050,11 @@ function addElement(element: ElementItem) {
   const options = {
     ...baseOptions,
     ...(element.options || {}),
+  }
+
+  if (element.type === 'text') {
+    editorStore.addObject('text', options)
+    return
   }
 
   if (element.type === 'shape') {
@@ -845,8 +1076,6 @@ function addElement(element: ElementItem) {
   if (element.type === 'planner') {
     if (element.plannerType === 'notes-panel') {
       editorStore.addObject('notes-panel', options)
-    } else if (element.plannerType === 'photo-block') {
-      editorStore.addObject('photo-block', options)
     } else if (element.plannerType === 'schedule') {
       editorStore.addObject('schedule', options)
     } else if (element.plannerType === 'checklist') {
@@ -859,6 +1088,8 @@ async function applyPlannerPreset(presetId: 'daily-pastel' | 'daily-minimal') {
   if (!editorStore.canvas) return
 
   editorStore.setCanvasSize(PAPER_SIZES.portrait.width, PAPER_SIZES.portrait.height)
+  await nextTick()
+  editorStore.setZoom(1)
   await nextTick()
   editorStore.canvas.calcOffset()
 
@@ -959,6 +1190,8 @@ async function applyPlannerPreset(presetId: 'daily-pastel' | 'daily-minimal') {
       fontSize: 46,
       fontFamily: 'Outfit',
       fontWeight: 700,
+      textAlign: 'left',
+      originX: 'left',
       color: '#111827',
     })
 
@@ -969,6 +1202,8 @@ async function applyPlannerPreset(presetId: 'daily-pastel' | 'daily-minimal') {
       fontSize: 12,
       fontFamily: 'Inter',
       fontWeight: 700,
+      textAlign: 'left',
+      originX: 'left',
       color: '#6b7280',
     })
     editorStore.addObject('shape', {
@@ -1029,6 +1264,8 @@ async function applyPlannerPreset(presetId: 'daily-pastel' | 'daily-minimal') {
       fontSize: 12,
       fontFamily: 'Inter',
       fontWeight: 700,
+      textAlign: 'left',
+      originX: 'left',
       color: '#6b7280',
     })
     for (let i = 0; i < 5; i++) {
@@ -1044,6 +1281,8 @@ async function applyPlannerPreset(presetId: 'daily-pastel' | 'daily-minimal') {
     }
   }
 
+  await nextTick()
+  editorStore.canvas.calcOffset()
   editorStore.canvas.renderAll()
   editorStore.snapshotCanvasState()
 }
@@ -1146,6 +1385,14 @@ function removeUploadedImage(id: string) {
   }
 }
 
+function handleAlign(action: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom') {
+  editorStore.alignSelection?.(action, alignTarget.value) ?? editorStore.alignObjects(action)
+}
+
+function handleDistribute(axis: 'horizontal' | 'vertical') {
+  editorStore.distributeSelection?.(axis)
+}
+
 function handleZoom(delta: number) {
   const newZoom = Math.max(25, Math.min(300, zoom.value * 100 + delta))
   editorStore.setZoom(newZoom / 100)
@@ -1158,14 +1405,14 @@ function handleZoom(delta: number) {
     <!-- Header -->
     <header class="h-14 bg-white dark:bg-gray-800 z-20 flex items-center justify-between px-4 border-b border-gray-200 dark:border-gray-700 shrink-0">
       <div class="flex items-center gap-4">
-        <button @click="router.push('/dashboard')" class="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors" title="Back to Dashboard">
+        <button @click="router.push('/dashboard')" class="btn-icon" title="Back to Dashboard">
           <ArrowLeftIcon class="w-5 h-5 text-gray-600 dark:text-gray-300" />
         </button>
         <div class="h-6 w-px bg-gray-200 dark:bg-gray-700"></div>
         <div>
           <input
             v-model="projectName"
-            class="font-semibold text-gray-900 dark:text-white text-sm bg-transparent border-0 p-0 focus:ring-0 focus:outline-none w-64 max-w-[40vw]"
+            class="input-inline w-64 max-w-[40vw]"
             aria-label="Project name"
           />
           <p class="text-xs text-gray-500">
@@ -1181,7 +1428,7 @@ function handleZoom(delta: number) {
           <button 
             @click="editorStore.undo()" 
             :disabled="!canUndo"
-            class="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            class="btn-icon"
             title="Undo (Ctrl+Z)"
           >
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1191,7 +1438,7 @@ function handleZoom(delta: number) {
           <button 
             @click="editorStore.redo()" 
             :disabled="!canRedo"
-            class="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            class="btn-icon"
             title="Redo (Ctrl+Shift+Z)"
           >
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1199,23 +1446,30 @@ function handleZoom(delta: number) {
             </svg>
           </button>
         </div>
-        
+
         <span class="text-xs text-gray-500 font-medium">A4 Portrait</span>
         <div class="h-6 w-px bg-gray-200 dark:bg-gray-700"></div>
         
-        <button class="btn-secondary text-xs px-3 py-1.5 flex items-center gap-1.5">
+        <AppButton variant="secondary-sm" class="flex items-center gap-1.5" type="button">
           <ShareIcon class="w-4 h-4" /> Share
-        </button>
-        <button 
-          @click="handleSaveProject()" 
+        </AppButton>
+        <AppButton
+          variant="secondary-sm"
+          class="flex items-center gap-1.5"
+          type="button"
           :disabled="!isDirty || saving"
-          class="bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs px-3 py-1.5 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50"
+          @click="handleSaveProject()"
         >
           {{ saving ? 'Saving...' : 'Save' }}
-        </button>
-        <button @click="isExportModalOpen = true" class="btn-primary text-xs px-4 py-2 flex items-center gap-1.5">
+        </AppButton>
+        <AppButton
+          variant="primary-sm"
+          class="flex items-center gap-1.5"
+          type="button"
+          @click="isExportModalOpen = true"
+        >
           <ArrowDownTrayIcon class="w-4 h-4" /> Export
-        </button>
+        </AppButton>
       </div>
     </header>
 
@@ -1229,10 +1483,10 @@ function handleZoom(delta: number) {
             :key="tool.id"
             @click="activeTool = activeTool === tool.id ? '' : tool.id"
             :class="[
-              'flex flex-col items-center justify-center w-12 h-14 rounded-xl transition-all duration-200',
+              'tool-rail-btn',
               activeTool === tool.id 
-                ? 'bg-primary-50 text-primary-600 dark:bg-primary-900/30 dark:text-primary-400' 
-                : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-700/50'
+                ? 'tool-rail-btn-active' 
+                : 'tool-rail-btn-idle'
             ]"
           >
             <component :is="tool.icon" class="w-5 h-5 mb-1" />
@@ -1253,7 +1507,7 @@ function handleZoom(delta: number) {
             <!-- Panel Header -->
             <div class="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center shrink-0">
               <h2 class="font-semibold text-gray-900 dark:text-white capitalize">{{ activeTool }}</h2>
-              <button @click="activeTool = ''" class="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
+              <button @click="activeTool = ''" class="btn-icon-sm">
                 <XMarkIcon class="w-5 h-5 text-gray-400" />
               </button>
             </div>
@@ -1287,10 +1541,10 @@ function handleZoom(delta: number) {
                       v-for="element in category.items"
                       :key="element.id"
                       @click="addElement(element)"
-                      class="aspect-square bg-gray-50 hover:bg-gray-100 dark:bg-gray-700/50 dark:hover:bg-gray-700 rounded-xl flex flex-col items-center justify-center transition-all hover:scale-105 group border border-gray-200 dark:border-gray-600"
+                      class="aspect-square surface-hover rounded-xl flex flex-col items-center justify-center transition-all group border border-gray-200 dark:border-gray-600"
                     >
-                      <span class="text-2xl mb-1 group-hover:scale-110 transition-transform">{{ element.icon }}</span>
-                      <span class="text-[10px] text-gray-500 dark:text-gray-400 font-medium">{{ element.name }}</span>
+                      <span class="h-8 w-8 flex items-center justify-center text-2xl leading-none mb-1 transition-transform group-hover:scale-105">{{ element.icon }}</span>
+                      <span class="text-[10px] text-gray-500 dark:text-gray-400 font-medium text-center leading-tight px-1">{{ element.name }}</span>
                     </button>
                   </div>
                 </div>
@@ -1306,7 +1560,7 @@ function handleZoom(delta: number) {
                   @dragleave="handleDragLeave"
                   @drop="handleDrop"
                   :class="[
-                    'relative border-2 border-dashed rounded-xl p-6 text-center transition-all',
+                    'dropzone',
                     isDragging 
                       ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20' 
                       : 'border-gray-300 dark:border-gray-600 hover:border-gray-400'
@@ -1337,14 +1591,14 @@ function handleZoom(delta: number) {
                       <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                         <button 
                           @click="addUploadedImage(image)"
-                          class="p-2 bg-white rounded-lg hover:bg-gray-100 transition-colors"
+                          class="btn-overlay"
                           title="Add to canvas"
                         >
                           <PlusIcon class="w-4 h-4 text-gray-800" />
                         </button>
                         <button 
                           @click="removeUploadedImage(image.id)"
-                          class="p-2 bg-white rounded-lg hover:bg-red-100 transition-colors"
+                          class="btn-overlay-danger"
                           title="Remove"
                         >
                           <TrashIcon class="w-4 h-4 text-red-600" />
@@ -1369,7 +1623,7 @@ function handleZoom(delta: number) {
                       v-for="preset in textPresets" 
                       :key="preset.id"
                       @click="addTextPreset(preset)"
-                      class="w-full text-left p-3 bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-colors group border border-transparent hover:border-gray-200 dark:hover:border-gray-600"
+                      class="w-full text-left p-3 surface-hover rounded-xl group border border-transparent hover:border-gray-200 dark:hover:border-gray-600"
                     >
                       <p 
                         :style="{ 
@@ -1395,7 +1649,7 @@ function handleZoom(delta: number) {
                       v-for="pairing in fontPairings"
                       :key="pairing.id"
                       @click="applyFontPairing(pairing)"
-                      class="p-3 bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-colors text-center group border border-transparent hover:border-primary-300"
+                      class="p-3 surface-hover rounded-xl text-center group border border-transparent hover:border-primary-300"
                     >
                       <p :style="{ fontFamily: pairing.heading }" class="text-xl font-bold text-gray-900 dark:text-white">{{ pairing.preview }}</p>
                       <p class="text-[10px] text-gray-500 mt-1">{{ pairing.name }}</p>
@@ -1411,7 +1665,7 @@ function handleZoom(delta: number) {
                       v-for="style in calendarTextStyles"
                       :key="style.id"
                       @click="addCalendarTextStyle(style)"
-                      class="w-full flex items-center justify-between p-2.5 bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors group"
+                      class="w-full flex items-center justify-between p-2.5 surface-hover rounded-lg group"
                     >
                       <span 
                         :style="{ 
@@ -1473,8 +1727,6 @@ function handleZoom(delta: number) {
                 <!-- Fabric Canvas Element -->
                 <canvas 
                   ref="canvasRef"
-                  :width="paperWidth"
-                  :height="paperHeight"
                   class="absolute inset-0"
                 ></canvas>
               </div>
@@ -1483,15 +1735,15 @@ function handleZoom(delta: number) {
 
           <!-- Zoom Controls -->
           <div class="absolute bottom-6 right-8 flex items-center gap-2 bg-white/95 text-gray-800 rounded-2xl px-2 py-1 shadow-xl ring-1 ring-black/5 backdrop-blur z-30">
-            <button @click="handleZoom(-10)" class="p-2 hover:bg-gray-100 rounded-xl transition-colors" title="Zoom out">
+            <button @click="handleZoom(-10)" class="zoom-btn" title="Zoom out">
               <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4" /></svg>
             </button>
             <span class="text-xs font-semibold min-w-14 text-center">{{ Math.round(zoom * 100) }}%</span>
-            <button @click="handleZoom(10)" class="p-2 hover:bg-gray-100 rounded-xl transition-colors" title="Zoom in">
+            <button @click="handleZoom(10)" class="zoom-btn" title="Zoom in">
               <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>
             </button>
             <div class="w-px h-5 bg-gray-200 mx-1"></div>
-            <button @click="editorStore.fitToScreen()" class="p-2 hover:bg-gray-100 rounded-xl transition-colors" title="Fit to screen">
+            <button @click="editorStore.fitToScreen()" class="zoom-btn" title="Fit to screen">
               <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
             </button>
           </div>
@@ -1596,7 +1848,7 @@ function handleZoom(delta: number) {
                     <input
                       v-model.number="positionX"
                       type="number"
-                      class="w-full px-3 py-2 text-sm border border-white/10 rounded-xl bg-white/10 text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      class="control-glass"
                     />
                   </div>
                   <div>
@@ -1604,7 +1856,7 @@ function handleZoom(delta: number) {
                     <input
                       v-model.number="positionY"
                       type="number"
-                      class="w-full px-3 py-2 text-sm border border-white/10 rounded-xl bg-white/10 text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      class="control-glass"
                     />
                   </div>
                 </div>
@@ -1615,7 +1867,7 @@ function handleZoom(delta: number) {
                     <input
                       type="number"
                       min="10"
-                      class="w-full px-3 py-2 text-sm border border-white/10 rounded-xl bg-white/10 text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      class="control-glass"
                       :value="Math.round(elementSize.width)"
                       @change="updateElementSize({ width: Number(($event.target as HTMLInputElement).value), height: elementSize.height })"
                     />
@@ -1625,7 +1877,7 @@ function handleZoom(delta: number) {
                     <input
                       type="number"
                       min="10"
-                      class="w-full px-3 py-2 text-sm border border-white/10 rounded-xl bg-white/10 text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      class="control-glass"
                       :value="Math.round(elementSize.height)"
                       @change="updateElementSize({ width: elementSize.width, height: Number(($event.target as HTMLInputElement).value) })"
                     />
@@ -1639,7 +1891,7 @@ function handleZoom(delta: number) {
                       v-model.number="objectWidth"
                       type="number"
                       min="1"
-                      class="w-full px-3 py-2 text-sm border border-white/10 rounded-xl bg-white/10 text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      class="control-glass"
                     />
                   </div>
                   <div>
@@ -1648,11 +1900,774 @@ function handleZoom(delta: number) {
                       v-model.number="objectHeight"
                       type="number"
                       min="1"
-                      class="w-full px-3 py-2 text-sm border border-white/10 rounded-xl bg-white/10 text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      class="control-glass"
                     />
                   </div>
                 </div>
               </div>
+
+              <!-- Align & Distribute -->
+              <div class="pt-4 border-t border-white/10 space-y-3">
+                <div class="flex items-center justify-between gap-3">
+                  <p class="text-xs font-semibold uppercase tracking-widest text-white/60">Align</p>
+                  <select v-model="alignTarget" class="control-glass-sm w-auto">
+                    <option value="canvas">To Page</option>
+                    <option value="selection">To Selection</option>
+                  </select>
+                </div>
+
+                <div class="grid grid-cols-3 gap-2">
+                  <button type="button" class="btn-glass-sm w-full" @click="handleAlign('left')">Left</button>
+                  <button type="button" class="btn-glass-sm w-full" @click="handleAlign('center')">Center</button>
+                  <button type="button" class="btn-glass-sm w-full" @click="handleAlign('right')">Right</button>
+                  <button type="button" class="btn-glass-sm w-full" @click="handleAlign('top')">Top</button>
+                  <button type="button" class="btn-glass-sm w-full" @click="handleAlign('middle')">Middle</button>
+                  <button type="button" class="btn-glass-sm w-full" @click="handleAlign('bottom')">Bottom</button>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    class="btn-glass-sm w-full"
+                    :disabled="selectedObjects.length < 3"
+                    :class="selectedObjects.length < 3 ? 'opacity-50 cursor-not-allowed' : ''"
+                    @click="handleDistribute('horizontal')"
+                  >
+                    Distribute H
+                  </button>
+                  <button
+                    type="button"
+                    class="btn-glass-sm w-full"
+                    :disabled="selectedObjects.length < 3"
+                    :class="selectedObjects.length < 3 ? 'opacity-50 cursor-not-allowed' : ''"
+                    @click="handleDistribute('vertical')"
+                  >
+                    Distribute V
+                  </button>
+                </div>
+
+                <p class="text-[11px] text-white/50">
+                  Tip: single object → “To Page”. Multiple → “To Selection”.
+                </p>
+              </div>
+
+              <!-- Calendar Grid -->
+              <template v-if="calendarMetadata">
+                <div class="pt-4 border-t border-white/10 space-y-4">
+                  <div class="flex items-center justify-between">
+                    <p class="text-xs font-semibold uppercase tracking-widest text-white/60">Month Grid</p>
+                    <select
+                      class="control-glass-sm"
+                      :value="calendarMetadata.mode"
+                      @change="updateCalendarMetadata((draft) => { draft.mode = ($event.target as HTMLSelectElement).value as CalendarGridMetadata['mode'] })"
+                    >
+                      <option value="month">Actual Month</option>
+                      <option value="blank">Blank Grid</option>
+                    </select>
+                  </div>
+
+                  <div class="grid grid-cols-2 gap-3">
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Year</label>
+                      <input
+                        type="number"
+                        min="1900"
+                        max="2100"
+                        class="control-glass"
+                        :value="calendarMetadata.year"
+                        @change="updateCalendarMetadata((draft) => { draft.year = Number(($event.target as HTMLInputElement).value) || draft.year })"
+                      />
+                    </div>
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Month</label>
+                      <select
+                        class="control-glass"
+                        :value="calendarMetadata.month"
+                        @change="updateCalendarMetadata((draft) => { draft.month = Number(($event.target as HTMLSelectElement).value) || draft.month })"
+                      >
+                        <option v-for="m in monthOptions" :key="m.value" :value="m.value">{{ m.label }}</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label class="text-xs font-medium text-white/60 mb-1.5 block">Week starts on</label>
+                    <select
+                      class="control-glass"
+                      :value="calendarMetadata.startDay"
+                      @change="updateCalendarMetadata((draft) => { draft.startDay = Number(($event.target as HTMLSelectElement).value) as CalendarGridMetadata['startDay'] })"
+                    >
+                      <option v-for="d in weekStartOptions" :key="d.value" :value="d.value">{{ d.label }}</option>
+                    </select>
+                  </div>
+
+                  <div class="flex items-center justify-between gap-4">
+                    <label class="flex items-center gap-2 text-sm text-white/80">
+                      <input
+                        type="checkbox"
+                        class="accent-primary-400"
+                        :checked="calendarMetadata.showHeader"
+                        @change="updateCalendarMetadata((draft) => { draft.showHeader = ($event.target as HTMLInputElement).checked })"
+                      >
+                      <span>Header</span>
+                    </label>
+                    <label class="flex items-center gap-2 text-sm text-white/80">
+                      <input
+                        type="checkbox"
+                        class="accent-primary-400"
+                        :checked="calendarMetadata.showWeekdays"
+                        @change="updateCalendarMetadata((draft) => { draft.showWeekdays = ($event.target as HTMLInputElement).checked })"
+                      >
+                      <span>Weekdays</span>
+                    </label>
+                  </div>
+
+                  <div>
+                    <label class="text-xs font-medium text-white/60 mb-1.5 block">Title override</label>
+                    <input
+                      type="text"
+                      placeholder="(optional)"
+                      class="control-glass"
+                      :value="calendarMetadata.title ?? ''"
+                      @input="updateCalendarMetadata((draft) => { draft.title = ($event.target as HTMLInputElement).value || undefined })"
+                    />
+                  </div>
+
+                  <div class="grid grid-cols-2 gap-3">
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Background</label>
+                      <ColorPicker
+                        :model-value="calendarMetadata.backgroundColor ?? '#ffffff'"
+                        @update:modelValue="(c) => updateCalendarMetadata((draft) => { draft.backgroundColor = c })"
+                      />
+                    </div>
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Border</label>
+                      <ColorPicker
+                        :model-value="calendarMetadata.borderColor ?? '#e5e7eb'"
+                        @update:modelValue="(c) => updateCalendarMetadata((draft) => { draft.borderColor = c })"
+                      />
+                    </div>
+                  </div>
+
+                  <div class="grid grid-cols-2 gap-3">
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Radius</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="80"
+                        class="control-glass"
+                        :value="calendarMetadata.cornerRadius ?? 26"
+                        @change="updateCalendarMetadata((draft) => { draft.cornerRadius = Math.max(0, Math.min(80, Number(($event.target as HTMLInputElement).value) || 0)) })"
+                      />
+                    </div>
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Border Width</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="10"
+                        class="control-glass"
+                        :value="calendarMetadata.borderWidth ?? 1"
+                        @change="updateCalendarMetadata((draft) => { draft.borderWidth = Math.max(0, Math.min(10, Number(($event.target as HTMLInputElement).value) || 0)) })"
+                      />
+                    </div>
+                  </div>
+
+                  <div class="grid grid-cols-2 gap-3">
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Header bg</label>
+                      <ColorPicker
+                        :model-value="calendarMetadata.headerBackgroundColor ?? '#111827'"
+                        @update:modelValue="(c) => updateCalendarMetadata((draft) => { draft.headerBackgroundColor = c })"
+                      />
+                    </div>
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Header text</label>
+                      <ColorPicker
+                        :model-value="calendarMetadata.headerTextColor ?? '#ffffff'"
+                        @update:modelValue="(c) => updateCalendarMetadata((draft) => { draft.headerTextColor = c })"
+                      />
+                    </div>
+                  </div>
+
+                  <div class="grid grid-cols-2 gap-3">
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Grid lines</label>
+                      <ColorPicker
+                        :model-value="calendarMetadata.gridLineColor ?? '#e5e7eb'"
+                        @update:modelValue="(c) => updateCalendarMetadata((draft) => { draft.gridLineColor = c })"
+                      />
+                    </div>
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Line width</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="6"
+                        class="control-glass"
+                        :value="calendarMetadata.gridLineWidth ?? 1"
+                        @change="updateCalendarMetadata((draft) => { draft.gridLineWidth = Math.max(0, Math.min(6, Number(($event.target as HTMLInputElement).value) || 0)) })"
+                      />
+                    </div>
+                  </div>
+
+                  <div class="grid grid-cols-2 gap-3">
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Day color</label>
+                      <ColorPicker
+                        :model-value="calendarMetadata.dayNumberColor ?? '#1f2937'"
+                        @update:modelValue="(c) => updateCalendarMetadata((draft) => { draft.dayNumberColor = c })"
+                      />
+                    </div>
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Muted</label>
+                      <ColorPicker
+                        :model-value="calendarMetadata.dayNumberMutedColor ?? '#9ca3af'"
+                        @update:modelValue="(c) => updateCalendarMetadata((draft) => { draft.dayNumberMutedColor = c })"
+                      />
+                    </div>
+                  </div>
+
+                  <div class="grid grid-cols-2 gap-3">
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Weekend bg</label>
+                      <ColorPicker
+                        :model-value="calendarMetadata.weekendBackgroundColor ?? 'rgba(0,0,0,0)'"
+                        @update:modelValue="(c) => updateCalendarMetadata((draft) => { draft.weekendBackgroundColor = c })"
+                      />
+                    </div>
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Today bg</label>
+                      <ColorPicker
+                        :model-value="calendarMetadata.todayBackgroundColor ?? 'rgba(0,0,0,0)'"
+                        @update:modelValue="(c) => updateCalendarMetadata((draft) => { draft.todayBackgroundColor = c })"
+                      />
+                    </div>
+                  </div>
+
+                  <div class="pt-3 border-t border-white/10 space-y-3">
+                    <p class="text-[11px] font-semibold text-white/60">Layout</p>
+
+                    <div class="grid grid-cols-2 gap-3">
+                      <div>
+                        <label class="text-xs font-medium text-white/60 mb-1.5 block">Header height</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="200"
+                          class="control-glass"
+                          :value="calendarMetadata.headerHeight ?? 60"
+                          @change="updateCalendarMetadata((draft) => { draft.headerHeight = Math.max(0, Math.min(200, Number(($event.target as HTMLInputElement).value) || 0)) })"
+                        />
+                      </div>
+                      <div>
+                        <label class="text-xs font-medium text-white/60 mb-1.5 block">Weekday height</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="120"
+                          class="control-glass"
+                          :value="calendarMetadata.weekdayHeight ?? 36"
+                          @change="updateCalendarMetadata((draft) => { draft.weekdayHeight = Math.max(0, Math.min(120, Number(($event.target as HTMLInputElement).value) || 0)) })"
+                        />
+                      </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                      <div>
+                        <label class="text-xs font-medium text-white/60 mb-1.5 block">Cell gap</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="30"
+                          class="control-glass"
+                          :value="calendarMetadata.cellGap ?? 0"
+                          @change="updateCalendarMetadata((draft) => { draft.cellGap = Math.max(0, Math.min(30, Number(($event.target as HTMLInputElement).value) || 0)) })"
+                        />
+                      </div>
+                      <div>
+                        <label class="text-xs font-medium text-white/60 mb-1.5 block">Grid line width</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="6"
+                          class="control-glass"
+                          :value="calendarMetadata.gridLineWidth ?? 1"
+                          @change="updateCalendarMetadata((draft) => { draft.gridLineWidth = Math.max(0, Math.min(6, Number(($event.target as HTMLInputElement).value) || 0)) })"
+                        />
+                      </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                      <div>
+                        <label class="text-xs font-medium text-white/60 mb-1.5 block">Day padding X</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="60"
+                          class="control-glass"
+                          :value="calendarMetadata.dayNumberInsetX ?? 12"
+                          @change="updateCalendarMetadata((draft) => { draft.dayNumberInsetX = Math.max(0, Math.min(60, Number(($event.target as HTMLInputElement).value) || 0)) })"
+                        />
+                      </div>
+                      <div>
+                        <label class="text-xs font-medium text-white/60 mb-1.5 block">Day padding Y</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="60"
+                          class="control-glass"
+                          :value="calendarMetadata.dayNumberInsetY ?? 8"
+                          @change="updateCalendarMetadata((draft) => { draft.dayNumberInsetY = Math.max(0, Math.min(60, Number(($event.target as HTMLInputElement).value) || 0)) })"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="pt-3 border-t border-white/10 space-y-3">
+                    <p class="text-[11px] font-semibold text-white/60">Holiday markers</p>
+
+                    <div class="flex items-center justify-between gap-4">
+                      <label class="flex items-center gap-2 text-sm text-white/80">
+                        <input
+                          type="checkbox"
+                          class="accent-primary-400"
+                          :checked="calendarMetadata.showHolidayMarkers ?? true"
+                          @change="updateCalendarMetadata((draft) => { draft.showHolidayMarkers = ($event.target as HTMLInputElement).checked })"
+                        >
+                        <span>Show</span>
+                      </label>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                      <div>
+                        <label class="text-xs font-medium text-white/60 mb-1.5 block">Color</label>
+                        <ColorPicker
+                          :model-value="calendarMetadata.holidayMarkerColor ?? '#ef4444'"
+                          @update:modelValue="(c) => updateCalendarMetadata((draft) => { draft.holidayMarkerColor = c })"
+                        />
+                      </div>
+                      <div>
+                        <label class="text-xs font-medium text-white/60 mb-1.5 block">Height</label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="20"
+                          class="control-glass"
+                          :value="calendarMetadata.holidayMarkerHeight ?? 4"
+                          @change="updateCalendarMetadata((draft) => { draft.holidayMarkerHeight = Math.max(1, Math.min(20, Number(($event.target as HTMLInputElement).value) || 4)) })"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="pt-3 border-t border-white/10 space-y-3">
+                    <p class="text-[11px] font-semibold text-white/60">Typography</p>
+
+                    <div class="grid grid-cols-2 gap-3">
+                      <div>
+                        <label class="text-xs font-medium text-white/60 mb-1.5 block">Header font</label>
+                        <FontPicker
+                          :model-value="calendarMetadata.headerFontFamily ?? 'Outfit'"
+                          @update:modelValue="(v) => updateCalendarMetadata((draft) => { draft.headerFontFamily = v })"
+                        />
+                      </div>
+                      <div>
+                        <label class="text-xs font-medium text-white/60 mb-1.5 block">Header size</label>
+                        <input
+                          type="number"
+                          min="8"
+                          max="96"
+                          class="control-glass"
+                          :value="calendarMetadata.headerFontSize ?? 24"
+                          @change="updateCalendarMetadata((draft) => { draft.headerFontSize = Math.max(8, Math.min(96, Number(($event.target as HTMLInputElement).value) || 24)) })"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Header weight</label>
+                      <input
+                        type="text"
+                        class="control-glass"
+                        :value="String(calendarMetadata.headerFontWeight ?? 600)"
+                        @input="updateCalendarMetadata((draft) => { const v = (($event.target as HTMLInputElement).value || '').trim(); draft.headerFontWeight = /^\d+$/.test(v) ? Number(v) : (v || 600) })"
+                      />
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                      <div>
+                        <label class="text-xs font-medium text-white/60 mb-1.5 block">Weekday font</label>
+                        <FontPicker
+                          :model-value="calendarMetadata.weekdayFontFamily ?? 'Inter'"
+                          @update:modelValue="(v) => updateCalendarMetadata((draft) => { draft.weekdayFontFamily = v })"
+                        />
+                      </div>
+                      <div>
+                        <label class="text-xs font-medium text-white/60 mb-1.5 block">Weekday size</label>
+                        <input
+                          type="number"
+                          min="8"
+                          max="40"
+                          class="control-glass"
+                          :value="calendarMetadata.weekdayFontSize ?? 12"
+                          @change="updateCalendarMetadata((draft) => { draft.weekdayFontSize = Math.max(8, Math.min(40, Number(($event.target as HTMLInputElement).value) || 12)) })"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Weekday weight</label>
+                      <input
+                        type="text"
+                        class="control-glass"
+                        :value="String(calendarMetadata.weekdayFontWeight ?? 600)"
+                        @input="updateCalendarMetadata((draft) => { const v = (($event.target as HTMLInputElement).value || '').trim(); draft.weekdayFontWeight = /^\d+$/.test(v) ? Number(v) : (v || 600) })"
+                      />
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                      <div>
+                        <label class="text-xs font-medium text-white/60 mb-1.5 block">Day font</label>
+                        <FontPicker
+                          :model-value="calendarMetadata.dayNumberFontFamily ?? 'Inter'"
+                          @update:modelValue="(v) => updateCalendarMetadata((draft) => { draft.dayNumberFontFamily = v })"
+                        />
+                      </div>
+                      <div>
+                        <label class="text-xs font-medium text-white/60 mb-1.5 block">Day size</label>
+                        <input
+                          type="number"
+                          min="8"
+                          max="60"
+                          class="control-glass"
+                          :value="calendarMetadata.dayNumberFontSize ?? 16"
+                          @change="updateCalendarMetadata((draft) => { draft.dayNumberFontSize = Math.max(8, Math.min(60, Number(($event.target as HTMLInputElement).value) || 16)) })"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Day weight</label>
+                      <input
+                        type="text"
+                        class="control-glass"
+                        :value="String(calendarMetadata.dayNumberFontWeight ?? 600)"
+                        @input="updateCalendarMetadata((draft) => { const v = (($event.target as HTMLInputElement).value || '').trim(); draft.dayNumberFontWeight = /^\d+$/.test(v) ? Number(v) : (v || 600) })"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </template>
+
+              <template v-if="isLineOrArrow">
+                <div class="pt-4 border-t border-white/10 space-y-4">
+                  <p class="text-[11px] font-semibold text-white/60">Lines &amp; Arrows</p>
+
+                  <div>
+                    <label class="text-xs font-medium text-white/60 mb-1.5 block">Stroke</label>
+                    <ColorPicker v-model="lineStrokeColor" />
+                  </div>
+
+                  <div>
+                    <label class="text-xs font-medium text-white/60 mb-1.5 block">Stroke Width</label>
+                    <div class="flex items-center gap-3">
+                      <input
+                        v-model.number="lineStrokeWidth"
+                        type="range"
+                        min="1"
+                        max="24"
+                        class="flex-1 accent-primary-400"
+                      />
+                      <span class="text-xs text-white/70 w-8 text-right">{{ lineStrokeWidth }}px</span>
+                    </div>
+                  </div>
+
+                  <div class="grid grid-cols-2 gap-3">
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Dash</label>
+                      <select class="control-glass" :value="dashStyle" @change="dashStyle = ($event.target as HTMLSelectElement).value">
+                        <option value="solid">Solid</option>
+                        <option value="dashed">Dashed</option>
+                        <option value="dotted">Dotted</option>
+                        <option value="dash-dot">Dash-dot</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Cap</label>
+                      <select class="control-glass" :value="lineCap" @change="lineCap = ($event.target as HTMLSelectElement).value">
+                        <option value="butt">Butt</option>
+                        <option value="round">Round</option>
+                        <option value="square">Square</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label class="text-xs font-medium text-white/60 mb-1.5 block">Join</label>
+                    <select class="control-glass" :value="lineJoin" @change="lineJoin = ($event.target as HTMLSelectElement).value">
+                      <option value="miter">Miter</option>
+                      <option value="round">Round</option>
+                      <option value="bevel">Bevel</option>
+                    </select>
+                  </div>
+
+                  <div v-if="isArrow" class="pt-3 border-t border-white/10 space-y-3">
+                    <p class="text-[11px] font-semibold text-white/60">Arrowhead</p>
+
+                    <div class="grid grid-cols-2 gap-3">
+                      <div>
+                        <label class="text-xs font-medium text-white/60 mb-1.5 block">Ends</label>
+                        <select class="control-glass" :value="arrowEnds" @change="arrowEnds = ($event.target as HTMLSelectElement).value">
+                          <option value="end">End</option>
+                          <option value="start">Start</option>
+                          <option value="both">Both</option>
+                          <option value="none">None</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label class="text-xs font-medium text-white/60 mb-1.5 block">Style</label>
+                        <select class="control-glass" :value="arrowHeadStyle" @change="arrowHeadStyle = ($event.target as HTMLSelectElement).value">
+                          <option value="filled">Filled</option>
+                          <option value="open">Open</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                      <div>
+                        <label class="text-xs font-medium text-white/60 mb-1.5 block">Length</label>
+                        <input v-model.number="arrowHeadLength" type="number" min="4" max="80" class="control-glass" />
+                      </div>
+                      <div>
+                        <label class="text-xs font-medium text-white/60 mb-1.5 block">Width</label>
+                        <input v-model.number="arrowHeadWidth" type="number" min="4" max="80" class="control-glass" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </template>
+
+              <!-- Week Strip -->
+              <template v-if="weekStripMetadata">
+                <div class="pt-4 border-t border-white/10 space-y-4">
+                  <p class="text-xs font-semibold uppercase tracking-widest text-white/60">Week Strip</p>
+
+                  <div>
+                    <label class="text-xs font-medium text-white/60 mb-1.5 block">Label</label>
+                    <input
+                      type="text"
+                      class="control-glass"
+                      :value="weekStripMetadata.label ?? ''"
+                      @input="updateWeekStripMetadata((draft) => { draft.label = ($event.target as HTMLInputElement).value || undefined })"
+                    />
+                  </div>
+
+                  <div class="grid grid-cols-2 gap-3">
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Start date</label>
+                      <input
+                        type="date"
+                        class="control-glass"
+                        :value="weekStripDateValue"
+                        @change="updateWeekStripMetadata((draft) => { const v = ($event.target as HTMLInputElement).value; if (v) draft.startDate = v })"
+                      />
+                    </div>
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Week starts</label>
+                      <select
+                        class="control-glass"
+                        :value="weekStripMetadata.startDay"
+                        @change="updateWeekStripMetadata((draft) => { draft.startDay = Number(($event.target as HTMLSelectElement).value) as WeekStripMetadata['startDay'] })"
+                      >
+                        <option v-for="d in weekStartOptions" :key="d.value" :value="d.value">{{ d.label }}</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div class="grid grid-cols-2 gap-3">
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Background</label>
+                      <ColorPicker
+                        :model-value="weekStripMetadata.backgroundColor ?? '#ffffff'"
+                        @update:modelValue="(c) => updateWeekStripMetadata((draft) => { draft.backgroundColor = c })"
+                      />
+                    </div>
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Border</label>
+                      <ColorPicker
+                        :model-value="weekStripMetadata.borderColor ?? '#e5e7eb'"
+                        @update:modelValue="(c) => updateWeekStripMetadata((draft) => { draft.borderColor = c })"
+                      />
+                    </div>
+                  </div>
+
+                  <div class="grid grid-cols-2 gap-3">
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Radius</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="80"
+                        class="control-glass"
+                        :value="weekStripMetadata.cornerRadius ?? 24"
+                        @change="updateWeekStripMetadata((draft) => { draft.cornerRadius = Math.max(0, Math.min(80, Number(($event.target as HTMLInputElement).value) || 0)) })"
+                      />
+                    </div>
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Cell lines</label>
+                      <ColorPicker
+                        :model-value="weekStripMetadata.cellBorderColor ?? '#f1f5f9'"
+                        @update:modelValue="(c) => updateWeekStripMetadata((draft) => { draft.cellBorderColor = c })"
+                      />
+                    </div>
+                  </div>
+
+                  <div class="grid grid-cols-3 gap-3">
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Label</label>
+                      <ColorPicker
+                        :model-value="weekStripMetadata.labelColor ?? '#0f172a'"
+                        @update:modelValue="(c) => updateWeekStripMetadata((draft) => { draft.labelColor = c })"
+                      />
+                    </div>
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Weekday</label>
+                      <ColorPicker
+                        :model-value="weekStripMetadata.weekdayColor ?? '#64748b'"
+                        @update:modelValue="(c) => updateWeekStripMetadata((draft) => { draft.weekdayColor = c })"
+                      />
+                    </div>
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Number</label>
+                      <ColorPicker
+                        :model-value="weekStripMetadata.dayNumberColor ?? '#0f172a'"
+                        @update:modelValue="(c) => updateWeekStripMetadata((draft) => { draft.dayNumberColor = c })"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </template>
+
+              <!-- Date Cell -->
+              <template v-if="dateCellMetadata">
+                <div class="pt-4 border-t border-white/10 space-y-4">
+                  <p class="text-xs font-semibold uppercase tracking-widest text-white/60">Date Cell</p>
+
+                  <div class="grid grid-cols-2 gap-3">
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Date</label>
+                      <input
+                        type="date"
+                        class="control-glass"
+                        :value="dateCellDateValue"
+                        @change="updateDateCellMetadata((draft) => { const v = ($event.target as HTMLInputElement).value; if (v) draft.date = v })"
+                      />
+                    </div>
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Accent</label>
+                      <ColorPicker
+                        :model-value="dateCellMetadata.highlightAccent"
+                        @update:modelValue="(c) => updateDateCellMetadata((draft) => { draft.highlightAccent = c })"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label class="text-xs font-medium text-white/60 mb-1.5 block">Placeholder</label>
+                    <input
+                      type="text"
+                      class="control-glass"
+                      :value="dateCellMetadata.notePlaceholder"
+                      @input="updateDateCellMetadata((draft) => { draft.notePlaceholder = ($event.target as HTMLInputElement).value })"
+                    />
+                  </div>
+
+                  <div>
+                    <label class="text-xs font-medium text-white/60 mb-1.5 block">Accent height</label>
+                    <div class="flex items-center gap-3">
+                      <input
+                        type="range"
+                        min="0.1"
+                        max="0.8"
+                        step="0.01"
+                        class="flex-1 accent-primary-400"
+                        :value="dateCellMetadata.accentHeightRatio ?? 0.4"
+                        @input="updateDateCellMetadata((draft) => { draft.accentHeightRatio = Number(($event.target as HTMLInputElement).value) })"
+                      />
+                      <span class="text-xs text-white/70 w-12 text-right">{{ Math.round(((dateCellMetadata.accentHeightRatio ?? 0.4) as number) * 100) }}%</span>
+                    </div>
+                  </div>
+
+                  <div class="grid grid-cols-2 gap-3">
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Background</label>
+                      <ColorPicker
+                        :model-value="dateCellMetadata.backgroundColor ?? '#ffffff'"
+                        @update:modelValue="(c) => updateDateCellMetadata((draft) => { draft.backgroundColor = c })"
+                      />
+                    </div>
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Border</label>
+                      <ColorPicker
+                        :model-value="dateCellMetadata.borderColor ?? '#e2e8f0'"
+                        @update:modelValue="(c) => updateDateCellMetadata((draft) => { draft.borderColor = c })"
+                      />
+                    </div>
+                  </div>
+
+                  <div class="grid grid-cols-2 gap-3">
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Radius</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="80"
+                        class="control-glass"
+                        :value="dateCellMetadata.cornerRadius ?? 24"
+                        @change="updateDateCellMetadata((draft) => { draft.cornerRadius = Math.max(0, Math.min(80, Number(($event.target as HTMLInputElement).value) || 0)) })"
+                      />
+                    </div>
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Border Width</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="10"
+                        class="control-glass"
+                        :value="dateCellMetadata.borderWidth ?? 1"
+                        @change="updateDateCellMetadata((draft) => { draft.borderWidth = Math.max(0, Math.min(10, Number(($event.target as HTMLInputElement).value) || 0)) })"
+                      />
+                    </div>
+                  </div>
+
+                  <div class="grid grid-cols-3 gap-3">
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Weekday</label>
+                      <ColorPicker
+                        :model-value="dateCellMetadata.weekdayColor ?? '#78350f'"
+                        @update:modelValue="(c) => updateDateCellMetadata((draft) => { draft.weekdayColor = c })"
+                      />
+                    </div>
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Number</label>
+                      <ColorPicker
+                        :model-value="dateCellMetadata.dayNumberColor ?? '#92400e'"
+                        @update:modelValue="(c) => updateDateCellMetadata((draft) => { draft.dayNumberColor = c })"
+                      />
+                    </div>
+                    <div>
+                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Text</label>
+                      <ColorPicker
+                        :model-value="dateCellMetadata.placeholderColor ?? '#475569'"
+                        @update:modelValue="(c) => updateDateCellMetadata((draft) => { draft.placeholderColor = c })"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </template>
 
               <!-- Schedule Block -->
               <template v-if="scheduleMetadata">
@@ -1660,7 +2675,7 @@ function handleZoom(delta: number) {
                   <div class="flex items-center justify-between">
                     <p class="text-xs font-semibold uppercase tracking-widest text-white/60">Schedule</p>
                     <select
-                      class="text-xs px-2 py-1 rounded-lg bg-white/10 border border-white/10 text-white"
+                      class="control-glass-sm"
                       :value="scheduleMetadata.intervalMinutes"
                       @change="updateScheduleMetadata((draft) => { draft.intervalMinutes = Number(($event.target as HTMLSelectElement).value) as ScheduleMetadata['intervalMinutes'] })"
                     >
@@ -1672,7 +2687,7 @@ function handleZoom(delta: number) {
                     <label class="text-xs font-medium text-white/60 mb-1.5 block">Title</label>
                     <input
                       type="text"
-                      class="w-full px-3 py-2 text-sm border border-white/10 rounded-xl bg-white/10 text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      class="control-glass"
                       :value="scheduleMetadata.title"
                       @input="updateScheduleMetadata((draft) => { draft.title = ($event.target as HTMLInputElement).value })"
                     />
@@ -1681,7 +2696,7 @@ function handleZoom(delta: number) {
                   <div>
                     <label class="text-xs font-medium text-white/60 mb-1.5 block">Header Style</label>
                     <select
-                      class="w-full px-3 py-2 text-sm border border-white/10 rounded-xl bg-white/10 text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      class="control-glass"
                       :value="scheduleMetadata.headerStyle ?? 'minimal'"
                       @change="updateScheduleMetadata((draft) => { draft.headerStyle = ($event.target as HTMLSelectElement).value as PlannerHeaderStyle })"
                     >
@@ -1694,14 +2709,14 @@ function handleZoom(delta: number) {
                       <label class="text-xs font-medium text-white/60 mb-1.5 block">Accent</label>
                       <ColorPicker
                         :model-value="scheduleMetadata.accentColor"
-                        @update:model-value="(c) => updateScheduleMetadata((draft) => { draft.accentColor = c })"
+                        @update:modelValue="(c) => updateScheduleMetadata((draft) => { draft.accentColor = c })"
                       />
                     </div>
                     <div>
                       <label class="text-xs font-medium text-white/60 mb-1.5 block">Lines</label>
                       <ColorPicker
                         :model-value="scheduleMetadata.lineColor ?? '#e2e8f0'"
-                        @update:model-value="(c) => updateScheduleMetadata((draft) => { draft.lineColor = c })"
+                        @update:modelValue="(c) => updateScheduleMetadata((draft) => { draft.lineColor = c })"
                       />
                     </div>
                   </div>
@@ -1711,14 +2726,14 @@ function handleZoom(delta: number) {
                       <label class="text-xs font-medium text-white/60 mb-1.5 block">Background</label>
                       <ColorPicker
                         :model-value="scheduleMetadata.backgroundColor ?? '#ffffff'"
-                        @update:model-value="(c) => updateScheduleMetadata((draft) => { draft.backgroundColor = c })"
+                        @update:modelValue="(c) => updateScheduleMetadata((draft) => { draft.backgroundColor = c })"
                       />
                     </div>
                     <div>
                       <label class="text-xs font-medium text-white/60 mb-1.5 block">Border</label>
                       <ColorPicker
                         :model-value="scheduleMetadata.borderColor ?? '#e2e8f0'"
-                        @update:model-value="(c) => updateScheduleMetadata((draft) => { draft.borderColor = c })"
+                        @update:modelValue="(c) => updateScheduleMetadata((draft) => { draft.borderColor = c })"
                       />
                     </div>
                   </div>
@@ -1730,7 +2745,7 @@ function handleZoom(delta: number) {
                         type="number"
                         min="0"
                         max="80"
-                        class="w-full px-3 py-2 text-sm border border-white/10 rounded-xl bg-white/10 text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        class="control-glass"
                         :value="scheduleMetadata.cornerRadius ?? 22"
                         @change="updateScheduleMetadata((draft) => { draft.cornerRadius = Math.max(0, Math.min(80, Number(($event.target as HTMLInputElement).value) || 0)) })"
                       />
@@ -1741,7 +2756,7 @@ function handleZoom(delta: number) {
                         type="number"
                         min="0"
                         max="10"
-                        class="w-full px-3 py-2 text-sm border border-white/10 rounded-xl bg-white/10 text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        class="control-glass"
                         :value="scheduleMetadata.borderWidth ?? 1"
                         @change="updateScheduleMetadata((draft) => { draft.borderWidth = Math.max(0, Math.min(10, Number(($event.target as HTMLInputElement).value) || 0)) })"
                       />
@@ -1755,7 +2770,7 @@ function handleZoom(delta: number) {
                         type="number"
                         min="0"
                         max="23"
-                        class="w-full px-3 py-2 text-sm border border-white/10 rounded-xl bg-white/10 text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        class="control-glass"
                         :value="scheduleMetadata.startHour"
                         @change="updateScheduleMetadata((draft) => { draft.startHour = Math.max(0, Math.min(23, Number(($event.target as HTMLInputElement).value) || draft.startHour)) })"
                       />
@@ -1766,7 +2781,7 @@ function handleZoom(delta: number) {
                         type="number"
                         min="0"
                         max="23"
-                        class="w-full px-3 py-2 text-sm border border-white/10 rounded-xl bg-white/10 text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        class="control-glass"
                         :value="scheduleMetadata.endHour"
                         @change="updateScheduleMetadata((draft) => { draft.endHour = Math.max(0, Math.min(23, Number(($event.target as HTMLInputElement).value) || draft.endHour)) })"
                       />
@@ -1784,7 +2799,7 @@ function handleZoom(delta: number) {
                     <label class="text-xs font-medium text-white/60 mb-1.5 block">Title</label>
                     <input
                       type="text"
-                      class="w-full px-3 py-2 text-sm border border-white/10 rounded-xl bg-white/10 text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      class="control-glass"
                       :value="checklistMetadata.title"
                       @input="updateChecklistMetadata((draft) => { draft.title = ($event.target as HTMLInputElement).value })"
                     />
@@ -1793,7 +2808,7 @@ function handleZoom(delta: number) {
                   <div>
                     <label class="text-xs font-medium text-white/60 mb-1.5 block">Header Style</label>
                     <select
-                      class="w-full px-3 py-2 text-sm border border-white/10 rounded-xl bg-white/10 text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      class="control-glass"
                       :value="checklistMetadata.headerStyle ?? 'tint'"
                       @change="updateChecklistMetadata((draft) => { draft.headerStyle = ($event.target as HTMLSelectElement).value as PlannerHeaderStyle })"
                     >
@@ -1806,14 +2821,14 @@ function handleZoom(delta: number) {
                       <label class="text-xs font-medium text-white/60 mb-1.5 block">Accent</label>
                       <ColorPicker
                         :model-value="checklistMetadata.accentColor"
-                        @update:model-value="(c) => updateChecklistMetadata((draft) => { draft.accentColor = c })"
+                        @update:modelValue="(c) => updateChecklistMetadata((draft) => { draft.accentColor = c })"
                       />
                     </div>
                     <div>
                       <label class="text-xs font-medium text-white/60 mb-1.5 block">Checkbox</label>
                       <ColorPicker
                         :model-value="checklistMetadata.checkboxColor ?? checklistMetadata.accentColor"
-                        @update:model-value="(c) => updateChecklistMetadata((draft) => { draft.checkboxColor = c })"
+                        @update:modelValue="(c) => updateChecklistMetadata((draft) => { draft.checkboxColor = c })"
                       />
                     </div>
                   </div>
@@ -1823,14 +2838,14 @@ function handleZoom(delta: number) {
                       <label class="text-xs font-medium text-white/60 mb-1.5 block">Background</label>
                       <ColorPicker
                         :model-value="checklistMetadata.backgroundColor ?? '#ffffff'"
-                        @update:model-value="(c) => updateChecklistMetadata((draft) => { draft.backgroundColor = c })"
+                        @update:modelValue="(c) => updateChecklistMetadata((draft) => { draft.backgroundColor = c })"
                       />
                     </div>
                     <div>
                       <label class="text-xs font-medium text-white/60 mb-1.5 block">Border</label>
                       <ColorPicker
                         :model-value="checklistMetadata.borderColor ?? '#e2e8f0'"
-                        @update:model-value="(c) => updateChecklistMetadata((draft) => { draft.borderColor = c })"
+                        @update:modelValue="(c) => updateChecklistMetadata((draft) => { draft.borderColor = c })"
                       />
                     </div>
                   </div>
@@ -1842,7 +2857,7 @@ function handleZoom(delta: number) {
                         type="number"
                         min="1"
                         max="30"
-                        class="w-full px-3 py-2 text-sm border border-white/10 rounded-xl bg-white/10 text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        class="control-glass"
                         :value="checklistMetadata.rows"
                         @change="updateChecklistMetadata((draft) => { draft.rows = Math.max(1, Math.min(30, Number(($event.target as HTMLInputElement).value) || draft.rows)) })"
                       />
@@ -1868,7 +2883,7 @@ function handleZoom(delta: number) {
                   <div class="flex items-center justify-between">
                     <p class="text-xs font-semibold uppercase tracking-widest text-white/60">Notes</p>
                     <select
-                      class="text-xs px-2 py-1 rounded-lg bg-white/10 border border-white/10 text-white"
+                      class="control-glass-sm"
                       :value="plannerNoteMetadata.pattern"
                       @change="updatePlannerMetadata((draft) => { draft.pattern = ($event.target as HTMLSelectElement).value as PlannerPatternVariant })"
                     >
@@ -1880,7 +2895,7 @@ function handleZoom(delta: number) {
                     <label class="text-xs font-medium text-white/60 mb-1.5 block">Title</label>
                     <input
                       type="text"
-                      class="w-full px-3 py-2 text-sm border border-white/10 rounded-xl bg-white/10 text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      class="control-glass"
                       :value="plannerNoteMetadata.title"
                       @input="updatePlannerMetadata((draft) => { draft.title = ($event.target as HTMLInputElement).value })"
                     />
@@ -1889,7 +2904,7 @@ function handleZoom(delta: number) {
                   <div>
                     <label class="text-xs font-medium text-white/60 mb-1.5 block">Header Style</label>
                     <select
-                      class="w-full px-3 py-2 text-sm border border-white/10 rounded-xl bg-white/10 text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      class="control-glass"
                       :value="plannerNoteMetadata.headerStyle ?? (plannerNoteMetadata.pattern === 'hero' ? 'filled' : 'minimal')"
                       @change="updatePlannerMetadata((draft) => { draft.headerStyle = ($event.target as HTMLSelectElement).value as PlannerHeaderStyle })"
                     >
@@ -1901,7 +2916,7 @@ function handleZoom(delta: number) {
                     <label class="text-xs font-medium text-white/60 mb-1.5 block">Accent</label>
                     <ColorPicker
                       :model-value="plannerNoteMetadata.accentColor"
-                      @update:model-value="(c) => updatePlannerMetadata((draft) => { draft.accentColor = c })"
+                      @update:modelValue="(c) => updatePlannerMetadata((draft) => { draft.accentColor = c })"
                     />
                   </div>
 
@@ -1910,14 +2925,14 @@ function handleZoom(delta: number) {
                       <label class="text-xs font-medium text-white/60 mb-1.5 block">Background</label>
                       <ColorPicker
                         :model-value="plannerNoteMetadata.backgroundColor ?? '#ffffff'"
-                        @update:model-value="(c) => updatePlannerMetadata((draft) => { draft.backgroundColor = c })"
+                        @update:modelValue="(c) => updatePlannerMetadata((draft) => { draft.backgroundColor = c })"
                       />
                     </div>
                     <div>
                       <label class="text-xs font-medium text-white/60 mb-1.5 block">Border</label>
                       <ColorPicker
                         :model-value="plannerNoteMetadata.borderColor ?? '#e2e8f0'"
-                        @update:model-value="(c) => updatePlannerMetadata((draft) => { draft.borderColor = c })"
+                        @update:modelValue="(c) => updatePlannerMetadata((draft) => { draft.borderColor = c })"
                       />
                     </div>
                   </div>
@@ -1932,13 +2947,13 @@ function handleZoom(delta: number) {
                     <textarea 
                       v-model="textContent" 
                       rows="3"
-                      class="w-full px-3 py-2 text-sm border border-white/10 rounded-xl bg-white/10 text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
+                      class="control-glass resize-none"
                     ></textarea>
                   </div>
                   
                   <div>
                     <label class="text-xs font-medium text-white/60 mb-1.5 block">Font Family</label>
-                    <FontPicker v-model="fontFamily" />
+                    <FontPicker v-model="fontFamily" class="control-glass" />
                   </div>
                   
                   <div class="grid grid-cols-2 gap-3">
@@ -1949,7 +2964,7 @@ function handleZoom(delta: number) {
                         type="number" 
                         min="8" 
                         max="200"
-                        class="w-full px-3 py-2 text-sm border border-white/10 rounded-xl bg-white/10 text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        class="control-glass"
                       />
                     </div>
                     <div>
@@ -2008,13 +3023,13 @@ function handleZoom(delta: number) {
                   <div class="grid grid-cols-2 gap-2">
                     <button 
                       @click="editorStore.bringToFront()"
-                      class="px-3 py-2 text-xs font-semibold bg-white/10 hover:bg-white/20 rounded-lg transition-colors"
+                      class="btn-glass-sm w-full"
                     >
                       Bring Front
                     </button>
                     <button 
                       @click="editorStore.sendToBack()"
-                      class="px-3 py-2 text-xs font-semibold bg-white/10 hover:bg-white/20 rounded-lg transition-colors"
+                      class="btn-glass-sm w-full"
                     >
                       Send Back
                     </button>

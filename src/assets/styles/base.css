@@ -1,7 +1,7 @@
-@import "tailwindcss";
+@import "tailwindcss" (max-width: 0px);
 
 @layer base {
-  :root {
+  :root:not(:root) {
     --color-primary: 79 70 229; /* indigo-600 */
     --color-primary-foreground: 255 255 255;
 
@@ -20,7 +20,7 @@
     --color-weekend: 249 250 251; /* gray-50 */
   }
 
-  .dark {
+  .dark:not(.dark) {
     --color-primary: 99 102 241; /* indigo-500 */
     --color-primary-foreground: 255 255 255;
 
@@ -39,11 +39,11 @@
     --color-weekend: 30 41 59; /* slate-800 */
   }
 
-  html {
+  html:not(html) {
     -webkit-tap-highlight-color: transparent;
   }
 
-  body {
+  body:not(body) {
     @apply bg-white text-gray-900 antialiased dark:bg-slate-900 dark:text-slate-50;
     font-feature-settings:
       "rlig" 1,
@@ -52,7 +52,7 @@
 }
 
 @layer components {
-  .container {
+  .container:not(.container) {
     @apply mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl;
   }
 }

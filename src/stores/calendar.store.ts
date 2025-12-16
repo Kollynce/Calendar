@@ -21,7 +21,7 @@ export const useCalendarStore = defineStore('calendar', () => {
   // ═══════════════════════════════════════════════════════════════
   const config = useLocalStorage<CalendarConfig>('calendar-config', {
     year: new Date().getFullYear(),
-    country: 'ZA',
+    country: 'KE',
     language: 'en',
     layout: 'year-grid',
     startDay: 0,
@@ -261,6 +261,10 @@ export const useCalendarStore = defineStore('calendar', () => {
   }
 
   // Initialize on store creation
+  // Migrate previous default country
+  if (config.value.country === 'ZA') {
+    config.value.country = 'KE'
+  }
   generateCalendar()
 
   return {

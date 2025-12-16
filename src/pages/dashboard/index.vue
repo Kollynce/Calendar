@@ -3,6 +3,7 @@ import { ref, computed, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useAuthStore } from '@/stores'
 import AppLayout from '@/layouts/AppLayout.vue'
+import AppButton from '@/components/ui/AppButton.vue'
 import { projectsService } from '@/services/projects/projects.service'
 import type { Project } from '@/types'
 import { 
@@ -79,12 +80,12 @@ watch(
             </p>
           </div>
           <div class="flex gap-3">
-            <button class="btn-secondary flex items-center gap-2 text-sm">
+            <AppButton variant="secondary" class="flex items-center gap-2 text-sm">
               <ArrowUpTrayIcon class="w-4 h-4" /> Import
-            </button>
-            <RouterLink to="/editor" class="btn-primary flex items-center gap-2">
+            </AppButton>
+            <AppButton to="/editor" variant="primary" class="flex items-center gap-2">
               <PlusIcon class="w-5 h-5" /> New Project
-            </RouterLink>
+            </AppButton>
           </div>
         </div>
 
@@ -110,9 +111,9 @@ watch(
           <p class="text-primary-100 mb-6 relative z-10 max-w-sm">
             Create a custom calendar with our powerful design editor. Choose size, layout, and holidays.
           </p>
-          <RouterLink to="/editor" class="inline-flex items-center gap-2 bg-white/20 backdrop-blur-md hover:bg-white/30 text-white px-4 py-2 rounded-lg font-medium transition-colors relative z-10">
+          <AppButton to="/editor" variant="glass" class="relative z-10 flex items-center gap-2">
             Open Editor <PlusIcon class="w-4 h-4" />
-          </RouterLink>
+          </AppButton>
         </div>
 
         <div class="glass-card p-6 border-l-4 border-l-accent-500 relative overflow-hidden group cursor-pointer">

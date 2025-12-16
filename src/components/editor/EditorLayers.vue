@@ -82,7 +82,6 @@ function getLayerDisplayName(obj: any): string {
   if (metadata.kind === 'planner-note') return `Notes: ${metadata.title ?? 'Notes'}`
   if (metadata.kind === 'schedule') return `Schedule: ${metadata.title ?? 'Schedule'}`
   if (metadata.kind === 'checklist') return `Checklist: ${metadata.title ?? 'Checklist'}`
-  if (metadata.kind === 'photo-block') return `Photo: ${metadata.label ?? 'Add photo'}`
   if (metadata.kind === 'week-strip') return `Week Strip: ${metadata.label ?? 'Week Plan'}`
   if (metadata.kind === 'calendar-grid') return 'Calendar Grid'
   if (metadata.kind === 'date-cell') return 'Date Cell'

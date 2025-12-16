@@ -39,7 +39,7 @@ export const useAuthStore = defineStore('auth', () => {
       preferences: {
         theme: 'system',
         language: 'en',
-        defaultCountry: 'ZA',
+        defaultCountry: 'KE',
         emailNotifications: true,
         marketingEmails: false,
       },
@@ -55,7 +55,7 @@ export const useAuthStore = defineStore('auth', () => {
       preferences: {
         theme: 'system',
         language: 'en',
-        defaultCountry: 'ZA',
+        defaultCountry: 'KE',
         emailNotifications: true,
         marketingEmails: false,
       },
@@ -71,7 +71,7 @@ export const useAuthStore = defineStore('auth', () => {
       preferences: {
         theme: 'system',
         language: 'en',
-        defaultCountry: 'ZA',
+        defaultCountry: 'KE',
         emailNotifications: true,
         marketingEmails: false,
       },
@@ -147,7 +147,7 @@ export const useAuthStore = defineStore('auth', () => {
       preferences: {
         theme: 'system',
         language: 'en',
-        defaultCountry: 'ZA',
+        defaultCountry: 'KE',
         emailNotifications: true,
         marketingEmails: false,
       },
@@ -198,7 +198,7 @@ export const useAuthStore = defineStore('auth', () => {
           preferences: {
             theme: 'system',
             language: 'en',
-            defaultCountry: 'ZA',
+            defaultCountry: 'KE',
             emailNotifications: true,
             marketingEmails: false,
           },

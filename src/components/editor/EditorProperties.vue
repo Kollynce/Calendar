@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useEditorStore } from '@/stores/editor.store'
 import ColorPicker from './ColorPicker.vue'
@@ -9,7 +9,6 @@ import type {
   WeekStripMetadata,
   DateCellMetadata,
   PlannerNoteMetadata,
-  PhotoBlockMetadata,
   PlannerPatternVariant,
   PlannerHeaderStyle,
   CanvasElementMetadata,
@@ -19,6 +18,16 @@ import type {
 
 const editorStore = useEditorStore()
 const { selectedObjects, hasSelection } = storeToRefs(editorStore)
+
+const alignTarget = ref<'canvas' | 'selection'>('canvas')
+
+watch(
+  () => selectedObjects.value.length,
+  (len) => {
+    alignTarget.value = len > 1 ? 'selection' : 'canvas'
+  },
+  { immediate: true },
+)
 
 const selectedObject = computed(() => selectedObjects.value[0])
 
@@ -69,6 +78,105 @@ const strokeWidth = computed({
   set: (value) => editorStore.updateObjectProperty('strokeWidth', value),
 })
 
+const isArrow = computed(() => {
+  const obj: any = selectedObject.value as any
+  return obj?.type === 'group' && obj?.data?.shapeKind === 'arrow'
+})
+
+const isLineOrArrow = computed(() => {
+  const obj: any = selectedObject.value as any
+  return obj?.type === 'line' || isArrow.value
+})
+
+const lineStrokeColor = computed({
+  get: () => {
+    const obj: any = selectedObject.value as any
+    if (isArrow.value) return obj?.data?.arrowOptions?.stroke ?? '#000000'
+    return obj?.stroke ?? '#000000'
+  },
+  set: (value) => editorStore.updateObjectProperty('stroke', value),
+})
+
+const lineStrokeWidth = computed({
+  get: () => {
+    const obj: any = selectedObject.value as any
+    if (isArrow.value) return Number(obj?.data?.arrowOptions?.strokeWidth ?? 2) || 2
+    return Number(obj?.strokeWidth ?? 0) || 0
+  },
+  set: (value) => editorStore.updateObjectProperty('strokeWidth', Number(value) || 0),
+})
+
+const lineCap = computed({
+  get: () => {
+    const obj: any = selectedObject.value as any
+    if (isArrow.value) return obj?._objects?.find((o: any) => o?.data?.arrowPart === 'line')?.strokeLineCap ?? 'butt'
+    return obj?.strokeLineCap ?? 'butt'
+  },
+  set: (value) => editorStore.updateObjectProperty('strokeLineCap', value),
+})
+
+const lineJoin = computed({
+  get: () => {
+    const obj: any = selectedObject.value as any
+    if (isArrow.value) return obj?._objects?.find((o: any) => o?.data?.arrowPart === 'line')?.strokeLineJoin ?? 'miter'
+    return obj?.strokeLineJoin ?? 'miter'
+  },
+  set: (value) => editorStore.updateObjectProperty('strokeLineJoin', value),
+})
+
+const dashStyle = computed({
+  get: () => {
+    const obj: any = selectedObject.value as any
+    const dash = isArrow.value
+      ? obj?._objects?.find((o: any) => o?.data?.arrowPart === 'line')?.strokeDashArray
+      : obj?.strokeDashArray
+    if (!dash || dash.length === 0) return 'solid'
+    const key = JSON.stringify(dash)
+    if (key === JSON.stringify([10, 8])) return 'dashed'
+    if (key === JSON.stringify([2, 6])) return 'dotted'
+    if (key === JSON.stringify([20, 10, 6, 10])) return 'dash-dot'
+    return 'custom'
+  },
+  set: (value) => {
+    if (value === 'solid') editorStore.updateObjectProperty('strokeDashArray', undefined)
+    else if (value === 'dashed') editorStore.updateObjectProperty('strokeDashArray', [10, 8])
+    else if (value === 'dotted') editorStore.updateObjectProperty('strokeDashArray', [2, 6])
+    else if (value === 'dash-dot') editorStore.updateObjectProperty('strokeDashArray', [20, 10, 6, 10])
+  },
+})
+
+const arrowEnds = computed({
+  get: () => {
+    const obj: any = selectedObject.value as any
+    return obj?.data?.arrowOptions?.arrowEnds ?? 'end'
+  },
+  set: (value) => editorStore.updateObjectProperty('arrowEnds', value),
+})
+
+const arrowHeadStyle = computed({
+  get: () => {
+    const obj: any = selectedObject.value as any
+    return obj?.data?.arrowOptions?.arrowHeadStyle ?? 'filled'
+  },
+  set: (value) => editorStore.updateObjectProperty('arrowHeadStyle', value),
+})
+
+const arrowHeadLength = computed({
+  get: () => {
+    const obj: any = selectedObject.value as any
+    return Number(obj?.data?.arrowOptions?.arrowHeadLength ?? 18) || 18
+  },
+  set: (value) => editorStore.updateObjectProperty('arrowHeadLength', Math.max(4, Number(value) || 4)),
+})
+
+const arrowHeadWidth = computed({
+  get: () => {
+    const obj: any = selectedObject.value as any
+    return Number(obj?.data?.arrowOptions?.arrowHeadWidth ?? 14) || 14
+  },
+  set: (value) => editorStore.updateObjectProperty('arrowHeadWidth', Math.max(4, Number(value) || 4)),
+})
+
 const elementMetadata = computed<CanvasElementMetadata | null>(() => {
   // Ensure this recomputes on selection changes (Fabric active object isn't reactive).
   void selectedObjects.value
@@ -91,10 +199,6 @@ const plannerNoteMetadata = computed<PlannerNoteMetadata | null>(() =>
   elementMetadata.value?.kind === 'planner-note' ? elementMetadata.value : null,
 )
 
-const photoBlockMetadata = computed<PhotoBlockMetadata | null>(() =>
-  elementMetadata.value?.kind === 'photo-block' ? elementMetadata.value : null,
-)
-
 const scheduleMetadata = computed<ScheduleMetadata | null>(() =>
   elementMetadata.value?.kind === 'schedule' ? elementMetadata.value : null,
 )
@@ -102,6 +206,14 @@ const scheduleMetadata = computed<ScheduleMetadata | null>(() =>
 const checklistMetadata = computed<ChecklistMetadata | null>(() =>
   elementMetadata.value?.kind === 'checklist' ? elementMetadata.value : null,
 )
+
+function handleAlign(action: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom') {
+  editorStore.alignSelection?.(action, alignTarget.value) ?? editorStore.alignObjects(action)
+}
+
+function handleDistribute(axis: 'horizontal' | 'vertical') {
+  editorStore.distributeSelection?.(axis)
+}
 
 function updateCalendarMetadata(updater: (draft: CalendarGridMetadata) => void) {
   editorStore.updateSelectedElementMetadata((metadata) => {
@@ -130,14 +242,6 @@ function updateDateCellMetadata(updater: (draft: DateCellMetadata) => void) {
 function updatePlannerMetadata(updater: (draft: PlannerNoteMetadata) => void) {
   editorStore.updateSelectedElementMetadata((metadata) => {
     if (metadata.kind !== 'planner-note') return null
-    updater(metadata)
-    return metadata
-  })
-}
-
-function updatePhotoMetadata(updater: (draft: PhotoBlockMetadata) => void) {
-  editorStore.updateSelectedElementMetadata((metadata) => {
-    if (metadata.kind !== 'photo-block') return null
     updater(metadata)
     return metadata
   })
@@ -308,7 +412,7 @@ const objectHeight = computed({
             <input
               v-model.number="positionX"
               type="number"
-              class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+              class="input"
             />
           </div>
           <div>
@@ -316,7 +420,7 @@ const objectHeight = computed({
             <input
               v-model.number="positionY"
               type="number"
-              class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+              class="input"
             />
           </div>
         </div>
@@ -327,7 +431,7 @@ const objectHeight = computed({
             <input
               type="number"
               min="10"
-              class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+              class="input"
               :value="Math.round(elementSize.width)"
               @change="updateElementSize({ width: Number(($event.target as HTMLInputElement).value), height: elementSize.height })"
             />
@@ -337,7 +441,7 @@ const objectHeight = computed({
             <input
               type="number"
               min="10"
-              class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+              class="input"
               :value="Math.round(elementSize.height)"
               @change="updateElementSize({ width: elementSize.width, height: Number(($event.target as HTMLInputElement).value) })"
             />
@@ -351,7 +455,7 @@ const objectHeight = computed({
               v-model.number="objectWidth"
               type="number"
               min="1"
-              class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+              class="input"
             />
           </div>
           <div>
@@ -360,7 +464,7 @@ const objectHeight = computed({
               v-model.number="objectHeight"
               type="number"
               min="1"
-              class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+              class="input"
             />
           </div>
         </div>
@@ -373,7 +477,7 @@ const objectHeight = computed({
               <label class="block text-gray-500 dark:text-gray-400 mb-1 font-medium text-xs leading-4">Content</label>
               <textarea 
                   v-model="textContent" 
-                  class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 focus:ring-2 focus:ring-primary-500 focus:border-transparent min-h-[60px]"
+                  class="input min-h-[60px]"
               />
           </div>
           <div>
@@ -389,7 +493,7 @@ const objectHeight = computed({
                 type="number"
                 min="8"
                 max="200"
-                class="property-input w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                class="input"
               />
             </div>
             <div>
@@ -433,6 +537,88 @@ const objectHeight = computed({
         </div>
       </template>
 
+      <template v-if="isLineOrArrow">
+        <div class="space-y-4">
+          <div>
+            <label class="block text-gray-500 dark:text-gray-400 mb-1 font-medium text-xs leading-4">Stroke Color</label>
+            <ColorPicker v-model="lineStrokeColor" />
+          </div>
+
+          <div>
+            <label class="block text-gray-500 dark:text-gray-400 mb-1 font-medium text-xs leading-4">Stroke Width</label>
+            <input
+              v-model.number="lineStrokeWidth"
+              type="range"
+              min="1"
+              max="24"
+              class="w-full"
+            />
+            <span class="text-xs text-gray-500">{{ lineStrokeWidth }}px</span>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-gray-500 dark:text-gray-400 mb-1 font-medium text-xs leading-4">Dash</label>
+              <select class="select" :value="dashStyle" @change="dashStyle = ($event.target as HTMLSelectElement).value">
+                <option value="solid">Solid</option>
+                <option value="dashed">Dashed</option>
+                <option value="dotted">Dotted</option>
+                <option value="dash-dot">Dash-dot</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-gray-500 dark:text-gray-400 mb-1 font-medium text-xs leading-4">Cap</label>
+              <select class="select" :value="lineCap" @change="lineCap = ($event.target as HTMLSelectElement).value">
+                <option value="butt">Butt</option>
+                <option value="round">Round</option>
+                <option value="square">Square</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-gray-500 dark:text-gray-400 mb-1 font-medium text-xs leading-4">Join</label>
+            <select class="select" :value="lineJoin" @change="lineJoin = ($event.target as HTMLSelectElement).value">
+              <option value="miter">Miter</option>
+              <option value="round">Round</option>
+              <option value="bevel">Bevel</option>
+            </select>
+          </div>
+
+          <div v-if="isArrow" class="space-y-4">
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-gray-500 dark:text-gray-400 mb-1 font-medium text-xs leading-4">Arrow Ends</label>
+                <select class="select" :value="arrowEnds" @change="arrowEnds = ($event.target as HTMLSelectElement).value">
+                  <option value="end">End</option>
+                  <option value="start">Start</option>
+                  <option value="both">Both</option>
+                  <option value="none">None</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-gray-500 dark:text-gray-400 mb-1 font-medium text-xs leading-4">Head Style</label>
+                <select class="select" :value="arrowHeadStyle" @change="arrowHeadStyle = ($event.target as HTMLSelectElement).value">
+                  <option value="filled">Filled</option>
+                  <option value="open">Open</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-gray-500 dark:text-gray-400 mb-1 font-medium text-xs leading-4">Head Length</label>
+                <input v-model.number="arrowHeadLength" type="number" min="4" max="80" class="input" />
+              </div>
+              <div>
+                <label class="block text-gray-500 dark:text-gray-400 mb-1 font-medium text-xs leading-4">Head Width</label>
+                <input v-model.number="arrowHeadWidth" type="number" min="4" max="80" class="input" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
+
       <!-- Schedule Properties -->
       <template v-if="scheduleMetadata">
         <div class="space-y-4 border border-gray-200 dark:border-gray-700 rounded-2xl p-4">
@@ -442,7 +628,7 @@ const objectHeight = computed({
               <p class="text-sm text-gray-700 dark:text-gray-100">Timeline</p>
             </div>
             <select
-              class="text-xs px-2 py-1 rounded-lg bg-gray-100 dark:bg-gray-800"
+              class="select-sm w-auto"
               :value="scheduleMetadata.intervalMinutes"
               @change="updateScheduleMetadata((draft) => { draft.intervalMinutes = Number(($event.target as HTMLSelectElement).value) as ScheduleMetadata['intervalMinutes'] })"
             >
@@ -455,7 +641,7 @@ const objectHeight = computed({
           <div>
             <label class="block text-xs text-gray-500 mb-1">Header Style</label>
             <select
-              class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+              class="select"
               :value="scheduleMetadata.headerStyle ?? 'minimal'"
               @change="updateScheduleMetadata((draft) => { draft.headerStyle = ($event.target as HTMLSelectElement).value as PlannerHeaderStyle })"
             >
@@ -467,7 +653,7 @@ const objectHeight = computed({
             <label class="block text-xs text-gray-500 mb-1">Title</label>
             <input
               type="text"
-              class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+              class="input"
               :value="scheduleMetadata.title"
               @input="updateScheduleMetadata((draft) => { draft.title = ($event.target as HTMLInputElement).value })"
             />
@@ -505,7 +691,7 @@ const objectHeight = computed({
                 type="number"
                 min="0"
                 max="80"
-                class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                class="input"
                 :value="scheduleMetadata.cornerRadius ?? 22"
                 @change="updateScheduleMetadata((draft) => { draft.cornerRadius = Math.max(0, Math.min(80, Number(($event.target as HTMLInputElement).value) || 0)) })"
               />
@@ -516,7 +702,7 @@ const objectHeight = computed({
                 type="number"
                 min="0"
                 max="10"
-                class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                class="input"
                 :value="scheduleMetadata.borderWidth ?? 1"
                 @change="updateScheduleMetadata((draft) => { draft.borderWidth = Math.max(0, Math.min(10, Number(($event.target as HTMLInputElement).value) || 0)) })"
               />
@@ -547,7 +733,7 @@ const objectHeight = computed({
                 type="number"
                 min="0"
                 max="23"
-                class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                class="input"
                 :value="scheduleMetadata.startHour"
                 @change="updateScheduleMetadata((draft) => { draft.startHour = Math.max(0, Math.min(23, Number(($event.target as HTMLInputElement).value) || draft.startHour)) })"
               />
@@ -558,7 +744,7 @@ const objectHeight = computed({
                 type="number"
                 min="0"
                 max="23"
-                class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                class="input"
                 :value="scheduleMetadata.endHour"
                 @change="updateScheduleMetadata((draft) => { draft.endHour = Math.max(0, Math.min(23, Number(($event.target as HTMLInputElement).value) || draft.endHour)) })"
               />
@@ -580,7 +766,7 @@ const objectHeight = computed({
           <div>
             <label class="block text-xs text-gray-500 mb-1">Header Style</label>
             <select
-              class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+              class="select"
               :value="checklistMetadata.headerStyle ?? 'tint'"
               @change="updateChecklistMetadata((draft) => { draft.headerStyle = ($event.target as HTMLSelectElement).value as PlannerHeaderStyle })"
             >
@@ -592,7 +778,7 @@ const objectHeight = computed({
             <label class="block text-xs text-gray-500 mb-1">Title</label>
             <input
               type="text"
-              class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+              class="input"
               :value="checklistMetadata.title"
               @input="updateChecklistMetadata((draft) => { draft.title = ($event.target as HTMLInputElement).value })"
             />
@@ -630,7 +816,7 @@ const objectHeight = computed({
                 type="number"
                 min="0"
                 max="80"
-                class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                class="input"
                 :value="checklistMetadata.cornerRadius ?? 22"
                 @change="updateChecklistMetadata((draft) => { draft.cornerRadius = Math.max(0, Math.min(80, Number(($event.target as HTMLInputElement).value) || 0)) })"
               />
@@ -641,7 +827,7 @@ const objectHeight = computed({
                 type="number"
                 min="0"
                 max="10"
-                class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                class="input"
                 :value="checklistMetadata.borderWidth ?? 1"
                 @change="updateChecklistMetadata((draft) => { draft.borderWidth = Math.max(0, Math.min(10, Number(($event.target as HTMLInputElement).value) || 0)) })"
               />
@@ -672,7 +858,7 @@ const objectHeight = computed({
                 type="number"
                 min="1"
                 max="30"
-                class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                class="input"
                 :value="checklistMetadata.rows"
                 @change="updateChecklistMetadata((draft) => { draft.rows = Math.max(1, Math.min(30, Number(($event.target as HTMLInputElement).value) || draft.rows)) })"
               />
@@ -728,7 +914,7 @@ const objectHeight = computed({
               <p class="text-sm text-gray-700 dark:text-gray-100">Month Grid</p>
             </div>
             <select
-              class="text-xs px-2 py-1 rounded-lg bg-gray-100 dark:bg-gray-800"
+              class="select-sm w-auto"
               :value="calendarMetadata.mode"
               @change="updateCalendarMetadata((draft) => { draft.mode = ($event.target as HTMLSelectElement).value as CalendarGridMetadata['mode'] })"
             >
@@ -743,7 +929,7 @@ const objectHeight = computed({
                 type="number"
                 min="1900"
                 max="2100"
-                class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                class="input"
                 :value="calendarMetadata.year"
                 @change="updateCalendarMetadata((draft) => { draft.year = Number(($event.target as HTMLInputElement).value) || draft.year })"
               />
@@ -751,7 +937,7 @@ const objectHeight = computed({
             <div>
               <label class="block text-xs text-gray-500 mb-1">Month</label>
               <select
-                class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                class="select"
                 :value="calendarMetadata.month"
                 @change="updateCalendarMetadata((draft) => { draft.month = Number(($event.target as HTMLSelectElement).value) || draft.month })"
               >
@@ -764,7 +950,7 @@ const objectHeight = computed({
           <div>
             <label class="block text-xs text-gray-500 mb-1">Week Starts On</label>
             <select
-              class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+              class="select"
               :value="calendarMetadata.startDay"
               @change="updateCalendarMetadata((draft) => { draft.startDay = Number(($event.target as HTMLSelectElement).value) as CalendarGridMetadata['startDay'] })"
             >
@@ -809,7 +995,7 @@ const objectHeight = computed({
             <label class="block text-xs text-gray-500 mb-1">Label</label>
             <input
               type="text"
-              class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+              class="input"
               :value="weekStripMetadata.label"
               @input="updateWeekStripMetadata((draft) => { draft.label = ($event.target as HTMLInputElement).value })"
             />
@@ -819,7 +1005,7 @@ const objectHeight = computed({
               <label class="block text-xs text-gray-500 mb-1">Start Date</label>
               <input
                 type="date"
-                class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                class="input"
                 :value="weekStripDateValue"
                 @change="handleDateInput(($event.target as HTMLInputElement).value, (iso) => updateWeekStripMetadata((draft) => { draft.startDate = iso }))"
               />
@@ -827,7 +1013,7 @@ const objectHeight = computed({
             <div>
               <label class="block text-xs text-gray-500 mb-1">Week Starts On</label>
               <select
-                class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                class="select"
                 :value="weekStripMetadata.startDay"
                 @change="updateWeekStripMetadata((draft) => { draft.startDay = Number(($event.target as HTMLSelectElement).value) as WeekStripMetadata['startDay'] })"
               >
@@ -854,7 +1040,7 @@ const objectHeight = computed({
               <label class="block text-xs text-gray-500 mb-1">Date</label>
               <input
                 type="date"
-                class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                class="input"
                 :value="dateCellDateValue"
                 @change="handleDateInput(($event.target as HTMLInputElement).value, (iso) => updateDateCellMetadata((draft) => { draft.date = iso }))"
               />
@@ -871,7 +1057,7 @@ const objectHeight = computed({
             <label class="block text-xs text-gray-500 mb-1">Note Placeholder</label>
             <input
               type="text"
-              class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+              class="input"
               :value="dateCellMetadata.notePlaceholder"
               @input="updateDateCellMetadata((draft) => { draft.notePlaceholder = ($event.target as HTMLInputElement).value })"
             />
@@ -888,7 +1074,7 @@ const objectHeight = computed({
               <p class="text-sm text-gray-700 dark:text-gray-100">Patterned Notes</p>
             </div>
             <select
-              class="text-xs px-2 py-1 rounded-lg bg-gray-100 dark:bg-gray-800"
+              class="select-sm w-auto"
               :value="plannerNoteMetadata.pattern"
               @change="updatePlannerMetadata((draft) => { draft.pattern = ($event.target as HTMLSelectElement).value as PlannerPatternVariant })"
             >
@@ -901,7 +1087,7 @@ const objectHeight = computed({
           <div>
             <label class="block text-xs text-gray-500 mb-1">Header Style</label>
             <select
-              class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+              class="select"
               :value="plannerNoteMetadata.headerStyle ?? (plannerNoteMetadata.pattern === 'hero' ? 'filled' : 'minimal')"
               @change="updatePlannerMetadata((draft) => { draft.headerStyle = ($event.target as HTMLSelectElement).value as PlannerHeaderStyle })"
             >
@@ -912,7 +1098,7 @@ const objectHeight = computed({
             <label class="block text-xs text-gray-500 mb-1">Title</label>
             <input
               type="text"
-              class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+              class="input"
               :value="plannerNoteMetadata.title"
               @input="updatePlannerMetadata((draft) => { draft.title = ($event.target as HTMLInputElement).value })"
             />
@@ -949,7 +1135,7 @@ const objectHeight = computed({
                 type="number"
                 min="0"
                 max="80"
-                class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                class="input"
                 :value="plannerNoteMetadata.cornerRadius ?? 22"
                 @change="updatePlannerMetadata((draft) => { draft.cornerRadius = Math.max(0, Math.min(80, Number(($event.target as HTMLInputElement).value) || 0)) })"
               />
@@ -960,7 +1146,7 @@ const objectHeight = computed({
                 type="number"
                 min="0"
                 max="10"
-                class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                class="input"
                 :value="plannerNoteMetadata.borderWidth ?? 1"
                 @change="updatePlannerMetadata((draft) => { draft.borderWidth = Math.max(0, Math.min(10, Number(($event.target as HTMLInputElement).value) || 0)) })"
               />
@@ -989,34 +1175,6 @@ const objectHeight = computed({
         </div>
       </template>
 
-      <!-- Photo Block Properties -->
-      <template v-if="photoBlockMetadata">
-        <div class="space-y-4 border border-gray-200 dark:border-gray-700 rounded-2xl p-4">
-          <div class="flex items-center justify-between">
-            <div>
-              <p class="text-xs font-semibold text-gray-500 uppercase tracking-widest">Photo Drop</p>
-              <p class="text-sm text-gray-700 dark:text-gray-100">Media Placeholder</p>
-            </div>
-          </div>
-          <div>
-            <label class="block text-xs text-gray-500 mb-1">Label</label>
-            <input
-              type="text"
-              class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
-              :value="photoBlockMetadata.label"
-              @input="updatePhotoMetadata((draft) => { draft.label = ($event.target as HTMLInputElement).value })"
-            />
-          </div>
-          <div>
-            <label class="block text-xs text-gray-500 mb-1">Accent Color</label>
-            <ColorPicker
-              :model-value="photoBlockMetadata.accentColor"
-              @update:model-value="(color) => updatePhotoMetadata((draft) => { draft.accentColor = color })"
-            />
-          </div>
-        </div>
-      </template>
-
       <!-- Common Properties -->
       <div class="space-y-4 pt-4 border-t border-gray-200 dark:border-gray-700">
         <div>
@@ -1039,11 +1197,53 @@ const objectHeight = computed({
               type="number"
               min="-360"
               max="360"
-              class="flex-1 w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              class="input flex-1"
             />
             <span class="text-sm text-gray-500">°</span>
           </div>
         </div>
+      </div>
+
+      <!-- Arrange / Align -->
+      <div v-if="hasSelection" class="space-y-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+        <div class="flex items-center justify-between">
+          <label class="block text-gray-500 dark:text-gray-400 font-medium text-xs leading-4">Align & Distribute</label>
+          <select v-model="alignTarget" class="select-sm w-auto">
+            <option value="canvas">Align to Page</option>
+            <option value="selection">Align to Selection</option>
+          </select>
+        </div>
+
+        <div class="grid grid-cols-3 gap-2">
+          <button class="btn-secondary-sm w-full" type="button" @click="handleAlign('left')">Left</button>
+          <button class="btn-secondary-sm w-full" type="button" @click="handleAlign('center')">Center</button>
+          <button class="btn-secondary-sm w-full" type="button" @click="handleAlign('right')">Right</button>
+          <button class="btn-secondary-sm w-full" type="button" @click="handleAlign('top')">Top</button>
+          <button class="btn-secondary-sm w-full" type="button" @click="handleAlign('middle')">Middle</button>
+          <button class="btn-secondary-sm w-full" type="button" @click="handleAlign('bottom')">Bottom</button>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <button
+            class="btn-secondary-sm w-full"
+            type="button"
+            :disabled="selectedObjects.length < 3"
+            @click="handleDistribute('horizontal')"
+          >
+            Distribute H
+          </button>
+          <button
+            class="btn-secondary-sm w-full"
+            type="button"
+            :disabled="selectedObjects.length < 3"
+            @click="handleDistribute('vertical')"
+          >
+            Distribute V
+          </button>
+        </div>
+        <p class="text-[11px] text-gray-500 dark:text-gray-400">
+          Tip: Use “Align to Page” for a single object. Use “Align to Selection” when you have multiple selected.
+        </p>
       </div>
 
       <!-- Layer Controls -->
@@ -1051,25 +1251,25 @@ const objectHeight = computed({
         <label class="block text-gray-500 dark:text-gray-400 mb-1 font-medium text-xs leading-4">Layer Order</label>
         <div class="grid grid-cols-2 gap-2">
           <button
-            class="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors font-medium text-xs leading-4"
+            class="btn-secondary-sm w-full"
             @click="editorStore.bringToFront()"
           >
             Bring to Front
           </button>
           <button
-            class="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors font-medium text-xs leading-4"
+            class="btn-secondary-sm w-full"
             @click="editorStore.sendToBack()"
           >
             Send to Back
           </button>
           <button
-            class="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors font-medium text-xs leading-4"
+            class="btn-secondary-sm w-full"
             @click="editorStore.bringForward()"
           >
             Bring Forward
           </button>
           <button
-            class="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors font-medium text-xs leading-4"
+            class="btn-secondary-sm w-full"
             @click="editorStore.sendBackward()"
           >
             Send Backward

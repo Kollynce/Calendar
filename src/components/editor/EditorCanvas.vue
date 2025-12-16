@@ -25,7 +25,8 @@ function initCanvas() {
     editorStore.initializeCanvas(canvasRef.value)
     // Small timeout to ensure container is sized
     setTimeout(() => {
-      editorStore.fitToScreen()
+      editorStore.setZoom(1)
+      editorStore.canvas?.calcOffset?.()
     }, 100)
   }
 }
@@ -117,6 +118,37 @@ function handleKeydown(e: KeyboardEvent): void {
     e.preventDefault()
     editorStore.resetZoom()
   }
+
+  // Align / Distribute (Cmd/Ctrl + Alt + Shift)
+  if (cmdKey && e.altKey && e.shiftKey) {
+    const key = e.key.toLowerCase()
+
+    if (key === 'l') {
+      e.preventDefault()
+      editorStore.alignSelection('left')
+    } else if (key === 'e') {
+      e.preventDefault()
+      editorStore.alignSelection('center')
+    } else if (key === 'r') {
+      e.preventDefault()
+      editorStore.alignSelection('right')
+    } else if (key === 't') {
+      e.preventDefault()
+      editorStore.alignSelection('top')
+    } else if (key === 'm') {
+      e.preventDefault()
+      editorStore.alignSelection('middle')
+    } else if (key === 'b') {
+      e.preventDefault()
+      editorStore.alignSelection('bottom')
+    } else if (key === 'h') {
+      e.preventDefault()
+      editorStore.distributeSelection('horizontal')
+    } else if (key === 'v') {
+      e.preventDefault()
+      editorStore.distributeSelection('vertical')
+    }
+  }
 }
 
 function handleWheel(e: WheelEvent): void {
@@ -135,7 +167,7 @@ function handleWheel(e: WheelEvent): void {
     @wheel="handleWheel"
   >
     <!-- Rulers -->
-    <EditorRulers v-if="showRulers" :zoom="zoom" />
+    <EditorRulers v-if="showRulers" :zoom="zoom" :width="canvasSize.width" :height="canvasSize.height" />
 
     <!-- Canvas Wrapper -->
     <div 

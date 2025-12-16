@@ -31,18 +31,18 @@ function formatPrice(cents: number): string {
     <!-- Filters -->
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
       <div class="flex flex-wrap gap-4">
-        <select class="input w-auto">
+        <select class="select w-auto">
           <option>All Categories</option>
           <option>Wall Calendars</option>
           <option>Desk Calendars</option>
           <option>Planners</option>
         </select>
-        <select class="input w-auto">
+        <select class="select w-auto">
           <option>All Prices</option>
           <option>Free</option>
           <option>Paid</option>
         </select>
-        <select class="input w-auto">
+        <select class="select w-auto">
           <option>Most Popular</option>
           <option>Newest</option>
           <option>Price: Low to High</option>

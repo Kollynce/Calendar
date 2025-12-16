@@ -180,7 +180,7 @@ watch(
 
 <template>
   <TransitionRoot as="template" :show="isOpen">
-    <Dialog as="div" class="relative z-50" @close="emit('close')">
+    <Dialog as="div" class="relative z-modal" @close="emit('close')">
       <TransitionChild 
         as="template" 
         enter="ease-out duration-300" 
@@ -296,7 +296,7 @@ watch(
                       <label class="text-sm font-medium text-gray-900 dark:text-white">Pages</label>
                       <select
                         v-model="pageMode"
-                        class="mt-2 w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-white"
+                        class="mt-2 select"
                       >
                         <option value="current">Current page (what’s on the canvas)</option>
                         <option value="all" :disabled="!isPdf">All months (Jan–Dec)</option>
@@ -312,7 +312,7 @@ watch(
                         <label class="text-xs font-medium text-gray-700 dark:text-gray-300">From</label>
                         <select
                           v-model.number="monthFrom"
-                          class="mt-1 w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-white"
+                          class="mt-1 select"
                         >
                           <option :value="1">Jan</option>
                           <option :value="2">Feb</option>
@@ -332,7 +332,7 @@ watch(
                         <label class="text-xs font-medium text-gray-700 dark:text-gray-300">To</label>
                         <select
                           v-model.number="monthTo"
-                          class="mt-1 w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-white"
+                          class="mt-1 select"
                         >
                           <option :value="1">Jan</option>
                           <option :value="2">Feb</option>
@@ -367,7 +367,7 @@ watch(
                       <label class="text-sm font-medium text-gray-900 dark:text-white">Quality</label>
                       <select
                         v-model="quality"
-                        class="mt-2 w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-white"
+                        class="mt-2 select"
                       >
                         <option value="screen">Screen (72 DPI)</option>
                         <option value="print" :disabled="!canExportPrintQuality">Print (300 DPI)</option>
@@ -386,7 +386,7 @@ watch(
                         step="1"
                         :value="bleed"
                         @input="bleed = Number(($event.target as HTMLInputElement).value)"
-                        class="mt-2 w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-white"
+                        class="mt-2 input"
                       />
                     </div>
 
