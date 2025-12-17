@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed, shallowRef } from 'vue'
-import { Canvas, Object as FabricObject, Textbox, Rect, Circle, Line, Group, Polygon, FabricImage } from 'fabric'
+import { Canvas, Object as FabricObject, Textbox, Rect, Circle, Line, Group, Polygon, FabricImage, ActiveSelection } from 'fabric'
 import type { 
   Project, 
   CanvasState, 
@@ -223,18 +223,18 @@ export const useEditorStore = defineStore('editor', () => {
 
     holidayLoadInFlight.add(y)
 
-    const country = calendarStore.config?.value?.country ?? 'KE'
+    const country = calendarStore.config?.country ?? 'KE'
     holidayService
       .getHolidays(country, y)
       .then(({ holidays }) => {
-        const showHolidays = calendarStore.config?.value?.showHolidays ?? true
-        const showCustom = calendarStore.config?.value?.showCustomHolidays ?? true
+        const showHolidays = calendarStore.config?.showHolidays ?? true
+        const showCustom = calendarStore.config?.showCustomHolidays ?? true
         const base = showHolidays ? holidays : ([] as Holiday[])
         const merged =
           showCustom
             ? holidayService.mergeWithCustomHolidays(
                 base,
-                (calendarStore.customHolidays as any)?.value ?? [],
+                (calendarStore.customHolidays as any) ?? [],
                 y,
               )
             : base
@@ -256,9 +256,9 @@ export const useEditorStore = defineStore('editor', () => {
     const y = Number(year)
     if (!Number.isFinite(y)) return []
 
-    const cfgYear = calendarStore.config?.value?.year
+    const cfgYear = calendarStore.config?.year
     if (cfgYear === y) {
-      return (calendarStore.allHolidays?.value ?? []) as Holiday[]
+      return (calendarStore.allHolidays ?? []) as Holiday[]
     }
 
     const cached = holidayCacheByYear.get(y)
@@ -1501,8 +1501,8 @@ export const useEditorStore = defineStore('editor', () => {
   }
 
 
-  function handleSelectionChange(e: any): void {
-    const selected = (e.selected || []) as any[]
+  function handleSelectionChange(): void {
+    const selected = (canvas.value?.getActiveObjects?.() ?? []) as any[]
     selected.forEach((obj) => ensureObjectIdentity(obj))
     selectedObjectIds.value = selected.map((obj) => obj.id).filter(Boolean)
   }
@@ -1851,8 +1851,10 @@ export const useEditorStore = defineStore('editor', () => {
   } {
     const objs = (group.getObjects?.() ?? []) as any[]
     const line = (objs.find((o) => o?.data?.arrowPart === 'line' || o?.type === 'line') ?? null) as Line | null
+
     const startHead = (objs.find((o) => o?.data?.arrowPart === 'startHead') ?? null) as Polygon | null
     const endHead = (objs.find((o) => o?.data?.arrowPart === 'endHead') ?? null) as Polygon | null
+
     return { line, startHead, endHead }
   }
 
@@ -1863,8 +1865,8 @@ export const useEditorStore = defineStore('editor', () => {
     stroke: string,
     strokeWidth: number,
     style: 'filled' | 'open',
-    strokeLineCap?: string,
-    strokeLineJoin?: string,
+    strokeLineCap?: CanvasLineCap,
+    strokeLineJoin?: CanvasLineJoin,
   ): Polygon {
     const points =
       part === 'endHead'
@@ -1903,8 +1905,8 @@ export const useEditorStore = defineStore('editor', () => {
 
     const stroke = (line as any)?.stroke ?? opts.stroke ?? '#000000'
     const strokeWidth = Math.max(1, Number((line as any)?.strokeWidth ?? opts.strokeWidth ?? 2) || 2)
-    const strokeLineCap = ((line as any)?.strokeLineCap ?? opts.strokeLineCap) as string | undefined
-    const strokeLineJoin = ((line as any)?.strokeLineJoin ?? opts.strokeLineJoin) as string | undefined
+    const strokeLineCap = ((line as any)?.strokeLineCap ?? opts.strokeLineCap) as CanvasLineCap | undefined
+    const strokeLineJoin = ((line as any)?.strokeLineJoin ?? opts.strokeLineJoin) as CanvasLineJoin | undefined
 
     const headLength = Math.max(4, Number(opts.arrowHeadLength ?? Math.max(14, strokeWidth * 4)) || Math.max(14, strokeWidth * 4))
     const headWidth = Math.max(4, Number(opts.arrowHeadWidth ?? Math.max(10, headLength * 0.7)) || Math.max(10, headLength * 0.7))
@@ -2360,6 +2362,292 @@ export const useEditorStore = defineStore('editor', () => {
     })
   }
 
+  function cutSelected(): void {
+    if (!canvas.value) return
+    const activeObject = canvas.value.getActiveObject()
+    if (!activeObject) return
+    copySelected()
+    deleteSelected()
+  }
+
+  function selectAll(): void {
+    if (!canvas.value) return
+    const allObjects = (canvas.value.getObjects() as any[]).filter((obj) => {
+      if (!obj) return false
+      if (obj.visible === false) return false
+      if (obj.selectable === false) return false
+      return true
+    }) as FabricObject[]
+
+    if (allObjects.length === 0) return
+    if (allObjects.length === 1) {
+      canvas.value.setActiveObject(allObjects[0]!)
+      canvas.value.requestRenderAll?.()
+      canvas.value.renderAll()
+      return
+    }
+
+    const sel = new ActiveSelection(allObjects, { canvas: canvas.value })
+    canvas.value.setActiveObject(sel)
+    canvas.value.requestRenderAll?.()
+    canvas.value.renderAll()
+  }
+
+  function nudgeSelection(dx: number, dy: number): void {
+    if (!canvas.value) return
+    const activeObjects = canvas.value.getActiveObjects()
+    if (activeObjects.length === 0) return
+
+    activeObjects.forEach((obj) => {
+      const left = Number((obj as any).left ?? 0) || 0
+      const top = Number((obj as any).top ?? 0) || 0
+      obj.set({ left: left + dx, top: top + dy } as any)
+      obj.setCoords?.()
+    })
+
+    canvas.value.getActiveObject()?.setCoords?.()
+    canvas.value.requestRenderAll?.()
+    canvas.value.renderAll()
+    isDirty.value = true
+    queueHistorySave()
+  }
+
+  function groupSelected(): void {
+    if (!canvas.value) return
+    const objects = canvas.value.getActiveObjects()
+    const ids = selectedObjectIds.value
+
+    const resolved =
+      objects.length >= 2
+        ? objects
+        : ids
+            .map((id) => getCanvasObjectById(id))
+            .filter(Boolean) as FabricObject[]
+
+    console.log('[groupSelected] start', {
+      activeObjectsLen: objects.length,
+      selectedIdsLen: ids.length,
+      resolvedLen: resolved.length,
+      activeType: (canvas.value.getActiveObject() as any)?.type ?? null,
+    })
+
+    if (resolved.length < 2) {
+      console.log('[groupSelected] abort: need >=2 objects')
+      return
+    }
+
+    const before = canvas.value.getObjects() as any[]
+    console.log('[groupSelected] before objects', before.map((o) => ({ type: o?.type, id: o?.id })))
+
+    const sel = new ActiveSelection(resolved, { canvas: canvas.value })
+    canvas.value.setActiveObject(sel)
+
+    const active: any = canvas.value.getActiveObject() as any
+    console.log('[groupSelected] active after setActiveObject', {
+      type: active?.type ?? null,
+      hasToGroup: typeof active?.toGroup === 'function',
+    })
+    if (!active) {
+      console.log('[groupSelected] abort: no active object')
+      return
+    }
+
+    const canToGroup = typeof active.toGroup === 'function'
+
+    if (!canToGroup) {
+      console.log('[groupSelected] fallback: manual group')
+      const all = canvas.value.getObjects() as any[]
+      const indices = resolved.map((obj) => all.indexOf(obj as any)).filter((i) => i >= 0)
+      const insertIndex = indices.length ? Math.max(...indices) : all.length
+
+      canvas.value.discardActiveObject()
+
+      const canvasAny: any = canvas.value as any
+      try {
+        resolved.forEach((obj) => {
+          canvas.value!.remove(obj)
+        })
+
+        const group = new Group(resolved as any)
+        ensureObjectIdentity(group as any)
+
+        canvas.value.add(group)
+
+        if (typeof canvasAny.moveObjectTo === 'function') {
+          canvasAny.moveObjectTo(group, insertIndex)
+        } else if (typeof (group as any).moveTo === 'function') {
+          ;(group as any).moveTo(insertIndex)
+        }
+
+        canvas.value.setActiveObject(group)
+        canvas.value.requestRenderAll?.()
+        canvas.value.renderAll()
+        snapshotCanvasState()
+        console.log('[groupSelected] success (manual)', {
+          groupId: (group as any)?.id ?? null,
+          children: Array.isArray((group as any)?._objects) ? (group as any)._objects.length : null,
+        })
+        return
+      } catch (err) {
+        console.error('[groupSelected] manual group failed', err)
+        resolved.forEach((obj) => {
+          try {
+            if (!(canvas.value!.getObjects() as any[]).includes(obj as any)) {
+              canvas.value!.add(obj)
+            }
+          } catch {
+            // ignore
+          }
+        })
+        canvas.value.requestRenderAll?.()
+        canvas.value.renderAll()
+        return
+      }
+    }
+
+    active.toGroup?.()
+    const maybeGroup = canvas.value.getActiveObject() as any
+    const after = canvas.value.getObjects() as any[]
+    console.log('[groupSelected] after toGroup', {
+      activeType: maybeGroup?.type ?? null,
+      objects: after.map((o) => ({ type: o?.type, id: o?.id, children: Array.isArray(o?._objects) ? o._objects.length : 0 })),
+    })
+
+    const group =
+      (maybeGroup && maybeGroup.type === 'group' ? maybeGroup : null) ??
+      after.find((obj) => {
+        if (!obj || obj.type !== 'group') return false
+        const children = Array.isArray(obj._objects) ? obj._objects : []
+        if (children.length !== resolved.length) return false
+        return resolved.every((r) => children.includes(r))
+      }) ??
+      before.find((obj) => {
+        if (!obj || obj.type !== 'group') return false
+        const children = Array.isArray(obj._objects) ? obj._objects : []
+        if (children.length !== resolved.length) return false
+        return resolved.every((r) => children.includes(r))
+      })
+
+    if (!group || group.type !== 'group') {
+      console.log('[groupSelected] abort: could not locate group')
+      return
+    }
+
+    console.log('[groupSelected] success', {
+      groupId: (group as any)?.id ?? null,
+      children: Array.isArray((group as any)?._objects) ? (group as any)._objects.length : null,
+    })
+
+    ensureObjectIdentity(group as any)
+    canvas.value.setActiveObject(group as any)
+    canvas.value.requestRenderAll?.()
+    canvas.value.renderAll()
+    snapshotCanvasState()
+  }
+
+  function ungroupSelected(): void {
+    if (!canvas.value) return
+    const active = canvas.value.getActiveObject() as any
+    if (!active) return
+    if (active.type !== 'group') return
+
+    const group = active as any
+    const children = (Array.isArray(group._objects) ? group._objects.slice() : []) as FabricObject[]
+    if (children.length === 0) return
+
+    const canvasAny: any = canvas.value as any
+    const all = canvas.value.getObjects() as any[]
+    const groupIndex = all.indexOf(group)
+
+    canvas.value.discardActiveObject()
+
+    if (typeof group._restoreObjectsState === 'function') {
+      group._restoreObjectsState()
+    }
+
+    canvas.value.remove(group)
+
+    children.forEach((obj) => {
+      ;(obj as any).group = undefined
+      ensureObjectIdentity(obj as any)
+      canvas.value!.add(obj)
+      obj.setCoords?.()
+    })
+
+    if (typeof canvasAny.moveObjectTo === 'function' && groupIndex >= 0) {
+      children.forEach((obj, i) => {
+        canvasAny.moveObjectTo(obj, groupIndex + i)
+      })
+    }
+
+    if (children.length === 1) {
+      canvas.value.setActiveObject(children[0]!)
+    } else {
+      const sel = new ActiveSelection(children, { canvas: canvas.value })
+      canvas.value.setActiveObject(sel)
+    }
+
+    canvas.value.getActiveObject()?.setCoords?.()
+    canvas.value.requestRenderAll?.()
+    canvas.value.renderAll()
+    snapshotCanvasState()
+  }
+
+  function clearSelection(): void {
+    if (!canvas.value) return
+    canvas.value.discardActiveObject()
+    canvas.value.requestRenderAll?.()
+    canvas.value.renderAll()
+  }
+
+  function toggleLockSelected(): void {
+    if (!canvas.value) return
+    const activeObjects = canvas.value.getActiveObjects()
+    if (activeObjects.length === 0) return
+
+    const shouldUnlock = activeObjects.some((obj: any) => obj?.selectable === false)
+    const nextSelectable = shouldUnlock
+
+    activeObjects.forEach((obj: any) => {
+      obj.selectable = nextSelectable
+      obj.evented = nextSelectable
+      obj.hasControls = nextSelectable
+    })
+
+    if (nextSelectable) {
+      if (activeObjects.length === 1) {
+        canvas.value.setActiveObject(activeObjects[0]!)
+      } else {
+        const sel = new ActiveSelection(activeObjects, { canvas: canvas.value })
+        canvas.value.setActiveObject(sel)
+      }
+    } else {
+      canvas.value.discardActiveObject()
+    }
+
+    canvas.value.requestRenderAll?.()
+    canvas.value.renderAll()
+    snapshotCanvasState()
+  }
+
+  function toggleVisibilitySelected(): void {
+    if (!canvas.value) return
+    const activeObjects = canvas.value.getActiveObjects()
+    if (activeObjects.length === 0) return
+
+    const shouldShow = activeObjects.some((obj: any) => obj?.visible === false)
+    const nextVisible = shouldShow
+
+    activeObjects.forEach((obj: any) => {
+      obj.visible = nextVisible
+    })
+
+    canvas.value.discardActiveObject()
+    canvas.value.requestRenderAll?.()
+    canvas.value.renderAll()
+    snapshotCanvasState()
+  }
+
   // ═══════════════════════════════════════════════════════════════
   // OBJECT PROPERTIES
   // ═══════════════════════════════════════════════════════════════
@@ -2572,83 +2860,115 @@ export const useEditorStore = defineStore('editor', () => {
   ): void {
     if (!canvas.value) return
 
-    // Get object bounds in canvas coordinates (not affected by viewportTransform)
-    // This uses the object's actual position and dimensions
+    // Get the active selection group if objects are multi-selected
+    const activeObject = canvas.value.getActiveObject()
+    const isActiveSelection = activeObject && (activeObject as any).type === 'activeselection'
+    
+    // IMPORTANT: Get objects BEFORE discarding the selection
+    // After discarding, _objects reference becomes invalid
+    const objects: FabricObject[] = isActiveSelection 
+      ? [...((activeObject as any)._objects || [])]  // Copy the array before discarding
+      : canvas.value.getActiveObjects()
+    if (!objects.length) return
+    
+    // For ActiveSelection, discard it so objects have their absolute coordinates
+    if (isActiveSelection) {
+      canvas.value.discardActiveObject()
+    }
+    
+    // Get object bounds using getBoundingRect which gives absolute canvas coordinates
     const getObjectBounds = (obj: FabricObject) => {
-      // Ensure coords are up to date
       obj.setCoords?.()
       
-      // Get the object's position and scaled dimensions
-      const left = Number((obj as any).left ?? 0)
-      const top = Number((obj as any).top ?? 0)
-      const width = obj.getScaledWidth?.() ?? (obj as any).width ?? 0
-      const height = obj.getScaledHeight?.() ?? (obj as any).height ?? 0
-      
-      // Account for originX/originY
-      const originX = (obj as any).originX ?? 'left'
-      const originY = (obj as any).originY ?? 'top'
-      
-      let adjustedLeft = left
-      let adjustedTop = top
-      
-      // Adjust for origin
-      if (originX === 'center') {
-        adjustedLeft = left - width / 2
-      } else if (originX === 'right') {
-        adjustedLeft = left - width
-      }
-      
-      if (originY === 'center') {
-        adjustedTop = top - height / 2
-      } else if (originY === 'bottom') {
-        adjustedTop = top - height
+      // getBoundingRect returns absolute coordinates regardless of origin
+      const boundingRect = obj.getBoundingRect?.() || {
+        left: Number((obj as any).left ?? 0),
+        top: Number((obj as any).top ?? 0),
+        width: obj.getScaledWidth?.() ?? (obj as any).width ?? 0,
+        height: obj.getScaledHeight?.() ?? (obj as any).height ?? 0,
       }
       
       return {
-        left: adjustedLeft,
-        top: adjustedTop,
-        width,
-        height,
-        right: adjustedLeft + width,
-        bottom: adjustedTop + height,
-        centerX: adjustedLeft + width / 2,
-        centerY: adjustedTop + height / 2
+        left: boundingRect.left,
+        top: boundingRect.top,
+        width: boundingRect.width,
+        height: boundingRect.height,
+        right: boundingRect.left + boundingRect.width,
+        bottom: boundingRect.top + boundingRect.height,
+        centerX: boundingRect.left + boundingRect.width / 2,
+        centerY: boundingRect.top + boundingRect.height / 2
       }
     }
 
-    const objects = canvas.value.getActiveObjects()
-    if (!objects.length) return
+    // Use the actual canvas dimensions (artboard size) from project, not affected by zoom
+    // canvas.value.width/height can be affected by viewport transform, so we use project dimensions
+    const canvasWidth = project.value?.canvas.width || canvas.value.width || 0
+    const canvasHeight = project.value?.canvas.height || canvas.value.height || 0
 
-    // Use the actual canvas dimensions (artboard size), not affected by zoom
-    const canvasWidth = canvas.value.width || 0
-    const canvasHeight = canvas.value.height || 0
-
-    const objectBounds = objects.map((obj) => ({
+    type ObjectBoundsEntry = { obj: FabricObject; bounds: ReturnType<typeof getObjectBounds> }
+    
+    const objectBounds: ObjectBoundsEntry[] = objects.map((obj: FabricObject) => ({
       obj,
       bounds: getObjectBounds(obj),
     }))
 
-    // For multi-select alignment, "selection" mode uses the largest object as reference
-    const keyEntry =
-      mode === 'selection' && objectBounds.length > 1
-        ? objectBounds.reduce(
-            (best, cur) => {
-              const bestArea = best.bounds.width * best.bounds.height
-              const curArea = cur.bounds.width * cur.bounds.height
-              return curArea > bestArea ? cur : best
-            },
-            objectBounds[0]!,
-          )
-        : null
+    // For multi-select "selection" mode, find the key object based on alignment direction
+    // Left align -> use leftmost object, Right align -> use rightmost, etc.
+    // This matches behavior of design apps like Figma, Adobe XD, etc.
+    const getKeyEntry = (): ObjectBoundsEntry | null => {
+      if (mode !== 'selection' || objectBounds.length <= 1) return null
+      
+      switch (alignment) {
+        case 'left':
+          // Use the leftmost object as reference
+          return objectBounds.reduce((best: ObjectBoundsEntry, cur: ObjectBoundsEntry) => 
+            cur.bounds.left < best.bounds.left ? cur : best, objectBounds[0]!)
+        case 'right':
+          // Use the rightmost object as reference
+          return objectBounds.reduce((best: ObjectBoundsEntry, cur: ObjectBoundsEntry) => 
+            cur.bounds.right > best.bounds.right ? cur : best, objectBounds[0]!)
+        case 'center':
+          // Use the object closest to the horizontal center of all objects
+          const allCenterX = objectBounds.reduce((sum, e) => sum + e.bounds.centerX, 0) / objectBounds.length
+          return objectBounds.reduce((best: ObjectBoundsEntry, cur: ObjectBoundsEntry) => 
+            Math.abs(cur.bounds.centerX - allCenterX) < Math.abs(best.bounds.centerX - allCenterX) ? cur : best, objectBounds[0]!)
+        case 'top':
+          // Use the topmost object as reference
+          return objectBounds.reduce((best: ObjectBoundsEntry, cur: ObjectBoundsEntry) => 
+            cur.bounds.top < best.bounds.top ? cur : best, objectBounds[0]!)
+        case 'bottom':
+          // Use the bottommost object as reference
+          return objectBounds.reduce((best: ObjectBoundsEntry, cur: ObjectBoundsEntry) => 
+            cur.bounds.bottom > best.bounds.bottom ? cur : best, objectBounds[0]!)
+        case 'middle':
+          // Use the object closest to the vertical center of all objects
+          const allCenterY = objectBounds.reduce((sum, e) => sum + e.bounds.centerY, 0) / objectBounds.length
+          return objectBounds.reduce((best: ObjectBoundsEntry, cur: ObjectBoundsEntry) => 
+            Math.abs(cur.bounds.centerY - allCenterY) < Math.abs(best.bounds.centerY - allCenterY) ? cur : best, objectBounds[0]!)
+        default:
+          return null
+      }
+    }
+    
+    const keyEntry = getKeyEntry()
+    
+    // DEBUG
+    console.log('=== ALIGN DEBUG ===')
+    console.log('mode:', mode, 'alignment:', alignment)
+    console.log('objectBounds.length:', objectBounds.length)
+    console.log('All objects:', objectBounds.map(e => ({ type: (e.obj as any).type, left: e.bounds.left, right: e.bounds.right })))
+    console.log('keyEntry:', keyEntry ? { type: (keyEntry.obj as any).type, bounds: keyEntry.bounds } : null)
 
+    type BoundsAccumulator = { left: number; top: number; right: number; bottom: number; centerX: number; centerY: number }
+    
     // Define the target bounds for alignment
-    const targetBounds =
+    const targetBounds: BoundsAccumulator =
       mode === 'canvas'
         ? { left: 0, top: 0, right: canvasWidth, bottom: canvasHeight, centerX: canvasWidth / 2, centerY: canvasHeight / 2 }
         : keyEntry
           ? keyEntry.bounds
           : objectBounds.reduce(
-              (acc, entry) => {
+              (acc: BoundsAccumulator, entry: ObjectBoundsEntry) => {
                 acc.left = Math.min(acc.left, entry.bounds.left)
                 acc.top = Math.min(acc.top, entry.bounds.top)
                 acc.right = Math.max(acc.right, entry.bounds.right)
@@ -2671,7 +2991,8 @@ export const useEditorStore = defineStore('editor', () => {
       ;(targetBounds as any).centerY = (targetBounds.top + targetBounds.bottom) / 2
     }
 
-    objectBounds.forEach(({ obj, bounds }) => {
+    // Now align objects - ActiveSelection was already discarded above if needed
+    objectBounds.forEach(({ obj, bounds }: { obj: FabricObject; bounds: ReturnType<typeof getObjectBounds> }) => {
       // Skip the key object in selection mode
       if (keyEntry && obj === keyEntry.obj) return
       
@@ -2706,6 +3027,17 @@ export const useEditorStore = defineStore('editor', () => {
       obj.set({ left: nextLeft, top: nextTop } as any)
       obj.setCoords?.()
     })
+    
+    // Re-select all objects if we had an ActiveSelection
+    if (isActiveSelection) {
+      const allObjects = objectBounds.map((e: { obj: FabricObject }) => e.obj)
+      if (allObjects.length > 1) {
+        const sel = new ActiveSelection(allObjects, { canvas: canvas.value })
+        canvas.value.setActiveObject(sel)
+      } else if (allObjects.length === 1 && allObjects[0]) {
+        canvas.value.setActiveObject(allObjects[0])
+      }
+    }
 
     // Keep the active selection box in sync
     canvas.value.getActiveObject()?.setCoords?.()
@@ -2808,26 +3140,17 @@ export const useEditorStore = defineStore('editor', () => {
   const MIN_ZOOM = 0.1
   const MAX_ZOOM = 8
 
-  function setZoom(newZoom: number, point?: { x: number; y: number }): void {
+  function setZoom(newZoom: number, _point?: { x: number; y: number }): void {
     if (!canvas.value) return
 
     const clampedZoom = Math.min(Math.max(newZoom, MIN_ZOOM), MAX_ZOOM)
     zoom.value = clampedZoom
     
-    if (point) {
-      // Zoom to specific point (cursor position) - Adobe-like behavior
-      canvas.value.zoomToPoint(point, clampedZoom)
-    } else {
-      // Zoom to center
-      const center = canvas.value.getCenterPoint()
-      canvas.value.zoomToPoint(center, clampedZoom)
-    }
-    
-    // Sync panOffset from viewportTransform
-    const vpt = canvas.value.viewportTransform
-    if (vpt) {
-      panOffset.value = { x: vpt[4], y: vpt[5] }
-    }
+    // NOTE: Visual zoom is handled by CSS transforms in AdobeCanvas.vue
+    // We do NOT apply FabricJS's zoomToPoint here because it would create
+    // a double-zoom effect and interfere with object coordinate calculations.
+    // The viewportTransform should remain at identity [1,0,0,1,0,0] so that
+    // object left/top values are always in pure canvas coordinates.
     
     canvas.value.requestRenderAll()
   }
@@ -2847,9 +3170,9 @@ export const useEditorStore = defineStore('editor', () => {
   function resetZoom(): void {
     if (!canvas.value) return
     
-    // Reset zoom and center the canvas
+    // Reset zoom - visual zoom is handled by CSS transforms in AdobeCanvas.vue
+    // Keep viewportTransform at identity so object coordinates remain in pure canvas space
     zoom.value = 1
-    canvas.value.setViewportTransform([1, 0, 0, 1, 0, 0])
     panOffset.value = { x: 0, y: 0 }
     canvas.value.requestRenderAll()
   }
@@ -2857,26 +3180,18 @@ export const useEditorStore = defineStore('editor', () => {
   function setPan(x: number, y: number): void {
     if (!canvas.value) return
     
-    const vpt = canvas.value.viewportTransform
-    if (!vpt) return
-    
-    vpt[4] = x
-    vpt[5] = y
+    // Pan is handled by CSS transforms in AdobeCanvas.vue
+    // We only update the panOffset ref here for state tracking
     panOffset.value = { x, y }
-    canvas.value.setViewportTransform(vpt)
     canvas.value.requestRenderAll()
   }
 
   function panBy(deltaX: number, deltaY: number): void {
     if (!canvas.value) return
     
-    const vpt = canvas.value.viewportTransform
-    if (!vpt) return
-    
-    vpt[4] += deltaX
-    vpt[5] += deltaY
-    panOffset.value = { x: vpt[4], y: vpt[5] }
-    canvas.value.setViewportTransform(vpt)
+    // Pan is handled by CSS transforms in AdobeCanvas.vue
+    // We only update the panOffset ref here for state tracking
+    panOffset.value = { x: panOffset.value.x + deltaX, y: panOffset.value.y + deltaY }
     canvas.value.requestRenderAll()
   }
 
@@ -2898,10 +3213,10 @@ export const useEditorStore = defineStore('editor', () => {
     const centerX = (containerWidth - canvasWidth * scale) / 2
     const centerY = (containerHeight - canvasHeight * scale) / 2
 
-    // Apply zoom and pan together
+    // Visual zoom/pan is handled by CSS transforms in AdobeCanvas.vue
+    // We only update the refs here for state tracking
+    // Do NOT apply FabricJS viewportTransform as it would interfere with object coordinates
     zoom.value = scale
-    const vpt: [number, number, number, number, number, number] = [scale, 0, 0, scale, centerX, centerY]
-    canvas.value.setViewportTransform(vpt)
     panOffset.value = { x: centerX, y: centerY }
     canvas.value.requestRenderAll()
   }
@@ -3208,7 +3523,15 @@ export const useEditorStore = defineStore('editor', () => {
     deleteSelected,
     duplicateSelected,
     copySelected,
+    cutSelected,
     paste,
+    selectAll,
+    nudgeSelection,
+    groupSelected,
+    ungroupSelected,
+    clearSelection,
+    toggleLockSelected,
+    toggleVisibilitySelected,
     updateObjectProperty,
     // Object access/helpers
     selectObjectById,

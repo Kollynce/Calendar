@@ -45,7 +45,6 @@ const editorStore = useEditorStore()
 
 // Store refs
 const { 
-  zoom, 
   hasSelection, 
   selectedObjects, 
   isDirty, 
@@ -691,9 +690,11 @@ const weekStartOptions: { value: 0 | 1 | 2 | 3 | 4 | 5 | 6; label: string }[] = 
   { value: 6, label: 'Saturday' },
 ]
 
-function normalizeDateInput(value: string): string {
+function normalizeDateInput(value: string | null | undefined): string {
   if (!value) return ''
-  return value.includes('T') ? value.split('T')[0] : value
+  if (!value.includes('T')) return value
+  const [datePart] = value.split('T')
+  return datePart ?? ''
 }
 
 const weekStripDateValue = computed(() =>
@@ -1365,7 +1366,9 @@ function removeUploadedImage(id: string) {
 }
 
 function handleAlign(action: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom') {
-  editorStore.alignSelection?.(action, alignTarget.value) ?? editorStore.alignObjects(action)
+  // alignSelection is a void function, so we can't use ?? operator
+  // Just call alignSelection directly with the target mode
+  editorStore.alignSelection(action, alignTarget.value)
 }
 
 function handleDistribute(axis: 'horizontal' | 'vertical') {
@@ -1706,7 +1709,7 @@ function handleDistribute(axis: 'horizontal' | 'vertical') {
         </div>
 
         <!-- Properties Panel -->
-        <div :class="['flex flex-col border-b border-white/5 transition-all duration-200', isPropertiesCollapsed ? 'h-8' : (isLayersCollapsed ? 'flex-1' : 'flex-1')]">
+        <div :class="['flex flex-col min-h-0 border-b border-white/5 transition-all duration-200', isPropertiesCollapsed ? 'h-8' : (isLayersCollapsed ? 'flex-1' : 'flex-1')]">
           <button 
             @click="isPropertiesCollapsed = !isPropertiesCollapsed"
             class="px-3 py-1.5 border-b border-white/5 shrink-0 flex items-center justify-between hover:bg-white/5 transition-colors cursor-pointer"
@@ -1720,7 +1723,7 @@ function handleDistribute(axis: 'horizontal' | 'vertical') {
             </span>
           </button>
           
-          <div v-show="!isPropertiesCollapsed" class="flex-1 overflow-y-auto space-y-3 p-3">
+          <div v-show="!isPropertiesCollapsed" class="flex-1 min-h-0 overflow-y-auto space-y-3 p-3">
             <!-- Template Overrides -->
             <section
               v-if="activeTemplate"
@@ -2342,7 +2345,7 @@ function handleDistribute(axis: 'horizontal' | 'vertical') {
                   <div class="grid grid-cols-2 gap-3">
                     <div>
                       <label class="text-xs font-medium text-white/60 mb-1.5 block">Dash</label>
-                      <select class="control-glass" :value="dashStyle" @change="dashStyle = ($event.target as HTMLSelectElement).value">
+                      <select class="control-glass" :value="dashStyle" @change="dashStyle = ($event.target as HTMLSelectElement).value as 'solid' | 'dashed' | 'dotted' | 'dash-dot'">
                         <option value="solid">Solid</option>
                         <option value="dashed">Dashed</option>
                         <option value="dotted">Dotted</option>
@@ -2995,7 +2998,7 @@ function handleDistribute(axis: 'horizontal' | 'vertical') {
         </div>
         
         <!-- Layers Panel -->
-        <div :class="['flex flex-col bg-[#0b111d] transition-all duration-200', isLayersCollapsed ? 'h-8' : (isPropertiesCollapsed ? 'flex-1' : 'flex-1')]">
+        <div :class="['flex flex-col min-h-0 bg-[#0b111d] transition-all duration-200', isLayersCollapsed ? 'h-8' : (isPropertiesCollapsed ? 'flex-1' : 'flex-1')]">
           <button 
             @click="isLayersCollapsed = !isLayersCollapsed"
             class="px-3 py-1.5 border-b border-white/10 shrink-0 flex items-center justify-between hover:bg-white/5 transition-colors cursor-pointer"
@@ -3006,7 +3009,7 @@ function handleDistribute(axis: 'horizontal' | 'vertical') {
             </div>
             <span class="text-[9px] px-1.5 py-0.5 rounded bg-white/10 text-white/60">{{ editorStore.canvas?.getObjects().length || 0 }}</span>
           </button>
-          <div v-show="!isLayersCollapsed" class="flex-1 overflow-y-auto">
+          <div v-show="!isLayersCollapsed" class="flex-1 min-h-0 overflow-y-auto">
             <EditorLayers />
           </div>
         </div>

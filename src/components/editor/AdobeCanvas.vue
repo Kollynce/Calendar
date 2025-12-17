@@ -151,28 +151,224 @@ function handleMouseUp() {
   }
 }
 
+function isTypingInField(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null
+  if (!el) return false
+  const tag = el.tagName
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true
+  if (el.isContentEditable) return true
+  return false
+}
+
+function isEditingFabricText(): boolean {
+  const active: any = editorStore.canvas?.getActiveObject?.() ?? null
+  return !!active?.isEditing
+}
+
 function handleKeyDown(e: KeyboardEvent) {
-  if (e.code === 'Space' && !e.repeat) {
+  const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0
+  const cmdKey = isMac ? e.metaKey : e.ctrlKey
+
+  const typing = isTypingInField(e.target)
+  const textEditing = isEditingFabricText()
+  const shouldIgnoreShortcuts = typing || textEditing
+
+  if (!canvasWrapperRef.value) return
+
+  if (!shouldIgnoreShortcuts && e.key === 'Escape') {
+    e.preventDefault()
+    editorStore.clearSelection()
+    return
+  }
+
+  if (!shouldIgnoreShortcuts && e.code === 'Space' && !e.repeat) {
     e.preventDefault()
     isSpacePressed.value = true
   }
-  
-  // Zoom shortcuts
-  if ((e.ctrlKey || e.metaKey) && e.key === '=') {
+
+  if (!shouldIgnoreShortcuts && (e.key === 'Delete' || e.key === 'Backspace')) {
+    e.preventDefault()
+    editorStore.deleteSelected()
+    return
+  }
+
+  if (!shouldIgnoreShortcuts && cmdKey && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+    e.preventDefault()
+    editorStore.undo()
+    return
+  }
+
+  if (
+    !shouldIgnoreShortcuts &&
+    ((cmdKey && e.shiftKey && e.key.toLowerCase() === 'z') || (cmdKey && e.key.toLowerCase() === 'y'))
+  ) {
+    e.preventDefault()
+    editorStore.redo()
+    return
+  }
+
+  if (!shouldIgnoreShortcuts && cmdKey && e.key.toLowerCase() === 'x') {
+    e.preventDefault()
+    editorStore.cutSelected()
+    return
+  }
+  if (!shouldIgnoreShortcuts && cmdKey && e.key.toLowerCase() === 'c') {
+    e.preventDefault()
+    editorStore.copySelected()
+    return
+  }
+  if (!shouldIgnoreShortcuts && cmdKey && e.key.toLowerCase() === 'v') {
+    e.preventDefault()
+    editorStore.paste()
+    return
+  }
+
+  if (!shouldIgnoreShortcuts && cmdKey && e.key.toLowerCase() === 'd') {
+    e.preventDefault()
+    editorStore.duplicateSelected()
+    return
+  }
+
+  if (!shouldIgnoreShortcuts && cmdKey && e.key.toLowerCase() === 'a') {
+    e.preventDefault()
+    editorStore.selectAll()
+    return
+  }
+
+  if (!shouldIgnoreShortcuts && cmdKey && e.key.toLowerCase() === 'g' && !e.shiftKey) {
+    e.preventDefault()
+    console.log('[shortcuts] group', {
+      key: e.key,
+      code: e.code,
+      cmdKey,
+      shift: e.shiftKey,
+      alt: e.altKey,
+      typing,
+      textEditing,
+      activeObjects: editorStore.canvas?.getActiveObjects?.()?.length ?? null,
+    })
+    editorStore.groupSelected()
+    return
+  }
+  if (!shouldIgnoreShortcuts && cmdKey && e.key.toLowerCase() === 'g' && e.shiftKey) {
+    e.preventDefault()
+    console.log('[shortcuts] ungroup', {
+      key: e.key,
+      code: e.code,
+      cmdKey,
+      shift: e.shiftKey,
+      alt: e.altKey,
+      typing,
+      textEditing,
+      active: (editorStore.canvas?.getActiveObject?.() as any)?.type ?? null,
+    })
+    editorStore.ungroupSelected()
+    return
+  }
+
+  if (!shouldIgnoreShortcuts && cmdKey && e.shiftKey && e.key.toLowerCase() === 'l') {
+    e.preventDefault()
+    editorStore.toggleLockSelected()
+    return
+  }
+
+  if (!shouldIgnoreShortcuts && cmdKey && e.shiftKey && e.key.toLowerCase() === 'h') {
+    e.preventDefault()
+    editorStore.toggleVisibilitySelected()
+    return
+  }
+
+  if (!shouldIgnoreShortcuts && cmdKey && (e.key === ']' || e.key === '[')) {
+    e.preventDefault()
+    if (e.key === ']') {
+      if (e.shiftKey) editorStore.bringToFront()
+      else editorStore.bringForward()
+    } else {
+      if (e.shiftKey) editorStore.sendToBack()
+      else editorStore.sendBackward()
+    }
+    return
+  }
+
+  if (!shouldIgnoreShortcuts && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+    const hasSelection = (editorStore.canvas?.getActiveObjects?.() ?? []).length > 0
+    if (!hasSelection) return
+    e.preventDefault()
+    const step = e.shiftKey ? 10 : 1
+    if (e.key === 'ArrowLeft') editorStore.nudgeSelection(-step, 0)
+    if (e.key === 'ArrowRight') editorStore.nudgeSelection(step, 0)
+    if (e.key === 'ArrowUp') editorStore.nudgeSelection(0, -step)
+    if (e.key === 'ArrowDown') editorStore.nudgeSelection(0, step)
+    return
+  }
+
+  if (!shouldIgnoreShortcuts && cmdKey && e.key.toLowerCase() === 's') {
+    e.preventDefault()
+    editorStore.saveProject()
+    return
+  }
+
+  if (!shouldIgnoreShortcuts && cmdKey && (e.key === '=' || e.key === '+')) {
     e.preventDefault()
     zoomIn()
+    return
   }
-  if ((e.ctrlKey || e.metaKey) && e.key === '-') {
+  if (!shouldIgnoreShortcuts && cmdKey && e.key === '-') {
     e.preventDefault()
     zoomOut()
+    return
   }
-  if ((e.ctrlKey || e.metaKey) && e.key === '0') {
+  if (!shouldIgnoreShortcuts && cmdKey && e.key === '0') {
     e.preventDefault()
     resetZoom()
+    return
   }
-  if ((e.ctrlKey || e.metaKey) && e.key === '1') {
+
+  if (!shouldIgnoreShortcuts && e.shiftKey && e.code === 'Digit0') {
+    e.preventDefault()
+    resetZoom()
+    return
+  }
+
+  if (!shouldIgnoreShortcuts && e.shiftKey && e.code === 'Digit1') {
     e.preventDefault()
     fitToScreen()
+    return
+  }
+
+  if (!shouldIgnoreShortcuts && e.shiftKey && e.code === 'Digit2') {
+    e.preventDefault()
+    zoomToSelection()
+    return
+  }
+
+  if (!shouldIgnoreShortcuts && cmdKey && e.altKey && e.shiftKey) {
+    const key = e.key.toLowerCase()
+    if (key === 'l') {
+      e.preventDefault()
+      editorStore.alignSelection('left')
+    } else if (key === 'e') {
+      e.preventDefault()
+      editorStore.alignSelection('center')
+    } else if (key === 'r') {
+      e.preventDefault()
+      editorStore.alignSelection('right')
+    } else if (key === 't') {
+      e.preventDefault()
+      editorStore.alignSelection('top')
+    } else if (key === 'm') {
+      e.preventDefault()
+      editorStore.alignSelection('middle')
+    } else if (key === 'b') {
+      e.preventDefault()
+      editorStore.alignSelection('bottom')
+    } else if (key === 'h') {
+      e.preventDefault()
+      editorStore.distributeSelection('horizontal')
+    } else if (key === 'v') {
+      e.preventDefault()
+      editorStore.distributeSelection('vertical')
+    }
   }
 }
 
@@ -245,6 +441,68 @@ function fitToWidth() {
   
   editorStore.setZoom(Math.min(newZoom, editorStore.MAX_ZOOM))
   nextTick(() => centerArtboard())
+}
+
+function zoomToSelection(): void {
+  if (!viewportRef.value || !editorStore.canvas) return
+  const objects = editorStore.canvas.getActiveObjects()
+  if (!objects || objects.length === 0) return
+
+  const bounds = objects.reduce(
+    (acc, obj) => {
+      obj.setCoords?.()
+      const rect = ((obj as any).getBoundingRect?.(true, true) ?? (obj as any).getBoundingRect?.() ?? { left: 0, top: 0, width: 0, height: 0 }) as {
+        left: number
+        top: number
+        width: number
+        height: number
+      }
+      const left = rect.left
+      const top = rect.top
+      const right = rect.left + rect.width
+      const bottom = rect.top + rect.height
+      return {
+        left: Math.min(acc.left, left),
+        top: Math.min(acc.top, top),
+        right: Math.max(acc.right, right),
+        bottom: Math.max(acc.bottom, bottom),
+      }
+    },
+    {
+      left: Number.POSITIVE_INFINITY,
+      top: Number.POSITIVE_INFINITY,
+      right: Number.NEGATIVE_INFINITY,
+      bottom: Number.NEGATIVE_INFINITY,
+    },
+  )
+
+  const width = Math.max(1, bounds.right - bounds.left)
+  const height = Math.max(1, bounds.bottom - bounds.top)
+  const margin = 60
+
+  const viewportWidth = viewportRef.value.clientWidth - (showRulers.value ? RULER_SIZE : 0)
+  const viewportHeight = viewportRef.value.clientHeight - (showRulers.value ? RULER_SIZE : 0)
+
+  const nextZoom = Math.min(
+    (viewportWidth - margin) / width,
+    (viewportHeight - margin) / height,
+    editorStore.MAX_ZOOM,
+  )
+
+  const clampedZoom = Math.max(editorStore.MIN_ZOOM, Math.min(nextZoom, editorStore.MAX_ZOOM))
+  editorStore.setZoom(clampedZoom)
+
+  const centerX = bounds.left + width / 2
+  const centerY = bounds.top + height / 2
+
+  const rulerOffset = showRulers.value ? RULER_SIZE : 0
+  const viewportCenterX = (viewportRef.value.clientWidth - rulerOffset) / 2
+  const viewportCenterY = (viewportRef.value.clientHeight - rulerOffset) / 2
+
+  panOffset.value = {
+    x: viewportCenterX - centerX * clampedZoom,
+    y: viewportCenterY - centerY * clampedZoom,
+  }
 }
 
 // Initialize
