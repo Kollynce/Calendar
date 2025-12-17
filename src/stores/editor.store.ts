@@ -1454,7 +1454,28 @@ export const useEditorStore = defineStore('editor', () => {
       backgroundColor: project.value.canvas.backgroundColor || '#ffffff',
       selection: true,
       preserveObjectStacking: true,
+      // Enable image smoothing for better quality at different zoom levels
+      imageSmoothingEnabled: true,
+      imageSmoothingQuality: 'high',
     })
+
+    // Set canvas element to allow proper panning via viewportTransform
+    const canvasEl = canvas.value.getElement()
+    const canvasWrapperEl = canvas.value.wrapperEl
+    if (canvasEl && canvasWrapperEl) {
+      // Ensure canvas can pan within its container
+      canvasWrapperEl.style.position = 'absolute'
+      canvasWrapperEl.style.top = '0'
+      canvasWrapperEl.style.left = '0'
+      canvasWrapperEl.style.width = '100%'
+      canvasWrapperEl.style.height = '100%'
+      
+      // Canvas element should be able to extend beyond container for panning
+      canvasEl.style.position = 'absolute'
+      canvasEl.style.top = '0'
+      canvasEl.style.left = '0'
+      canvasEl.style.transformOrigin = 'top left'
+    }
 
     // Set up event listeners
     setupCanvasEvents()
@@ -2551,72 +2572,87 @@ export const useEditorStore = defineStore('editor', () => {
   ): void {
     if (!canvas.value) return
 
-    const getCanvasRect = (obj: FabricObject) => {
-      // Prefer absolute corner coords (canvas space) so zoom/viewportTransform doesn't skew bounds.
-      try {
-        obj.setCoords?.()
-        const a = (obj as any).aCoords as any
-        const points = a
-          ? [a.tl, a.tr, a.br, a.bl].filter(Boolean)
-          : (typeof (obj as any).getCoords === 'function' ? (obj as any).getCoords() : [])
-
-        if (points && points.length) {
-          const xs = points.map((p: any) => Number(p.x) || 0)
-          const ys = points.map((p: any) => Number(p.y) || 0)
-          const left = Math.min(...xs)
-          const right = Math.max(...xs)
-          const top = Math.min(...ys)
-          const bottom = Math.max(...ys)
-          return { left, top, width: right - left, height: bottom - top }
-        }
-      } catch {
-        // fall back
+    // Get object bounds in canvas coordinates (not affected by viewportTransform)
+    // This uses the object's actual position and dimensions
+    const getObjectBounds = (obj: FabricObject) => {
+      // Ensure coords are up to date
+      obj.setCoords?.()
+      
+      // Get the object's position and scaled dimensions
+      const left = Number((obj as any).left ?? 0)
+      const top = Number((obj as any).top ?? 0)
+      const width = obj.getScaledWidth?.() ?? (obj as any).width ?? 0
+      const height = obj.getScaledHeight?.() ?? (obj as any).height ?? 0
+      
+      // Account for originX/originY
+      const originX = (obj as any).originX ?? 'left'
+      const originY = (obj as any).originY ?? 'top'
+      
+      let adjustedLeft = left
+      let adjustedTop = top
+      
+      // Adjust for origin
+      if (originX === 'center') {
+        adjustedLeft = left - width / 2
+      } else if (originX === 'right') {
+        adjustedLeft = left - width
       }
-
-      return obj.getBoundingRect(true, true)
+      
+      if (originY === 'center') {
+        adjustedTop = top - height / 2
+      } else if (originY === 'bottom') {
+        adjustedTop = top - height
+      }
+      
+      return {
+        left: adjustedLeft,
+        top: adjustedTop,
+        width,
+        height,
+        right: adjustedLeft + width,
+        bottom: adjustedTop + height,
+        centerX: adjustedLeft + width / 2,
+        centerY: adjustedTop + height / 2
+      }
     }
 
     const objects = canvas.value.getActiveObjects()
     if (!objects.length) return
 
+    // Use the actual canvas dimensions (artboard size), not affected by zoom
     const canvasWidth = canvas.value.width || 0
     const canvasHeight = canvas.value.height || 0
 
-    const rects = objects.map((obj) => ({
+    const objectBounds = objects.map((obj) => ({
       obj,
-      rect: getCanvasRect(obj),
+      bounds: getObjectBounds(obj),
     }))
 
-    // For multi-select alignment, "selection" mode behaves like a key-object align:
-    // keep one object fixed (largest by bounds area) and align the others to it.
+    // For multi-select alignment, "selection" mode uses the largest object as reference
     const keyEntry =
-      mode === 'selection' && rects.length > 1
-        ? rects.reduce(
+      mode === 'selection' && objectBounds.length > 1
+        ? objectBounds.reduce(
             (best, cur) => {
-              const bestArea = best.rect.width * best.rect.height
-              const curArea = cur.rect.width * cur.rect.height
+              const bestArea = best.bounds.width * best.bounds.height
+              const curArea = cur.bounds.width * cur.bounds.height
               return curArea > bestArea ? cur : best
             },
-            rects[0]!,
+            objectBounds[0]!,
           )
         : null
 
-    const bounds =
+    // Define the target bounds for alignment
+    const targetBounds =
       mode === 'canvas'
-        ? { left: 0, top: 0, right: canvasWidth, bottom: canvasHeight }
+        ? { left: 0, top: 0, right: canvasWidth, bottom: canvasHeight, centerX: canvasWidth / 2, centerY: canvasHeight / 2 }
         : keyEntry
-          ? {
-              left: keyEntry.rect.left,
-              top: keyEntry.rect.top,
-              right: keyEntry.rect.left + keyEntry.rect.width,
-              bottom: keyEntry.rect.top + keyEntry.rect.height,
-            }
-          : rects.reduce(
+          ? keyEntry.bounds
+          : objectBounds.reduce(
               (acc, entry) => {
-                acc.left = Math.min(acc.left, entry.rect.left)
-                acc.top = Math.min(acc.top, entry.rect.top)
-                acc.right = Math.max(acc.right, entry.rect.left + entry.rect.width)
-                acc.bottom = Math.max(acc.bottom, entry.rect.top + entry.rect.height)
+                acc.left = Math.min(acc.left, entry.bounds.left)
+                acc.top = Math.min(acc.top, entry.bounds.top)
+                acc.right = Math.max(acc.right, entry.bounds.right)
+                acc.bottom = Math.max(acc.bottom, entry.bounds.bottom)
                 return acc
               },
               {
@@ -2624,34 +2660,48 @@ export const useEditorStore = defineStore('editor', () => {
                 top: Number.POSITIVE_INFINITY,
                 right: Number.NEGATIVE_INFINITY,
                 bottom: Number.NEGATIVE_INFINITY,
+                centerX: 0,
+                centerY: 0
               },
             )
 
-    const targetCenterX = (bounds.left + bounds.right) / 2
-    const targetCenterY = (bounds.top + bounds.bottom) / 2
+    // Calculate center if not already set
+    if (!('centerX' in targetBounds) || targetBounds.centerX === 0) {
+      (targetBounds as any).centerX = (targetBounds.left + targetBounds.right) / 2
+      ;(targetBounds as any).centerY = (targetBounds.top + targetBounds.bottom) / 2
+    }
 
-    rects.forEach(({ obj, rect }) => {
+    objectBounds.forEach(({ obj, bounds }) => {
+      // Skip the key object in selection mode
       if (keyEntry && obj === keyEntry.obj) return
-      const objLeft = Number((obj as any).left ?? 0) || 0
-      const objTop = Number((obj as any).top ?? 0) || 0
-
-      const rectLeft = rect.left
-      const rectTop = rect.top
-      const rectRight = rect.left + rect.width
-      const rectBottom = rect.top + rect.height
-      const rectCenterX = rect.left + rect.width / 2
-      const rectCenterY = rect.top + rect.height / 2
+      
+      const objLeft = Number((obj as any).left ?? 0)
+      const objTop = Number((obj as any).top ?? 0)
 
       let nextLeft = objLeft
       let nextTop = objTop
 
-      if (alignment === 'left') nextLeft = objLeft + (bounds.left - rectLeft)
-      if (alignment === 'center') nextLeft = objLeft + (targetCenterX - rectCenterX)
-      if (alignment === 'right') nextLeft = objLeft + (bounds.right - rectRight)
-
-      if (alignment === 'top') nextTop = objTop + (bounds.top - rectTop)
-      if (alignment === 'middle') nextTop = objTop + (targetCenterY - rectCenterY)
-      if (alignment === 'bottom') nextTop = objTop + (bounds.bottom - rectBottom)
+      // Calculate the offset needed to align
+      switch (alignment) {
+        case 'left':
+          nextLeft = objLeft + (targetBounds.left - bounds.left)
+          break
+        case 'center':
+          nextLeft = objLeft + ((targetBounds as any).centerX - bounds.centerX)
+          break
+        case 'right':
+          nextLeft = objLeft + (targetBounds.right - bounds.right)
+          break
+        case 'top':
+          nextTop = objTop + (targetBounds.top - bounds.top)
+          break
+        case 'middle':
+          nextTop = objTop + ((targetBounds as any).centerY - bounds.centerY)
+          break
+        case 'bottom':
+          nextTop = objTop + (targetBounds.bottom - bounds.bottom)
+          break
+      }
 
       obj.set({ left: nextLeft, top: nextTop } as any)
       obj.setCoords?.()
@@ -2667,42 +2717,51 @@ export const useEditorStore = defineStore('editor', () => {
   function distributeSelection(axis: 'horizontal' | 'vertical'): void {
     if (!canvas.value) return
 
-    const getCanvasRect = (obj: FabricObject) => {
-      try {
-        obj.setCoords?.()
-        const a = (obj as any).aCoords as any
-        const points = a
-          ? [a.tl, a.tr, a.br, a.bl].filter(Boolean)
-          : (typeof (obj as any).getCoords === 'function' ? (obj as any).getCoords() : [])
-
-        if (points && points.length) {
-          const xs = points.map((p: any) => Number(p.x) || 0)
-          const ys = points.map((p: any) => Number(p.y) || 0)
-          const left = Math.min(...xs)
-          const right = Math.max(...xs)
-          const top = Math.min(...ys)
-          const bottom = Math.max(...ys)
-          return { left, top, width: right - left, height: bottom - top }
-        }
-      } catch {
-        // fall back
+    // Get object bounds in canvas coordinates (not affected by viewportTransform)
+    const getObjectBounds = (obj: FabricObject) => {
+      obj.setCoords?.()
+      
+      const left = Number((obj as any).left ?? 0)
+      const top = Number((obj as any).top ?? 0)
+      const width = obj.getScaledWidth?.() ?? (obj as any).width ?? 0
+      const height = obj.getScaledHeight?.() ?? (obj as any).height ?? 0
+      
+      const originX = (obj as any).originX ?? 'left'
+      const originY = (obj as any).originY ?? 'top'
+      
+      let adjustedLeft = left
+      let adjustedTop = top
+      
+      if (originX === 'center') {
+        adjustedLeft = left - width / 2
+      } else if (originX === 'right') {
+        adjustedLeft = left - width
       }
-
-      return obj.getBoundingRect(true, true)
+      
+      if (originY === 'center') {
+        adjustedTop = top - height / 2
+      } else if (originY === 'bottom') {
+        adjustedTop = top - height
+      }
+      
+      return {
+        left: adjustedLeft,
+        top: adjustedTop,
+        width,
+        height,
+        right: adjustedLeft + width,
+        bottom: adjustedTop + height,
+        centerX: adjustedLeft + width / 2,
+        centerY: adjustedTop + height / 2
+      }
     }
 
     const objects = canvas.value.getActiveObjects()
     if (objects.length < 3) return
 
     const entries = objects.map((obj) => {
-      const rect = getCanvasRect(obj)
-      const left = rect.left
-      const top = rect.top
-      const right = rect.left + rect.width
-      const bottom = rect.top + rect.height
-      const centerX = rect.left + rect.width / 2
-      const centerY = rect.top + rect.height / 2
-      return { obj, rect, left, top, right, bottom, centerX, centerY, width: rect.width, height: rect.height }
+      const bounds = getObjectBounds(obj)
+      return { obj, ...bounds }
     })
 
     if (axis === 'horizontal') {
@@ -2743,28 +2802,82 @@ export const useEditorStore = defineStore('editor', () => {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // ZOOM & PAN
+  // ZOOM & PAN (Adobe-like using FabricJS native viewportTransform)
   // ═══════════════════════════════════════════════════════════════
 
-  function setZoom(newZoom: number): void {
+  const MIN_ZOOM = 0.1
+  const MAX_ZOOM = 8
+
+  function setZoom(newZoom: number, point?: { x: number; y: number }): void {
     if (!canvas.value) return
 
-    const clampedZoom = Math.min(Math.max(newZoom, 0.1), 5)
+    const clampedZoom = Math.min(Math.max(newZoom, MIN_ZOOM), MAX_ZOOM)
     zoom.value = clampedZoom
-    canvas.value.setZoom(clampedZoom)
-    canvas.value.renderAll()
+    
+    if (point) {
+      // Zoom to specific point (cursor position) - Adobe-like behavior
+      canvas.value.zoomToPoint(point, clampedZoom)
+    } else {
+      // Zoom to center
+      const center = canvas.value.getCenterPoint()
+      canvas.value.zoomToPoint(center, clampedZoom)
+    }
+    
+    // Sync panOffset from viewportTransform
+    const vpt = canvas.value.viewportTransform
+    if (vpt) {
+      panOffset.value = { x: vpt[4], y: vpt[5] }
+    }
+    
+    canvas.value.requestRenderAll()
+  }
+
+  function zoomToPoint(newZoom: number, point: { x: number; y: number }): void {
+    setZoom(newZoom, point)
   }
 
   function zoomIn(): void {
-    setZoom(zoom.value * 1.2)
+    setZoom(zoom.value * 1.25)
   }
 
   function zoomOut(): void {
-    setZoom(zoom.value / 1.2)
+    setZoom(zoom.value / 1.25)
   }
 
   function resetZoom(): void {
-    setZoom(1)
+    if (!canvas.value) return
+    
+    // Reset zoom and center the canvas
+    zoom.value = 1
+    canvas.value.setViewportTransform([1, 0, 0, 1, 0, 0])
+    panOffset.value = { x: 0, y: 0 }
+    canvas.value.requestRenderAll()
+  }
+
+  function setPan(x: number, y: number): void {
+    if (!canvas.value) return
+    
+    const vpt = canvas.value.viewportTransform
+    if (!vpt) return
+    
+    vpt[4] = x
+    vpt[5] = y
+    panOffset.value = { x, y }
+    canvas.value.setViewportTransform(vpt)
+    canvas.value.requestRenderAll()
+  }
+
+  function panBy(deltaX: number, deltaY: number): void {
+    if (!canvas.value) return
+    
+    const vpt = canvas.value.viewportTransform
+    if (!vpt) return
+    
+    vpt[4] += deltaX
+    vpt[5] += deltaY
+    panOffset.value = { x: vpt[4], y: vpt[5] }
+    canvas.value.setViewportTransform(vpt)
+    canvas.value.requestRenderAll()
   }
 
   function fitToScreen(): void {
@@ -2775,11 +2888,41 @@ export const useEditorStore = defineStore('editor', () => {
     const canvasWidth = project.value.canvas.width
     const canvasHeight = project.value.canvas.height
 
-    const scaleX = (containerWidth - 100) / canvasWidth
-    const scaleY = (containerHeight - 100) / canvasHeight
-    const scale = Math.min(scaleX, scaleY, 1)
+    // Calculate scale to fit with padding
+    const padding = 80
+    const scaleX = (containerWidth - padding) / canvasWidth
+    const scaleY = (containerHeight - padding) / canvasHeight
+    const scale = Math.min(scaleX, scaleY, 2) // Allow up to 200% for small canvases
 
-    setZoom(scale)
+    // Calculate center position
+    const centerX = (containerWidth - canvasWidth * scale) / 2
+    const centerY = (containerHeight - canvasHeight * scale) / 2
+
+    // Apply zoom and pan together
+    zoom.value = scale
+    const vpt: [number, number, number, number, number, number] = [scale, 0, 0, scale, centerX, centerY]
+    canvas.value.setViewportTransform(vpt)
+    panOffset.value = { x: centerX, y: centerY }
+    canvas.value.requestRenderAll()
+  }
+
+  function centerCanvas(): void {
+    if (!canvas.value || !project.value) return
+
+    const containerWidth = canvas.value.wrapperEl?.clientWidth || 800
+    const containerHeight = canvas.value.wrapperEl?.clientHeight || 600
+    const canvasWidth = project.value.canvas.width
+    const canvasHeight = project.value.canvas.height
+    const currentZoom = zoom.value
+
+    const centerX = (containerWidth - canvasWidth * currentZoom) / 2
+    const centerY = (containerHeight - canvasHeight * currentZoom) / 2
+
+    setPan(centerX, centerY)
+  }
+
+  function getViewportTransform(): number[] | null {
+    return canvas.value?.viewportTransform ?? null
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -3081,12 +3224,19 @@ export const useEditorStore = defineStore('editor', () => {
     alignObjects,
     alignSelection,
     distributeSelection,
-    // Zoom
+    // Zoom & Pan
     setZoom,
+    zoomToPoint,
     zoomIn,
     zoomOut,
     resetZoom,
     fitToScreen,
+    centerCanvas,
+    setPan,
+    panBy,
+    getViewportTransform,
+    MIN_ZOOM,
+    MAX_ZOOM,
     // History
     undo,
     redo,

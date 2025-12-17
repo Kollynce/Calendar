@@ -152,10 +152,25 @@ function handleKeydown(e: KeyboardEvent): void {
 }
 
 function handleWheel(e: WheelEvent): void {
+  if (!editorStore.canvas) return
+  
   if (e.ctrlKey || e.metaKey) {
     e.preventDefault()
-    const delta = e.deltaY > 0 ? 0.9 : 1.1
-    editorStore.setZoom(zoom.value * delta)
+    e.stopPropagation()
+    
+    // Use FabricJS native zoom-to-point
+    const currentZoom = editorStore.canvas.getZoom()
+    const newZoom = currentZoom * (0.999 ** e.deltaY)
+    
+    // Get cursor position relative to canvas
+    const canvasEl = editorStore.canvas.getElement()
+    const rect = canvasEl.getBoundingClientRect()
+    const point = {
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top
+    }
+    
+    editorStore.zoomToPoint(newZoom, point)
   }
 }
 </script>

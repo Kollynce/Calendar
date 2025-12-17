@@ -24,7 +24,7 @@ import FontPicker from '@/components/editor/FontPicker.vue'
 import CalendarConfigPanel from '@/components/editor/CalendarConfigPanel.vue'
 import EditorLayers from '@/components/editor/EditorLayers.vue'
 import TemplatePanel from '@/components/editor/TemplatePanel.vue'
-import EditorRulers from '@/components/editor/EditorRulers.vue'
+import AdobeCanvas from '@/components/editor/AdobeCanvas.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import { renderTemplateOnCanvas, generateTemplateThumbnail } from '@/services/editor/template-renderer'
 import type {
@@ -42,7 +42,6 @@ import type {
 const router = useRouter()
 const route = useRoute()
 const editorStore = useEditorStore()
-const RULER_SIZE = 32
 
 // Store refs
 const { 
@@ -54,12 +53,12 @@ const {
   canUndo,
   canRedo,
   canvasSize,
-  showRulers,
 } = storeToRefs(editorStore)
 
 // Local State
 const activeTool = ref('templates')
 const canvasRef = ref<HTMLCanvasElement | null>(null)
+const adobeCanvasRef = ref<InstanceType<typeof AdobeCanvas> | null>(null)
 const isExportModalOpen = ref(false)
 const uploadedImages = ref<{ id: string; url: string; name: string }[]>([])
 const isDragging = ref(false)
@@ -67,6 +66,11 @@ const selectedTemplateCategory = ref('all')
 const templateThumbnails = ref<Record<string, string>>({})
 const thumbnailsLoading = ref(false)
 const activeTemplateId = ref<string | null>(null)
+
+// Panel visibility state for Adobe-style collapsible UI
+const isRightSidebarVisible = ref(true)
+const isPropertiesCollapsed = ref(false)
+const isLayersCollapsed = ref(false)
 const templateOverrides = ref({
   highlightToday: true,
   highlightWeekends: true,
@@ -93,28 +97,6 @@ async function handleSaveProject(): Promise<void> {
 const DEFAULT_CANVAS = PAPER_SIZES.portrait
 
 const paperWidth = computed(() => canvasSize.value.width || DEFAULT_CANVAS.width)
-const paperHeight = computed(() => canvasSize.value.height || DEFAULT_CANVAS.height)
-const boardStyle = computed(() => ({
-  width: `${paperWidth.value}px`,
-  height: `${paperHeight.value}px`,
-}))
-const boardWrapperStyle = computed(() => {
-  const offset = showRulers.value ? RULER_SIZE : 0
-  return {
-    width: `${paperWidth.value + offset}px`,
-    height: `${paperHeight.value + offset}px`,
-    paddingLeft: `${offset}px`,
-    paddingTop: `${offset}px`,
-  }
-})
-const boardOffsetStyle = computed(() =>
-  showRulers.value
-    ? {
-        marginLeft: `${RULER_SIZE}px`,
-        marginTop: `${RULER_SIZE}px`,
-      }
-    : {},
-)
 
 // Tools configuration - Updated with Calendar instead of Holidays
 const tools = [
@@ -827,6 +809,11 @@ function shouldAddWelcomeText(): boolean {
   return true
 }
 
+function handleCanvasReady(canvasEl: HTMLCanvasElement): void {
+  canvasRef.value = canvasEl
+  void initializeEditorCanvas()
+}
+
 async function initializeEditorCanvas(): Promise<void> {
   await nextTick()
 
@@ -838,6 +825,8 @@ async function initializeEditorCanvas(): Promise<void> {
   requestAnimationFrame(() => {
     editorStore.setZoom(1)
     editorStore.canvas?.calcOffset()
+    // Fit canvas to screen after initialization
+    adobeCanvasRef.value?.fitToScreen()
   })
 
   if (shouldAddWelcomeText()) {
@@ -861,24 +850,14 @@ async function initializeEditorCanvas(): Promise<void> {
 }
 
 onMounted(() => {
-  void (async () => {
-    await ensureProjectForRoute()
-    setTimeout(() => {
-      void initializeEditorCanvas()
-    }, 50)
-  })()
+  void ensureProjectForRoute()
   loadTemplateThumbnails()
 })
 
 watch(routeProjectId, (next, prev) => {
   if (next === prev) return
   editorStore.destroyCanvas()
-  void (async () => {
-    await ensureProjectForRoute()
-    setTimeout(() => {
-      void initializeEditorCanvas()
-    }, 50)
-  })()
+  void ensureProjectForRoute()
 })
 
 onBeforeUnmount(() => {
@@ -1393,11 +1372,6 @@ function handleDistribute(axis: 'horizontal' | 'vertical') {
   editorStore.distributeSelection?.(axis)
 }
 
-function handleZoom(delta: number) {
-  const newZoom = Math.max(25, Math.min(300, zoom.value * 100 + delta))
-  editorStore.setZoom(newZoom / 100)
-}
-
 </script>
 
 <template>
@@ -1476,44 +1450,44 @@ function handleZoom(delta: number) {
     <div class="flex-1 flex overflow-hidden">
       <!-- Left Sidebar -->
       <aside class="flex h-full z-10 shrink-0">
-        <!-- Icon Rail -->
-        <div class="w-16 bg-white dark:bg-gray-800 flex flex-col items-center py-4 gap-1 border-r border-gray-200 dark:border-gray-700">
+        <!-- Icon Rail (Compact) -->
+        <div class="w-12 bg-white dark:bg-gray-800 flex flex-col items-center py-3 gap-0.5 border-r border-gray-200 dark:border-gray-700">
           <button 
             v-for="tool in tools" 
             :key="tool.id"
             @click="activeTool = activeTool === tool.id ? '' : tool.id"
             :class="[
-              'tool-rail-btn',
+              'w-10 h-10 rounded-lg flex flex-col items-center justify-center transition-all',
               activeTool === tool.id 
-                ? 'tool-rail-btn-active' 
-                : 'tool-rail-btn-idle'
+                ? 'bg-primary-500 text-white shadow-md' 
+                : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
             ]"
+            :title="tool.name"
           >
-            <component :is="tool.icon" class="w-5 h-5 mb-1" />
-            <span class="text-[10px] font-medium">{{ tool.name }}</span>
+            <component :is="tool.icon" class="w-5 h-5" />
           </button>
         </div>
 
         <!-- Drawer Panel -->
         <transition
-          enter-active-class="transition-all duration-300 ease-out"
-          enter-from-class="-translate-x-full opacity-0"
-          enter-to-class="translate-x-0 opacity-100"
-          leave-active-class="transition-all duration-200 ease-in"
-          leave-from-class="translate-x-0 opacity-100"
-          leave-to-class="-translate-x-full opacity-0"
+          enter-active-class="transition-all duration-200 ease-out"
+          enter-from-class="w-0 opacity-0"
+          enter-to-class="w-64 opacity-100"
+          leave-active-class="transition-all duration-150 ease-in"
+          leave-from-class="w-64 opacity-100"
+          leave-to-class="w-0 opacity-0"
         >
-          <div v-if="activeTool" class="w-80 xl:w-88 2xl:w-104 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col">
+          <div v-if="activeTool" class="w-64 xl:w-72 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden">
             <!-- Panel Header -->
-            <div class="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center shrink-0">
-              <h2 class="font-semibold text-gray-900 dark:text-white capitalize">{{ activeTool }}</h2>
-              <button @click="activeTool = ''" class="btn-icon-sm">
-                <XMarkIcon class="w-5 h-5 text-gray-400" />
+            <div class="px-3 py-2 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center shrink-0">
+              <h2 class="font-medium text-sm text-gray-900 dark:text-white capitalize">{{ activeTool }}</h2>
+              <button @click="activeTool = ''" class="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                <XMarkIcon class="w-4 h-4 text-gray-400" />
               </button>
             </div>
             
             <!-- Panel Content -->
-            <div class="flex-1 overflow-y-auto p-4">
+            <div class="flex-1 overflow-y-auto p-3">
               
               <!-- ═══════════════════════════════════════════════════ -->
               <!-- TEMPLATES PANEL - Redesigned with categories -->
@@ -1695,78 +1669,58 @@ function handleZoom(delta: number) {
         </transition>
       </aside>
 
-      <!-- Center Canvas Area -->
-      <main class="flex-1 relative overflow-hidden flex flex-col bg-[#050b14] text-white">
-        <!-- Canvas Background Pattern -->
-        <div class="absolute inset-0 opacity-60 pointer-events-none" style="background: radial-gradient(circle at 25% 25%, rgba(255,255,255,0.04), transparent 40%), radial-gradient(circle at 75% 0%, rgba(99,102,241,0.08), transparent 45%), radial-gradient(circle at 10% 80%, rgba(6,182,212,0.06), transparent 40%);"></div>
-        <div class="absolute inset-0 pointer-events-none" style="background-image: radial-gradient(circle at 1px 1px, rgba(255,255,255,0.04) 1px, transparent 0); background-size: 24px 24px;"></div>
-        
-        <!-- Canvas Container -->
-        <div class="flex-1 flex items-center justify-center p-4 overflow-auto relative z-0">
-          <div 
-            class="canvas-stage relative transition-all duration-300"
-            :style="boardWrapperStyle"
-          >
-            <EditorRulers
-              v-if="showRulers"
-              :zoom="zoom"
-              :width="paperWidth"
-              :height="paperHeight"
-              :ruler-size="RULER_SIZE"
-            />
-
-            <div 
-              class="board-stack relative drop-shadow-[0_25px_60px_rgba(15,23,42,0.55)]"
-              :style="boardOffsetStyle"
-            >
-              <!-- White Paper Visual -->
-              <div 
-                class="bg-white relative rounded-[24px] overflow-hidden"
-                :style="boardStyle"
-              >
-                <!-- Fabric Canvas Element -->
-                <canvas 
-                  ref="canvasRef"
-                  class="absolute inset-0"
-                ></canvas>
-              </div>
-            </div>
-          </div>
-
-          <!-- Zoom Controls -->
-          <div class="absolute bottom-6 right-8 flex items-center gap-2 bg-white/95 text-gray-800 rounded-2xl px-2 py-1 shadow-xl ring-1 ring-black/5 backdrop-blur z-30">
-            <button @click="handleZoom(-10)" class="zoom-btn" title="Zoom out">
-              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4" /></svg>
-            </button>
-            <span class="text-xs font-semibold min-w-14 text-center">{{ Math.round(zoom * 100) }}%</span>
-            <button @click="handleZoom(10)" class="zoom-btn" title="Zoom in">
-              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>
-            </button>
-            <div class="w-px h-5 bg-gray-200 mx-1"></div>
-            <button @click="editorStore.fitToScreen()" class="zoom-btn" title="Fit to screen">
-              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
-            </button>
-          </div>
-        </div>
+      <!-- Center Canvas Area (Adobe-style) -->
+      <main class="flex-1 relative overflow-hidden flex flex-col">
+        <AdobeCanvas 
+          ref="adobeCanvasRef"
+          :canvas-ref="canvasRef"
+          @canvas-ready="handleCanvasReady"
+        />
       </main>
 
+      <!-- Right Sidebar Toggle Button -->
+      <button
+        v-if="!isRightSidebarVisible"
+        @click="isRightSidebarVisible = true"
+        class="fixed right-0 top-1/2 -translate-y-1/2 z-20 bg-[#0f1627] text-white/70 hover:text-white p-2 rounded-l-lg border border-r-0 border-white/10 transition-colors"
+        title="Show sidebar"
+      >
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
+      </button>
+
       <!-- Right Sidebar (Properties + Layers) -->
-      <aside class="w-72 xl:w-80 2xl:w-96 bg-[#0f1627] text-white border-l border-white/10 shrink-0 hidden lg:flex flex-col z-10 overflow-hidden">
-        <!-- Properties Panel (Top Half) -->
-        <div class="flex-1 flex flex-col min-h-0 border-b border-white/5">
-          <div class="p-4 border-b border-white/5 shrink-0">
-            <div class="flex items-center justify-between">
-              <div>
-                <p class="text-xs uppercase tracking-[0.2em] text-white/60">Inspector</p>
-                <h3 class="font-semibold text-lg">Properties</h3>
-              </div>
-              <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-white/10 text-white/70">
-                {{ isDirty ? 'Unsaved' : 'Synced' }}
-              </span>
+      <aside 
+        v-show="isRightSidebarVisible"
+        class="w-56 xl:w-64 bg-[#0f1627] text-white border-l border-white/10 shrink-0 hidden lg:flex flex-col z-10 overflow-hidden transition-all duration-200"
+      >
+        <!-- Sidebar Header with Hide Button -->
+        <div class="px-3 py-2 border-b border-white/10 flex items-center justify-between shrink-0">
+          <span class="text-[10px] font-semibold uppercase tracking-wider text-white/50">Inspector</span>
+          <button
+            @click="isRightSidebarVisible = false"
+            class="p-1 rounded hover:bg-white/10 text-white/50 hover:text-white transition-colors"
+            title="Hide sidebar"
+          >
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+          </button>
+        </div>
+
+        <!-- Properties Panel -->
+        <div :class="['flex flex-col border-b border-white/5 transition-all duration-200', isPropertiesCollapsed ? 'h-8' : (isLayersCollapsed ? 'flex-1' : 'flex-1')]">
+          <button 
+            @click="isPropertiesCollapsed = !isPropertiesCollapsed"
+            class="px-3 py-1.5 border-b border-white/5 shrink-0 flex items-center justify-between hover:bg-white/5 transition-colors cursor-pointer"
+          >
+            <div class="flex items-center gap-2">
+              <svg :class="['w-3 h-3 transition-transform', isPropertiesCollapsed ? '-rotate-90' : 'rotate-0']" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+              <span class="text-xs font-medium">Properties</span>
             </div>
-          </div>
+            <span class="text-[9px] px-1.5 py-0.5 rounded bg-white/10 text-white/60">
+              {{ isDirty ? 'Unsaved' : 'Synced' }}
+            </span>
+          </button>
           
-          <div class="flex-1 overflow-y-auto space-y-4 p-4">
+          <div v-show="!isPropertiesCollapsed" class="flex-1 overflow-y-auto space-y-3 p-3">
             <!-- Template Overrides -->
             <section
               v-if="activeTemplate"
@@ -3040,13 +2994,19 @@ function handleZoom(delta: number) {
           </div>
         </div>
         
-        <!-- Layers Panel (Bottom Half) -->
-        <div class="flex-1 flex flex-col min-h-0 bg-[#0b111d]">
-          <div class="p-3 border-b border-white/10 shrink-0 flex items-center justify-between">
-            <h3 class="font-semibold text-white text-sm uppercase tracking-[0.3em]">Layers</h3>
-            <span class="text-xs text-white/50">{{ editorStore.canvas?.getObjects().length || 0 }}</span>
-          </div>
-          <div class="flex-1 overflow-y-auto">
+        <!-- Layers Panel -->
+        <div :class="['flex flex-col bg-[#0b111d] transition-all duration-200', isLayersCollapsed ? 'h-8' : (isPropertiesCollapsed ? 'flex-1' : 'flex-1')]">
+          <button 
+            @click="isLayersCollapsed = !isLayersCollapsed"
+            class="px-3 py-1.5 border-b border-white/10 shrink-0 flex items-center justify-between hover:bg-white/5 transition-colors cursor-pointer"
+          >
+            <div class="flex items-center gap-2">
+              <svg :class="['w-3 h-3 transition-transform', isLayersCollapsed ? '-rotate-90' : 'rotate-0']" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+              <span class="text-xs font-medium">Layers</span>
+            </div>
+            <span class="text-[9px] px-1.5 py-0.5 rounded bg-white/10 text-white/60">{{ editorStore.canvas?.getObjects().length || 0 }}</span>
+          </button>
+          <div v-show="!isLayersCollapsed" class="flex-1 overflow-y-auto">
             <EditorLayers />
           </div>
         </div>

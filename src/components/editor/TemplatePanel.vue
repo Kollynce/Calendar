@@ -30,42 +30,42 @@ function renderStars(rating: number) {
 </script>
 
 <template>
-  <div class="space-y-4">
+  <div class="space-y-3">
     <!-- Category Tabs -->
-    <div class="flex flex-wrap gap-1.5">
+    <div class="flex flex-wrap gap-1">
       <button
         v-for="cat in categories"
         :key="cat.id"
         @click="selectCategory(cat.id)"
         :class="[
-          'px-3 py-1.5 text-xs font-medium rounded-full transition-all ring-1 ring-inset',
+          'px-2 py-1 text-[10px] font-medium rounded-md transition-all',
           selectedCategory === cat.id
-            ? 'bg-primary-500 text-white ring-primary-500 shadow'
-            : 'bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-400 ring-gray-200 dark:ring-gray-600 hover:bg-white dark:hover:bg-gray-600/80'
+            ? 'bg-primary-500 text-white shadow-sm'
+            : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
         ]"
       >
-        <span class="font-semibold text-[11px] uppercase tracking-wide">{{ cat.name }}</span>
+        {{ cat.name }}
       </button>
     </div>
 
     <!-- Template Grid -->
-    <div v-if="loading" class="grid gap-3 grid-cols-1 sm:grid-cols-2">
+    <div v-if="loading" class="grid gap-2 grid-cols-2">
       <div
-        v-for="n in 6"
+        v-for="n in 4"
         :key="n"
-        class="rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700 h-44 bg-gray-100 dark:bg-gray-700 animate-pulse"
+        class="rounded-lg border border-dashed border-gray-200 dark:border-gray-700 aspect-[3/4] bg-gray-100 dark:bg-gray-700 animate-pulse"
       ></div>
     </div>
 
-    <div v-else class="grid gap-3 grid-cols-1 sm:grid-cols-2">
+    <div v-else class="grid gap-2 grid-cols-2">
       <button
         v-for="template in templates"
         :key="template.id"
         @click="apply(template)"
-        class="group relative rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 hover:border-primary-500 focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:outline-none transition-all duration-200 text-left bg-white/80 dark:bg-gray-900/40"
+        class="group relative rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 hover:border-primary-500 hover:shadow-md focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:outline-none transition-all duration-150 text-left bg-white dark:bg-gray-800"
       >
         <!-- Template Preview -->
-        <div class="relative aspect-3/4 bg-gray-50 dark:bg-gray-900">
+        <div class="relative aspect-[3/4] bg-gray-50 dark:bg-gray-900">
           <img
             v-if="thumbnails[template.id]"
             :src="thumbnails[template.id]"
@@ -74,69 +74,59 @@ function renderStars(rating: number) {
           />
           <div
             v-else
-            class="w-full h-full flex flex-col items-center justify-center text-gray-400 dark:text-gray-500 gap-1"
+            class="w-full h-full flex flex-col items-center justify-center text-gray-400 dark:text-gray-500 gap-0.5"
           >
-            <PhotoIcon class="w-6 h-6" />
-            <span class="text-[10px] uppercase tracking-wide">Preview unavailable</span>
+            <PhotoIcon class="w-5 h-5" />
+            <span class="text-[8px] uppercase">No preview</span>
           </div>
 
-          <!-- Availability badges -->
-          <div class="absolute top-2 left-2 flex gap-1">
+          <!-- Compact badges -->
+          <div class="absolute top-1 left-1 flex gap-0.5">
             <span
               v-if="template.preview.hasPhotoArea"
-              class="inline-flex items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white backdrop-blur"
+              class="w-4 h-4 rounded bg-black/50 flex items-center justify-center backdrop-blur"
+              title="Has photo area"
             >
-              <PhotoIcon class="w-3 h-3" />
-              Photo
+              <PhotoIcon class="w-2.5 h-2.5 text-white" />
             </span>
             <span
               v-if="template.preview.hasNotesArea"
-              class="inline-flex items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white backdrop-blur"
+              class="w-4 h-4 rounded bg-black/50 flex items-center justify-center backdrop-blur"
+              title="Has notes area"
             >
-              <DocumentTextIcon class="w-3 h-3" />
-              Notes
+              <DocumentTextIcon class="w-2.5 h-2.5 text-white" />
             </span>
           </div>
 
-          <!-- CTA overlay -->
+          <!-- Hover overlay -->
           <div
-            class="absolute inset-0 bg-linear-to-b from-transparent via-transparent to-black/90 opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-between px-3 pb-3 text-white"
+            class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2"
           >
-            <div>
-              <p class="text-xs font-semibold">{{ template.name }}</p>
-              <p class="text-[10px] uppercase tracking-wide text-white/70">{{ template.category }}</p>
+            <div class="flex-1 min-w-0">
+              <p class="text-[10px] font-semibold text-white truncate">{{ template.name }}</p>
+              <p class="text-[8px] text-white/70 uppercase">{{ template.category }}</p>
             </div>
-            <span class="text-[10px] bg-white/90 text-primary-600 font-semibold px-2 py-0.5 rounded-full shadow">Use</span>
           </div>
         </div>
 
-        <!-- Template Info -->
-        <div class="p-3 space-y-2">
-          <div class="flex items-center gap-2 text-[10px] uppercase tracking-wide text-gray-500 dark:text-gray-400">
-            <span class="rounded-full bg-gray-100 dark:bg-gray-800 px-2 py-0.5 font-semibold">
-              {{ template.config.layout === 'portrait' ? 'Portrait' : 'Landscape' }}
+        <!-- Compact Info -->
+        <div class="p-1.5">
+          <p class="text-[10px] font-medium text-gray-900 dark:text-white truncate">{{ template.name }}</p>
+          <div class="flex items-center gap-1 mt-0.5">
+            <span class="text-[8px] text-gray-500 dark:text-gray-400 uppercase">
+              {{ template.config.layout === 'portrait' ? 'P' : 'L' }}
             </span>
-            <span class="rounded-full bg-gray-100 dark:bg-gray-800 px-2 py-0.5 font-semibold">
-              {{ template.config.monthsPerPage }} / page
-            </span>
-          </div>
-          <div>
-            <p class="text-sm font-semibold text-gray-900 dark:text-white truncate">{{ template.name }}</p>
-            <p class="text-[11px] text-gray-500 dark:text-gray-400 line-clamp-2">{{ template.description }}</p>
-          </div>
-          <div class="flex items-center gap-1">
             <div class="flex">
               <StarSolidIcon
-                v-for="s in renderStars(template.rating || 0)"
+                v-for="s in Math.min(renderStars(template.rating || 0), 3)"
                 :key="s"
-                class="w-3.5 h-3.5 text-amber-400"
+                class="w-2.5 h-2.5 text-amber-400"
               />
             </div>
-            <span class="text-[11px] text-gray-400">{{ template.rating?.toFixed(1) ?? '—' }}</span>
             <span
               v-if="template.popular"
-              class="ml-auto text-[9px] bg-primary-50 text-primary-700 px-1.5 py-0.5 rounded-full font-semibold uppercase tracking-wide"
-            >Popular</span>
+              class="ml-auto text-[7px] bg-primary-100 dark:bg-primary-900/50 text-primary-600 dark:text-primary-300 px-1 py-0.5 rounded font-semibold uppercase"
+            >★</span>
           </div>
         </div>
       </button>

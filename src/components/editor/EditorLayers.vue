@@ -122,18 +122,18 @@ function deleteLayer(id: string): void {
       <div
         v-for="layer in layers"
         :key="layer.id"
-        class="group flex items-center px-3 py-2 cursor-pointer gap-2 hover:bg-gray-50 dark:hover:bg-gray-700/50 border-b border-gray-100 dark:border-gray-700/50 transition-colors"
+        class="group flex items-center px-2 py-1.5 cursor-pointer gap-1.5 hover:bg-white/5 border-b border-white/5 transition-colors"
         :class="{ 
-          'bg-primary-50 dark:bg-primary-900/20 text-primary-900 dark:text-primary-100': selectedObjectIds.includes(layer.id),
+          'bg-primary-500/20 text-primary-200': selectedObjectIds.includes(layer.id),
           'opacity-50': !layer.visible 
         }"
         @click="selectLayer(layer.id)"
       >
         <!-- Layer Icon -->
-        <div class="shrink-0 text-gray-400 dark:text-gray-500">
+        <div class="shrink-0 text-white/40">
           <svg 
             v-if="layer.type === 'textbox'" 
-            class="w-4 h-4" 
+            class="w-3.5 h-3.5" 
             fill="none" 
             viewBox="0 0 24 24" 
             stroke="currentColor"
@@ -142,7 +142,7 @@ function deleteLayer(id: string): void {
           </svg>
           <svg 
             v-else-if="layer.type === 'rect'" 
-            class="w-4 h-4" 
+            class="w-3.5 h-3.5" 
             fill="none" 
             viewBox="0 0 24 24" 
             stroke="currentColor"
@@ -151,7 +151,7 @@ function deleteLayer(id: string): void {
           </svg>
           <svg 
             v-else-if="layer.type === 'circle'" 
-            class="w-4 h-4" 
+            class="w-3.5 h-3.5" 
             fill="none" 
             viewBox="0 0 24 24" 
             stroke="currentColor"
@@ -160,7 +160,7 @@ function deleteLayer(id: string): void {
           </svg>
           <svg 
             v-else-if="layer.type === 'image'" 
-            class="w-4 h-4" 
+            class="w-3.5 h-3.5" 
             fill="none" 
             viewBox="0 0 24 24" 
             stroke="currentColor"
@@ -169,7 +169,7 @@ function deleteLayer(id: string): void {
           </svg>
           <svg 
             v-else 
-            class="w-4 h-4" 
+            class="w-3.5 h-3.5" 
             fill="none" 
             viewBox="0 0 24 24" 
             stroke="currentColor"
@@ -179,36 +179,36 @@ function deleteLayer(id: string): void {
         </div>
 
         <!-- Layer Name -->
-        <span class="flex-1 truncate text-sm text-gray-700 dark:text-gray-300">
+        <span class="flex-1 truncate text-[11px] text-white/80">
           {{ layer.name }}
         </span>
 
         <!-- Layer Actions -->
-        <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div class="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
           <button
-            class="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-500 dark:text-gray-400 transition-colors"
+            class="p-0.5 rounded hover:bg-white/10 text-white/40 hover:text-white/80 transition-colors"
             @click.stop="toggleVisibility(layer.id)"
             :title="layer.visible ? 'Hide' : 'Show'"
           >
-            <EyeIcon v-if="layer.visible" class="w-3.5 h-3.5" />
-            <EyeSlashIcon v-else class="w-3.5 h-3.5" />
+            <EyeIcon v-if="layer.visible" class="w-3 h-3" />
+            <EyeSlashIcon v-else class="w-3 h-3" />
           </button>
           
           <button
-            class="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-500 dark:text-gray-400 transition-colors"
+            class="p-0.5 rounded hover:bg-white/10 text-white/40 hover:text-white/80 transition-colors"
             @click.stop="toggleLock(layer.id)"
             :title="layer.locked ? 'Unlock' : 'Lock'"
           >
-            <LockClosedIcon v-if="layer.locked" class="w-3.5 h-3.5" />
-            <LockOpenIcon v-else class="w-3.5 h-3.5" />
+            <LockClosedIcon v-if="layer.locked" class="w-3 h-3" />
+            <LockOpenIcon v-else class="w-3 h-3" />
           </button>
           
           <button
-            class="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 text-red-500 hover:text-red-600 transition-colors"
+            class="p-0.5 rounded hover:bg-white/10 text-red-400/60 hover:text-red-400 transition-colors"
             @click.stop="deleteLayer(layer.id)"
             title="Delete"
           >
-            <TrashIcon class="w-3.5 h-3.5" />
+            <TrashIcon class="w-3 h-3" />
           </button>
         </div>
       </div>
@@ -216,9 +216,9 @@ function deleteLayer(id: string): void {
       <!-- Empty State -->
       <div 
         v-if="layers.length === 0" 
-        class="p-4 text-center text-gray-500 text-sm"
+        class="p-3 text-center text-white/40 text-[11px]"
       >
-        No layers yet. Add objects to the canvas.
+        No layers yet
       </div>
     </div>
   </div>

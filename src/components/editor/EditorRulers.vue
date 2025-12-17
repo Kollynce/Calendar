@@ -6,8 +6,12 @@ const props = withDefaults(defineProps<{
   width: number
   height: number
   rulerSize?: number
+  viewportWidth?: number
+  viewportHeight?: number
 }>(), {
   rulerSize: 32,
+  viewportWidth: 0,
+  viewportHeight: 0,
 })
 
 const stepValue = computed(() => {
@@ -37,19 +41,19 @@ const verticalMarkers = computed(() => {
 })
 
 const wrapperStyle = computed(() => ({
-  width: `${props.width + props.rulerSize}px`,
-  height: `${props.height + props.rulerSize}px`,
+  width: `${Math.max(props.viewportWidth || 0, props.width + props.rulerSize)}px`,
+  height: `${Math.max(props.viewportHeight || 0, props.height + props.rulerSize)}px`,
 }))
 
 const topRulerStyle = computed(() => ({
   left: `${props.rulerSize}px`,
-  width: `${props.width}px`,
+  width: `${Math.max(props.viewportWidth || 0, props.width) - props.rulerSize}px`,
   height: `${props.rulerSize}px`,
 }))
 
 const leftRulerStyle = computed(() => ({
   top: `${props.rulerSize}px`,
-  height: `${props.height}px`,
+  height: `${Math.max(props.viewportHeight || 0, props.height) - props.rulerSize}px`,
   width: `${props.rulerSize}px`,
 }))
 
