@@ -1,10 +1,11 @@
-import { createApp } from 'vue'
+import { createApp, watch } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router'
 import { initializeFirebase } from './config/firebase'
 import { useThemeStore } from './stores/theme.store'
 import { useAuthStore } from './stores/auth.store'
+import { useCalendarStore } from './stores/calendar.store'
 
 // Styles
 import './style.css'
@@ -24,9 +25,18 @@ async function bootstrap() {
   // Initialize stores
   const themeStore = useThemeStore()
   const authStore = useAuthStore()
+  const calendarStore = useCalendarStore()
 
   themeStore.initialize()
   await authStore.initialize()
+
+  await calendarStore.syncCustomHolidays(authStore.user?.id ?? null)
+  watch(
+    () => authStore.user?.id ?? null,
+    async (nextUserId) => {
+      await calendarStore.syncCustomHolidays(nextUserId)
+    },
+  )
 
   // Mount app
   app.mount('#app')

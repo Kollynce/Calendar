@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
+import { useAuthStore } from '@/stores'
 import { 
   HomeIcon, 
   FolderIcon, 
@@ -7,25 +9,45 @@ import {
   Cog6ToothIcon, 
   QuestionMarkCircleIcon,
   CreditCardIcon,
-  ChartBarIcon
+  ChartBarIcon,
+  UsersIcon
 } from '@heroicons/vue/24/outline'
 
 const route = useRoute()
+const authStore = useAuthStore()
 
-const navigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
-  { name: 'My Projects', href: '/dashboard/projects', icon: FolderIcon },
-  { name: 'Brand Kits', href: '/dashboard/brand-kits', icon: SwatchIcon },
-  { name: 'Analytics', href: '/dashboard/analytics', icon: ChartBarIcon },
-]
+const navigation = computed(() => {
+  const items = [
+    { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
+    { name: 'My Projects', href: '/dashboard/projects', icon: FolderIcon },
+  ]
 
-const secondaryNavigation = [
+  if (authStore.isPro) {
+    items.push({ name: 'Brand Kits', href: '/settings/brand-kit', icon: SwatchIcon })
+  }
+
+  if (authStore.isCreator) {
+    items.push({ name: 'Analytics', href: '/dashboard/analytics', icon: ChartBarIcon })
+  }
+
+  return items
+})
+
+const secondaryNavigation = computed(() => [
+  { name: 'Account', href: '/settings', icon: Cog6ToothIcon },
   { name: 'Subscription', href: '/settings/billing', icon: CreditCardIcon },
-  { name: 'Settings', href: '/settings', icon: Cog6ToothIcon },
+  { name: 'Settings', href: '/settings/preferences', icon: Cog6ToothIcon },
   { name: 'Help & Support', href: '/help', icon: QuestionMarkCircleIcon },
+])
+
+const adminNavigation = [
+  { name: 'Users', href: '/admin/users', icon: UsersIcon },
 ]
 
-const isActive = (path: string) => route.path === path || route.path.startsWith(path + '/')
+const isActive = (path: string) => {
+  if (path === '/dashboard' || path === '/settings') return route.path === path
+  return route.path === path || route.path.startsWith(path + '/')
+}
 </script>
 
 <template>
@@ -67,6 +89,33 @@ const isActive = (path: string) => route.path === path || route.path.startsWith(
         <nav class="space-y-1">
           <RouterLink
             v-for="item in secondaryNavigation"
+            :key="item.name"
+            :to="item.href"
+            :class="[
+              isActive(item.href)
+                ? 'bg-primary-50 text-primary-600 dark:bg-primary-900/20 dark:text-primary-400'
+                : 'text-gray-700 hover:text-primary-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800',
+              'group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors'
+            ]"
+          >
+            <component 
+              :is="item.icon" 
+              class="mr-3 h-5 w-5 flex-shrink-0" 
+              :class="isActive(item.href) ? 'text-primary-500' : 'text-gray-400 group-hover:text-gray-500'" 
+              aria-hidden="true" 
+            />
+            {{ item.name }}
+          </RouterLink>
+        </nav>
+      </div>
+
+      <div v-if="authStore.isAdmin">
+        <h3 class="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+          Admin
+        </h3>
+        <nav class="space-y-1">
+          <RouterLink
+            v-for="item in adminNavigation"
             :key="item.name"
             :to="item.href"
             :class="[

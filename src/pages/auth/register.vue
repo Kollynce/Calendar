@@ -50,6 +50,9 @@ async function handleGoogleSignIn() {
           <p class="mt-2 text-gray-600 dark:text-gray-400">
             Start creating beautiful calendars
           </p>
+          <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">
+            New accounts start on the Free plan. Upgrade anytime to unlock Pro features.
+          </p>
         </div>
 
         <!-- Error Message -->

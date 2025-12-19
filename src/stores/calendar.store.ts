@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useLocalStorage } from '@vueuse/core'
 import { holidayService } from '@/services/calendar/holiday.service'
+import { customHolidaysService } from '@/services/calendar/custom-holidays.service'
 import { calendarGeneratorService } from '@/services/calendar/generator.service'
 import { localizationService } from '@/services/calendar/localization.service'
 import type { 
@@ -34,6 +35,8 @@ export const useCalendarStore = defineStore('calendar', () => {
   const calendarData = ref<CalendarYear | null>(null)
   const holidays = ref<Holiday[]>([])
   const customHolidays = useLocalStorage<CustomHoliday[]>('custom-holidays', [])
+  const customHolidaysUserId = ref<string | null>(null)
+  const customHolidaysLoaded = ref(false)
   const loading = ref(false)
   const error = ref<string | null>(null)
   const holidaySource = ref<'api' | 'static'>('api')
@@ -207,6 +210,47 @@ export const useCalendarStore = defineStore('calendar', () => {
     config.value.showWeekNumbers = show ?? !config.value.showWeekNumbers
   }
 
+  async function syncCustomHolidays(userId: string | null): Promise<void> {
+    if (import.meta.env.VITE_DEMO_MODE === 'true') return
+
+    if (!userId) {
+      customHolidaysUserId.value = null
+      customHolidaysLoaded.value = false
+      return
+    }
+
+    if (customHolidaysUserId.value === userId && customHolidaysLoaded.value) return
+
+    try {
+      const remote = await customHolidaysService.list(userId)
+
+      // If Firestore is empty but local has data, do a one-time migration.
+      if (remote.length === 0 && customHolidays.value.length > 0) {
+        await Promise.all(
+          customHolidays.value.map(async (holiday) => {
+            const now = new Date().toISOString()
+            const toSave: CustomHoliday = {
+              ...holiday,
+              type: 'custom',
+              createdBy: holiday.createdBy || userId,
+              createdAt: holiday.createdAt || now,
+              updatedAt: now,
+            }
+            await customHolidaysService.upsert(userId, toSave)
+          }),
+        )
+      } else {
+        customHolidays.value = remote
+      }
+
+      customHolidaysUserId.value = userId
+      customHolidaysLoaded.value = true
+      generateCalendar()
+    } catch (e) {
+      console.warn('Failed to sync custom holidays from Firestore', e)
+    }
+  }
+
   // ═══════════════════════════════════════════════════════════════
   // CUSTOM HOLIDAYS
   // ═══════════════════════════════════════════════════════════════
@@ -215,13 +259,18 @@ export const useCalendarStore = defineStore('calendar', () => {
    * Add custom holiday
    */
   function addCustomHoliday(holiday: Omit<CustomHoliday, 'id' | 'createdAt' | 'updatedAt'>): void {
+    const now = new Date().toISOString()
     const newHoliday: CustomHoliday = {
       ...holiday,
       id: `custom-${Date.now()}`,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      createdBy: holiday.createdBy || customHolidaysUserId.value || '',
+      createdAt: now,
+      updatedAt: now,
     }
     customHolidays.value.push(newHoliday)
+    if (customHolidaysUserId.value) {
+      void customHolidaysService.upsert(customHolidaysUserId.value, newHoliday)
+    }
     generateCalendar()
   }
 
@@ -231,12 +280,16 @@ export const useCalendarStore = defineStore('calendar', () => {
   function updateCustomHoliday(id: string, updates: Partial<CustomHoliday>): void {
     const index = customHolidays.value.findIndex(h => h.id === id)
     if (index !== -1) {
-      customHolidays.value[index] = {
+      const next: CustomHoliday = {
         ...customHolidays.value[index],
         ...updates,
         type: 'custom',
         updatedAt: new Date().toISOString(),
       } as CustomHoliday
+      customHolidays.value[index] = next
+      if (customHolidaysUserId.value) {
+        void customHolidaysService.upsert(customHolidaysUserId.value, next)
+      }
       generateCalendar()
     }
   }
@@ -248,6 +301,9 @@ export const useCalendarStore = defineStore('calendar', () => {
     const index = customHolidays.value.findIndex(h => h.id === id)
     if (index !== -1) {
       customHolidays.value.splice(index, 1)
+      if (customHolidaysUserId.value) {
+        void customHolidaysService.remove(customHolidaysUserId.value, id)
+      }
       generateCalendar()
     }
   }
@@ -294,6 +350,7 @@ export const useCalendarStore = defineStore('calendar', () => {
     toggleHolidays,
     toggleCustomHolidays,
     toggleWeekNumbers,
+    syncCustomHolidays,
     addCustomHoliday,
     updateCustomHoliday,
     deleteCustomHoliday,

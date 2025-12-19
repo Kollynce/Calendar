@@ -14,7 +14,8 @@ import {
   XMarkIcon, 
   DocumentArrowDownIcon, 
   PhotoIcon,
-  PrinterIcon
+  PrinterIcon,
+  ArrowPathIcon
 } from '@heroicons/vue/24/outline'
 
 const props = defineProps<{
@@ -25,7 +26,7 @@ const emit = defineEmits(['close'])
 
 const exportStore = useExportStore()
 const editorStore = useEditorStore()
-const { config, exporting, progress, statusText, error, availableFormats, maxDPI } = storeToRefs(exportStore)
+const { config, exporting, progress, statusText, error, availableFormats, maxDPI, canRetryLastServerExport } = storeToRefs(exportStore)
 
 const previewUrl = ref<string | null>(null)
 
@@ -84,6 +85,8 @@ const isMultiPagePdf = computed(() => {
 
 const canExportPdf = computed(() => availableFormats.value.includes('pdf'))
 const canExportPng = computed(() => availableFormats.value.includes('png'))
+const canExportSvg = computed(() => availableFormats.value.includes('svg'))
+const canExportTiff = computed(() => availableFormats.value.includes('tiff'))
 
 const quality = computed({
   get: () => config.value.quality,
@@ -109,6 +112,13 @@ const safeZone = computed({
 
 async function handleExport(): Promise<void> {
   await exportStore.exportProject()
+  if (!error.value) {
+    emit('close')
+  }
+}
+
+async function handleRetryServerExport(): Promise<void> {
+  await exportStore.retryLastServerPdfExport()
   if (!error.value) {
     emit('close')
   }
@@ -233,12 +243,90 @@ watch(
 
                 <!-- Settings Column -->
                 <div class="flex-1 space-y-6">
-                  <div>
-                    <label class="text-sm font-medium text-gray-900 dark:text-white">Export Format</label>
-                    <div class="mt-3 grid grid-cols-1 gap-3">
-                      
+                  <div class="space-y-4">
+                    <div class="space-y-2">
+                      <label class="text-sm font-medium text-gray-900 dark:text-white">Image Formats</label>
+                      <!-- PNG Option -->
+                      <div 
+                        @click="canExportPng && (selectedFormat = 'png')"
+                        :class="[
+                          !canExportPng
+                            ? 'opacity-50 cursor-not-allowed ring-1 ring-gray-200 dark:ring-gray-700'
+                            : selectedFormat === 'png'
+                              ? 'ring-2 ring-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                              : 'ring-1 ring-gray-200 dark:ring-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50',
+                          'relative flex cursor-pointer rounded-lg px-4 py-3 shadow-sm focus:outline-none'
+                        ]"
+                      >
+                         <div class="flex w-full items-center justify-between">
+                          <div class="flex items-center">
+                            <div class="text-sm">
+                              <p class="font-medium text-gray-900 dark:text-white flex items-center gap-2">
+                                <PhotoIcon class="w-4 h-4" /> PNG Image
+                              </p>
+                              <p class="text-gray-500 dark:text-gray-400">High quality digital sharing</p>
+                            </div>
+                          </div>
+                          <div v-if="selectedFormat === 'png'" class="h-4 w-4 rounded-full border-[5px] border-primary-500"></div>
+                           <div v-else class="h-4 w-4 rounded-full border border-gray-300"></div>
+                        </div>
+                      </div>
+
+                      <!-- JPG Option -->
+                      <div 
+                        @click="selectedFormat = 'jpg'"
+                        :class="[
+                          selectedFormat === 'jpg'
+                            ? 'ring-2 ring-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                            : 'ring-1 ring-gray-200 dark:ring-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50',
+                          'relative flex cursor-pointer rounded-lg px-4 py-3 shadow-sm focus:outline-none'
+                        ]"
+                      >
+                         <div class="flex w-full items-center justify-between">
+                          <div class="flex items-center">
+                            <div class="text-sm">
+                              <p class="font-medium text-gray-900 dark:text-white flex items-center gap-2">
+                                <PhotoIcon class="w-4 h-4" /> JPG Image
+                              </p>
+                              <p class="text-gray-500 dark:text-gray-400">Smaller file size for sharing</p>
+                            </div>
+                          </div>
+                          <div v-if="selectedFormat === 'jpg'" class="h-4 w-4 rounded-full border-[5px] border-primary-500"></div>
+                           <div v-else class="h-4 w-4 rounded-full border border-gray-300"></div>
+                        </div>
+                      </div>
+
+                      <!-- SVG Option -->
+                      <div 
+                        v-if="canExportSvg"
+                        @click="selectedFormat = 'svg'"
+                        :class="[
+                          selectedFormat === 'svg'
+                            ? 'ring-2 ring-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                            : 'ring-1 ring-gray-200 dark:ring-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50',
+                          'relative flex cursor-pointer rounded-lg px-4 py-3 shadow-sm focus:outline-none'
+                        ]"
+                      >
+                         <div class="flex w-full items-center justify-between">
+                          <div class="flex items-center">
+                            <div class="text-sm">
+                              <p class="font-medium text-gray-900 dark:text-white flex items-center gap-2">
+                                <CodeBracketIcon class="w-4 h-4" /> SVG Vector
+                              </p>
+                              <p class="text-gray-500 dark:text-gray-400">Scalable vector graphics</p>
+                            </div>
+                          </div>
+                          <div v-if="selectedFormat === 'svg'" class="h-4 w-4 rounded-full border-[5px] border-primary-500"></div>
+                           <div v-else class="h-4 w-4 rounded-full border border-gray-300"></div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="space-y-2" v-if="canExportPdf || canExportTiff">
+                      <label class="text-sm font-medium text-gray-900 dark:text-white">Print Formats</label>
                       <!-- PDF Option -->
                       <div 
+                        v-if="canExportPdf"
                         @click="canExportPdf && (selectedFormat = 'pdf')"
                         :class="[
                           !canExportPdf
@@ -263,15 +351,14 @@ watch(
                         </div>
                       </div>
 
-                      <!-- PNG Option -->
+                      <!-- TIFF Option -->
                       <div 
-                        @click="canExportPng && (selectedFormat = 'png')"
+                        v-if="canExportTiff"
+                        @click="selectedFormat = 'tiff'"
                         :class="[
-                          !canExportPng
-                            ? 'opacity-50 cursor-not-allowed ring-1 ring-gray-200 dark:ring-gray-700'
-                            : selectedFormat === 'png'
-                              ? 'ring-2 ring-primary-500 bg-primary-50 dark:bg-primary-900/20'
-                              : 'ring-1 ring-gray-200 dark:ring-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50',
+                          selectedFormat === 'tiff'
+                            ? 'ring-2 ring-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                            : 'ring-1 ring-gray-200 dark:ring-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50',
                           'relative flex cursor-pointer rounded-lg px-4 py-3 shadow-sm focus:outline-none'
                         ]"
                       >
@@ -279,12 +366,12 @@ watch(
                           <div class="flex items-center">
                             <div class="text-sm">
                               <p class="font-medium text-gray-900 dark:text-white flex items-center gap-2">
-                                <PhotoIcon class="w-4 h-4" /> PNG Image
+                                <PrinterIcon class="w-4 h-4" /> TIFF Print
                               </p>
-                              <p class="text-gray-500 dark:text-gray-400">High quality digital sharing</p>
+                              <p class="text-gray-500 dark:text-gray-400">Professional print production</p>
                             </div>
                           </div>
-                          <div v-if="selectedFormat === 'png'" class="h-4 w-4 rounded-full border-[5px] border-primary-500"></div>
+                          <div v-if="selectedFormat === 'tiff'" class="h-4 w-4 rounded-full border-[5px] border-primary-500"></div>
                            <div v-else class="h-4 w-4 rounded-full border border-gray-300"></div>
                         </div>
                       </div>
@@ -429,6 +516,17 @@ watch(
                         <DocumentArrowDownIcon class="w-5 h-5" /> Download {{ selectedFormat.toUpperCase() }}
                       </template>
                     </button>
+
+                    <button
+                      v-if="canRetryLastServerExport"
+                      type="button"
+                      class="mt-3 w-full btn-secondary flex justify-center items-center gap-2"
+                      :disabled="exporting"
+                      @click="handleRetryServerExport"
+                    >
+                      <ArrowPathIcon class="w-5 h-5" /> Retry server export
+                    </button>
+
                     <p v-if="exporting && statusText" class="mt-2 text-xs text-center text-gray-600 dark:text-gray-300">{{ statusText }}</p>
                     <p v-if="error" class="mt-2 text-xs text-red-600 text-center">{{ error }}</p>
                     <p class="mt-2 text-xs text-center text-gray-500">

@@ -11,6 +11,7 @@ export interface User {
   preferences: UserPreferences
   createdAt: string
   updatedAt: string
+  lastLoginAt?: string
 }
 
 export type UserRole = 'user' | 'creator' | 'admin'

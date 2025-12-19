@@ -1,0 +1,147 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && request.auth.token.admin == true;
+    }
+
+    function isCreator() {
+      return isAuthenticated() && (
+        request.auth.token.admin == true ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['creator', 'admin']
+      );
+    }
+
+    function getUserSubscription() {
+      return request.auth.token.subscription || 'free';
+    }
+
+    function isPro() {
+      return getUserSubscription() in ['pro', 'business', 'enterprise'];
+    }
+
+    function isBusiness() {
+      return getUserSubscription() in ['business', 'enterprise'];
+    }
+
+    function validString(field, min, max) {
+      return field is string && field.size() >= min && field.size() <= max;
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+
+      allow create: if isOwner(userId) &&
+        validString(request.resource.data.displayName, 1, 100) &&
+        request.resource.data.role == 'user' &&
+        request.resource.data.subscription == 'free';
+
+      allow update: if isOwner(userId) &&
+        request.resource.data.role == resource.data.role &&
+        request.resource.data.subscription == resource.data.subscription;
+
+      allow delete: if isAdmin();
+
+      match /brandKits/{brandKitId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isPro();
+        allow update, delete: if isOwner(userId);
+      }
+
+      match /customHolidays/{holidayId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId);
+        allow update, delete: if isOwner(userId);
+      }
+    }
+
+    match /projects/{projectId} {
+      allow read: if isAuthenticated() && (isOwner(resource.data.userId) || isAdmin());
+
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid &&
+        validString(request.resource.data.name, 1, 200);
+
+      allow update: if isAuthenticated() && isOwner(resource.data.userId) &&
+        request.resource.data.userId == resource.data.userId;
+
+      allow delete: if isAuthenticated() && isOwner(resource.data.userId);
+    }
+
+    match /templates/{templateId} {
+      allow read: if resource.data.status == 'approved' ||
+        isOwner(resource.data.creatorId) ||
+        isAdmin();
+
+      allow create: if isCreator() &&
+        request.resource.data.creatorId == request.auth.uid &&
+        request.resource.data.status == 'draft' &&
+        validString(request.resource.data.name, 1, 200) &&
+        validString(request.resource.data.description, 10, 2000);
+
+      allow update: if isOwner(resource.data.creatorId) &&
+        request.resource.data.creatorId == resource.data.creatorId &&
+        (request.resource.data.status == resource.data.status ||
+         request.resource.data.status == 'pending');
+
+      allow update: if isAdmin();
+
+      allow delete: if isOwner(resource.data.creatorId) && resource.data.status == 'draft';
+
+      match /reviews/{reviewId} {
+        allow read: if true;
+
+        allow create: if isAuthenticated() &&
+          request.resource.data.userId == request.auth.uid &&
+          request.resource.data.rating >= 1 &&
+          request.resource.data.rating <= 5;
+
+        allow update: if isOwner(resource.data.userId);
+        allow delete: if isOwner(resource.data.userId);
+      }
+
+      match /purchases/{purchaseId} {
+        allow read: if isOwner(resource.data.userId) ||
+          isOwner(get(/databases/$(database)/documents/templates/$(templateId)).data.creatorId);
+
+        allow write: if false;
+      }
+    }
+
+    match /subscriptions/{subscriptionId} {
+      allow read: if isOwner(resource.data.userId);
+      allow write: if false;
+    }
+
+    match /exportJobs/{jobId} {
+      allow read: if isAuthenticated() && (isOwner(resource.data.userId) || isAdmin());
+      allow write: if false;
+    }
+
+    match /orders/{orderId} {
+      allow read: if isOwner(resource.data.buyerId) ||
+        isOwner(resource.data.sellerId) ||
+        isAdmin();
+
+      allow write: if false;
+    }
+
+    match /feedback/{feedbackId} {
+      allow read: if isAdmin();
+
+      allow create: if validString(request.resource.data.message, 10, 5000) &&
+        request.resource.data.type in ['bug', 'feature', 'general'];
+
+      allow update, delete: if false;
+    }
+  }
+}

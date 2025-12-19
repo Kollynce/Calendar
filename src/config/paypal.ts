@@ -16,8 +16,9 @@ export async function initPayPal(): Promise<PayPalNamespace | null> {
     paypal = await loadScript({
       clientId,
       currency: 'USD',
-      intent: 'capture',
+      intent: 'subscription',
       vault: true, // Enable vault for subscriptions
+      components: 'buttons',
     })
     
     console.log('✅ PayPal SDK loaded')

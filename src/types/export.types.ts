@@ -60,6 +60,8 @@ export interface ExportJob {
 }
 
 export type ExportJobStatus = 
+  | 'queued'
+  | 'running'
   | 'pending'
   | 'processing'
   | 'completed'

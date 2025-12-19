@@ -12,6 +12,31 @@ import {
 import { db } from '@/config/firebase'
 import type { Project } from '@/types'
 
+function stripUndefinedDeep<T>(value: T): T {
+  if (value === undefined) return undefined as unknown as T
+  if (value === null) return value
+
+  if (Array.isArray(value)) {
+    return value
+      .map((v) => stripUndefinedDeep(v))
+      .filter((v) => v !== undefined) as unknown as T
+  }
+
+  if (typeof value === 'object') {
+    const input = value as Record<string, unknown>
+    const out: Record<string, unknown> = {}
+    Object.entries(input).forEach(([k, v]) => {
+      if (v === undefined) return
+      const cleaned = stripUndefinedDeep(v)
+      if (cleaned === undefined) return
+      out[k] = cleaned
+    })
+    return out as T
+  }
+
+  return value
+}
+
 class ProjectsService {
   private readonly isDemoMode = import.meta.env.VITE_DEMO_MODE === 'true'
 
@@ -24,7 +49,8 @@ class ProjectsService {
 
   async save(project: Project): Promise<void> {
     if (this.isDemoMode) return
-    await setDoc(doc(db, 'projects', project.id), project, { merge: true })
+    const cleaned = stripUndefinedDeep(project)
+    await setDoc(doc(db, 'projects', project.id), cleaned, { merge: true })
   }
 
   async listForUser(userId: string, max = 20): Promise<Project[]> {

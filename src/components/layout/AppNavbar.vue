@@ -22,7 +22,7 @@ const navigation = [
 ]
 
 const userNavigation = [
-  { name: 'Your Profile', href: '/profile' },
+  { name: 'Your Profile', href: '/settings' },
   { name: 'Settings', href: '/settings' },
   { name: 'Sign out', href: '#', action: () => authStore.logout() },
 ]
@@ -81,6 +81,14 @@ const userNavigation = [
               </template>
 
               <template #items>
+                <MenuItem v-if="authStore.isAdmin" v-slot="{ active }">
+                  <a
+                    href="/admin/users"
+                    :class="[active ? 'bg-gray-50 dark:bg-gray-700' : '', 'block px-4 py-2 text-sm text-gray-700 dark:text-gray-200']"
+                  >
+                    Admin: Users
+                  </a>
+                </MenuItem>
                 <MenuItem v-for="item in userNavigation" :key="item.name" v-slot="{ active }">
                   <a
                     :href="item.href"
@@ -142,6 +150,13 @@ const userNavigation = [
           </div>
         </div>
         <div class="mt-3 space-y-1">
+          <a
+            v-if="authStore.isAdmin"
+            href="/admin/users"
+            class="block px-4 py-2 text-base font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-800"
+          >
+            Admin: Users
+          </a>
           <a
             v-for="item in userNavigation"
             :key="item.name"

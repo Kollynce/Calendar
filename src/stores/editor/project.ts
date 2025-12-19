@@ -201,10 +201,14 @@ export function createProjectModule(params: {
       project.value.canvas = getCanvasState() as CanvasState
       project.value.updatedAt = new Date().toISOString()
 
+      const canvasWidth = canvas.value.getWidth?.() ?? canvas.value.width ?? 0
+      const targetThumbWidth = 720
+      const multiplier = canvasWidth > 0 ? Math.min(Math.max(targetThumbWidth / canvasWidth, 0.35), 1.25) : 0.75
+
       const thumbnail = canvas.value.toDataURL({
         format: 'jpeg',
-        quality: 0.5,
-        multiplier: 0.25,
+        quality: 0.85,
+        multiplier,
       })
       project.value.thumbnail = thumbnail
 

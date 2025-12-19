@@ -87,9 +87,13 @@ const PAPER_SIZES = {
 }
 
 async function handleSaveProject(): Promise<void> {
-  await editorStore.saveProject()
-  if (!routeProjectId.value && editorStore.project?.id) {
-    router.replace(`/editor/${editorStore.project.id}`)
+  try {
+    await editorStore.saveProject()
+    if (!routeProjectId.value && editorStore.project?.id) {
+      router.replace(`/editor/${editorStore.project.id}`)
+    }
+  } catch (e) {
+    console.error('Failed to save project', e)
   }
 }
 
@@ -801,6 +805,10 @@ async function ensureProjectForRoute(): Promise<void> {
     project.canvas.width = project.canvas.width || DEFAULT_CANVAS.width
     project.canvas.height = project.canvas.height || DEFAULT_CANVAS.height
   }
+
+  if (canvasRef.value && !editorStore.canvas) {
+    await initializeEditorCanvas()
+  }
 }
 
 function shouldAddWelcomeText(): boolean {
@@ -855,10 +863,16 @@ onMounted(() => {
   loadTemplateThumbnails()
 })
 
-watch(routeProjectId, (next, prev) => {
+watch(routeProjectId, async (next, prev) => {
   if (next === prev) return
+
+  if (next && editorStore.project?.id === next && editorStore.canvas) {
+    return
+  }
+
   editorStore.destroyCanvas()
-  void ensureProjectForRoute()
+  await ensureProjectForRoute()
+  await initializeEditorCanvas()
 })
 
 onBeforeUnmount(() => {

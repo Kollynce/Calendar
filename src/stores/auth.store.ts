@@ -10,7 +10,7 @@ import {
   sendPasswordResetEmail,
   type User as FirebaseUser
 } from 'firebase/auth'
-import { doc, getDoc, setDoc } from 'firebase/firestore'
+import { doc, getDoc, onSnapshot, setDoc, type Unsubscribe } from 'firebase/firestore'
 import { auth, db } from '@/config/firebase'
 import type { User, SubscriptionTier } from '@/types'
 import { TIER_LIMITS } from '@/config/constants'
@@ -19,14 +19,21 @@ export const useAuthStore = defineStore('auth', () => {
   // State
   const user = ref<User | null>(null)
   const firebaseUser = ref<FirebaseUser | null>(null)
+  const customClaims = ref<Record<string, any> | null>(null)
   const loading = ref(true)
   const error = ref<string | null>(null)
 
+  let unsubscribeUserDoc: Unsubscribe | null = null
+
   // Getters
   const isAuthenticated = computed(() => !!user.value)
-  const subscriptionTier = computed(() => user.value?.subscription || 'free')
+  const subscriptionTier = computed(() => {
+    // Prefer custom claims for security, fall back to user doc
+    const tokenSubscription = customClaims.value?.subscription as string
+    return tokenSubscription || user.value?.subscription || 'free'
+  })
   const isPro = computed(() => ['pro', 'business', 'enterprise'].includes(subscriptionTier.value))
-  const tierLimits = computed(() => TIER_LIMITS[subscriptionTier.value])
+  const tierLimits = computed(() => TIER_LIMITS[subscriptionTier.value as SubscriptionTier])
 
   // Demo mode users for testing
   const DEMO_USERS: Record<string, User> = {
@@ -88,19 +95,35 @@ export const useAuthStore = defineStore('auth', () => {
   async function initialize(): Promise<void> {
     // In demo mode, skip Firebase auth listener
     if (isDemoMode) {
-      console.log('🎭 Running in DEMO MODE - Firebase auth disabled')
+      console.log('Running in DEMO MODE - Firebase auth disabled')
       loading.value = false
       return
     }
 
     return new Promise((resolve) => {
-      const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
+      onAuthStateChanged(auth, async (fbUser) => {
         firebaseUser.value = fbUser
+
+        if (unsubscribeUserDoc) {
+          unsubscribeUserDoc()
+          unsubscribeUserDoc = null
+        }
         
         if (fbUser) {
-          await fetchUserProfile(fbUser.uid)
+          await ensureUserProfile(fbUser)
+          await refreshAdminClaims(fbUser)
+
+          // Get custom claims from token
+          const tokenResult = await fbUser.getIdTokenResult()
+          customClaims.value = tokenResult.claims
+
+          unsubscribeUserDoc = onSnapshot(doc(db, 'users', fbUser.uid), (snap) => {
+            if (!snap.exists()) return
+            user.value = { id: fbUser.uid, ...(snap.data() as Omit<User, 'id'>) } as User
+          })
         } else {
           user.value = null
+          customClaims.value = null
         }
         
         loading.value = false
@@ -109,23 +132,57 @@ export const useAuthStore = defineStore('auth', () => {
     })
   }
 
-  /**
-   * Fetch user profile from Firestore
-   */
-  async function fetchUserProfile(uid: string): Promise<void> {
-    try {
-      const userDoc = await getDoc(doc(db, 'users', uid))
-      
-      if (userDoc.exists()) {
-        user.value = { id: uid, ...userDoc.data() } as User
-      } else {
-        // User exists in Auth but not Firestore - create profile
-        await createUserProfile(uid)
-      }
-    } catch (e) {
-      console.error('Error fetching user profile:', e)
-      error.value = 'Failed to load user profile'
+  async function sleep(ms: number): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, ms))
+  }
+
+  async function getUserProfile(uid: string): Promise<User | null> {
+    const userDoc = await getDoc(doc(db, 'users', uid))
+    if (!userDoc.exists()) return null
+    return { id: uid, ...userDoc.data() } as User
+  }
+
+  async function waitForUserProfile(uid: string): Promise<User | null> {
+    const delays = [150, 300, 600, 900, 1200]
+    for (const delay of delays) {
+      const profile = await getUserProfile(uid)
+      if (profile) return profile
+      await sleep(delay)
     }
+    return null
+  }
+
+  async function refreshAdminClaims(fbUser: FirebaseUser): Promise<void> {
+    if (user.value?.role !== 'admin') return
+
+    const delays = [0, 400, 800, 1200]
+    for (const delay of delays) {
+      if (delay) await sleep(delay)
+      await fbUser.getIdToken(true)
+      const tokenResult = await fbUser.getIdTokenResult()
+      customClaims.value = tokenResult.claims
+      if (tokenResult.claims.admin === true) return
+    }
+  }
+
+  async function ensureUserProfile(
+    fbUser: FirebaseUser,
+    data?: Partial<User>
+  ): Promise<void> {
+    const uid = fbUser.uid
+    const existing = await getUserProfile(uid)
+    if (existing) {
+      user.value = existing
+      return
+    }
+
+    const provisioned = await waitForUserProfile(uid)
+    if (provisioned) {
+      user.value = provisioned
+      return
+    }
+
+    await createUserProfile(uid, data)
   }
 
   /**
@@ -137,6 +194,12 @@ export const useAuthStore = defineStore('auth', () => {
   ): Promise<void> {
     const fbUser = firebaseUser.value
     if (!fbUser) return
+
+    const existing = await getDoc(doc(db, 'users', uid))
+    if (existing.exists()) {
+      user.value = { id: uid, ...existing.data() } as User
+      return
+    }
 
     // Build user object without undefined values (Firestore rejects undefined)
     const newUser: Record<string, any> = {
@@ -173,6 +236,18 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = { id: uid, ...newUser } as User
   }
 
+  async function updateLastLogin(uid: string): Promise<void> {
+    const now = new Date().toISOString()
+    await setDoc(
+      doc(db, 'users', uid),
+      {
+        lastLoginAt: now,
+        updatedAt: now,
+      },
+      { merge: true },
+    )
+  }
+
   /**
    * Sign in with email and password
    */
@@ -186,13 +261,14 @@ export const useAuthStore = defineStore('auth', () => {
         const demoUser = DEMO_USERS[emailInput]
         if (demoUser) {
           user.value = demoUser
+          customClaims.value = { subscription: demoUser.subscription }
           return
         }
         // Allow any email in demo mode with a default user
-        user.value = {
+        const defaultUser = {
           id: 'demo-user-' + Date.now(),
           email: emailInput,
-          displayName: emailInput.split('@')[0],
+          displayName: emailInput.split('@')[0] ?? emailInput,
           role: 'user',
           subscription: 'pro', // Give pro access in demo
           preferences: {
@@ -205,11 +281,15 @@ export const useAuthStore = defineStore('auth', () => {
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         }
+        user.value = defaultUser as User
+        customClaims.value = { subscription: defaultUser.subscription }
         return
       }
 
       const result = await signInWithEmailAndPassword(auth, emailInput, password)
-      await fetchUserProfile(result.user.uid)
+      await ensureUserProfile(result.user)
+      await refreshAdminClaims(result.user)
+      await updateLastLogin(result.user.uid)
     } catch (e: any) {
       error.value = getAuthErrorMessage(e.code)
       throw e
@@ -231,7 +311,9 @@ export const useAuthStore = defineStore('auth', () => {
     
     try {
       const result = await createUserWithEmailAndPassword(auth, email, password)
-      await createUserProfile(result.user.uid, { displayName })
+      await ensureUserProfile(result.user, { displayName })
+      await refreshAdminClaims(result.user)
+      await updateLastLogin(result.user.uid)
     } catch (e: any) {
       error.value = getAuthErrorMessage(e.code)
       throw e
@@ -255,10 +337,13 @@ export const useAuthStore = defineStore('auth', () => {
       const userDoc = await getDoc(doc(db, 'users', result.user.uid))
       
       if (!userDoc.exists()) {
-        await createUserProfile(result.user.uid)
+        await ensureUserProfile(result.user)
       } else {
-        await fetchUserProfile(result.user.uid)
+        await ensureUserProfile(result.user)
       }
+
+      await refreshAdminClaims(result.user)
+      await updateLastLogin(result.user.uid)
     } catch (e: any) {
       error.value = getAuthErrorMessage(e.code)
       throw e
@@ -288,6 +373,11 @@ export const useAuthStore = defineStore('auth', () => {
     await signOut(auth)
     user.value = null
     firebaseUser.value = null
+
+    if (unsubscribeUserDoc) {
+      unsubscribeUserDoc()
+      unsubscribeUserDoc = null
+    }
   }
 
   /**

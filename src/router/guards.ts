@@ -4,6 +4,7 @@ import { useAuthStore } from '@/stores/auth.store'
 export function setupRouterGuards(router: Router): void {
   router.beforeEach(async (to, from, next) => {
     const authStore = useAuthStore()
+    void from
 
     // Wait for auth to initialize
     if (authStore.loading) {
@@ -13,6 +14,7 @@ export function setupRouterGuards(router: Router): void {
     const requiresAuth = to.meta.requiresAuth
     const requiresCreator = to.meta.requiresCreator
     const requiresPro = to.meta.requiresPro
+    const requiresAdmin = to.meta.requiresAdmin
     const guestOnly = to.meta.guest
 
     // Redirect authenticated users away from guest-only pages
@@ -36,6 +38,11 @@ export function setupRouterGuards(router: Router): void {
     // Check pro subscription
     if (requiresPro && !authStore.isPro) {
       return next({ name: 'billing' })
+    }
+
+    // Check admin role
+    if (requiresAdmin && !authStore.isAdmin) {
+      return next({ name: 'dashboard' })
     }
 
     next()

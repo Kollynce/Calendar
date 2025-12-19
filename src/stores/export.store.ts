@@ -2,10 +2,12 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { pdfExportService } from '@/services/export/pdf.service'
 import { imageExportService } from '@/services/export/image.service'
+import { exportJobsService } from '@/services/export/export-jobs.service'
 import { renderTemplateOnCanvas } from '@/services/editor/template-renderer'
 import { calendarTemplates, type CalendarTemplate } from '@/data/templates/calendar-templates'
 import { useEditorStore } from './editor.store'
 import { useAuthStore } from './auth.store'
+import { isFeatureEnabled } from '@/config/features'
 import type { 
   ExportConfig, 
   ExportFormat, 
@@ -39,6 +41,8 @@ export const useExportStore = defineStore('export', () => {
   const statusText = ref<string | null>(null)
   const error = ref<string | null>(null)
   const recentExports = ref<ExportJob[]>([])
+
+  const lastServerPdfJobId = ref<string | null>(null)
 
   async function yieldToUI(): Promise<void> {
     await new Promise<void>((resolve) => {
@@ -93,6 +97,17 @@ export const useExportStore = defineStore('export', () => {
     }
     
     return formats
+  })
+
+  const canRetryLastServerExport = computed(() => {
+    if (import.meta.env.VITE_DEMO_MODE === 'true') return false
+    if (!isFeatureEnabled('serverExports')) return false
+    if (!authStore.isAuthenticated) return false
+    if (config.value.format !== 'pdf') return false
+    if (config.value.pages !== 'current') return false
+    if (!editorStore.project?.id) return false
+    if (!lastServerPdfJobId.value) return false
+    return Boolean(error.value)
   })
 
   // ═══════════════════════════════════════════════════════════════
@@ -224,6 +239,59 @@ export const useExportStore = defineStore('export', () => {
   async function exportAsPDF(): Promise<Blob> {
     if (!editorStore.canvas) throw new Error('Canvas not found')
 
+    const canUseServerExports =
+      import.meta.env.VITE_DEMO_MODE !== 'true' &&
+      isFeatureEnabled('serverExports') &&
+      authStore.isAuthenticated &&
+      Boolean(editorStore.project?.id)
+
+    if (canUseServerExports && config.value.pages === 'current') {
+      const projectId = editorStore.project!.id
+      statusText.value = 'Queued server export…'
+      progress.value = 10
+      await yieldToUI()
+
+      const jobId = await exportJobsService.createPdfExportJob(projectId)
+      lastServerPdfJobId.value = jobId
+
+      const { downloadUrl } = await exportJobsService.waitForJobCompletion(jobId, {
+        onProgress: (jobProgress, status, stage) => {
+          const normalized = Math.max(0, Math.min(100, Math.round(jobProgress)))
+          progress.value = Math.max(progress.value, normalized)
+          statusText.value =
+            stage === 'load_project'
+              ? 'Loading project…'
+              : stage === 'prepare_data'
+                ? 'Preparing export…'
+                : stage === 'render_pdf'
+                  ? 'Rendering PDF…'
+                  : stage === 'upload'
+                    ? 'Uploading PDF…'
+                    : stage === 'finalize'
+                      ? 'Finalizing export…'
+                      : status === 'queued'
+                        ? 'Queued server export…'
+                        : status === 'running'
+                          ? 'Generating PDF on server…'
+                          : status === 'completed'
+                            ? 'Downloading PDF…'
+                            : status === 'failed'
+                              ? 'Export failed'
+                              : 'Exporting…'
+        },
+      })
+
+      statusText.value = 'Downloading PDF…'
+      progress.value = Math.max(progress.value, 90)
+      await yieldToUI()
+
+      const response = await fetch(downloadUrl)
+      if (!response.ok) {
+        throw new Error('Failed to download exported PDF')
+      }
+      return await response.blob()
+    }
+
     if (config.value.pages === 'all') {
       return exportAsYearPDF()
     }
@@ -332,6 +400,58 @@ export const useExportStore = defineStore('export', () => {
   async function exportAsPNG(): Promise<Blob> {
     if (!editorStore.canvas) throw new Error('Canvas not found')
 
+    const canUseServerExports =
+      import.meta.env.VITE_DEMO_MODE !== 'true' &&
+      isFeatureEnabled('serverExports') &&
+      authStore.isAuthenticated &&
+      Boolean(editorStore.project?.id)
+
+    if (canUseServerExports) {
+      const projectId = editorStore.project!.id
+      statusText.value = 'Queued server PNG export…'
+      progress.value = 10
+      await yieldToUI()
+
+      const jobId = await exportJobsService.createPngExportJob(projectId)
+
+      const { downloadUrl } = await exportJobsService.waitForJobCompletion(jobId, {
+        onProgress: (jobProgress, status, stage) => {
+          const normalized = Math.max(0, Math.min(100, Math.round(jobProgress)))
+          progress.value = Math.max(progress.value, normalized)
+          statusText.value =
+            stage === 'load_project'
+              ? 'Loading project…'
+              : stage === 'prepare_data'
+                ? 'Preparing export…'
+                : stage === 'render_pdf'
+                  ? 'Rendering PNG…'
+                  : stage === 'upload'
+                    ? 'Uploading PNG…'
+                    : stage === 'finalize'
+                      ? 'Finalizing export…'
+                      : status === 'queued'
+                        ? 'Queued server PNG export…'
+                        : status === 'running'
+                          ? 'Generating PNG on server…'
+                          : status === 'completed'
+                            ? 'Downloading PNG…'
+                            : status === 'failed'
+                              ? 'Export failed'
+                              : 'Exporting…'
+        },
+      })
+
+      statusText.value = 'Downloading PNG…'
+      progress.value = Math.max(progress.value, 90)
+      await yieldToUI()
+
+      const response = await fetch(downloadUrl)
+      if (!response.ok) {
+        throw new Error('Failed to download exported PNG')
+      }
+      return await response.blob()
+    }
+
     return imageExportService.exportFabricToPNG(
       editorStore.canvas,
       config.value
@@ -343,6 +463,58 @@ export const useExportStore = defineStore('export', () => {
    */
   async function exportAsJPEG(): Promise<Blob> {
     if (!editorStore.canvas) throw new Error('Canvas not found')
+
+    const canUseServerExports =
+      import.meta.env.VITE_DEMO_MODE !== 'true' &&
+      isFeatureEnabled('serverExports') &&
+      authStore.isAuthenticated &&
+      Boolean(editorStore.project?.id)
+
+    if (canUseServerExports) {
+      const projectId = editorStore.project!.id
+      statusText.value = 'Queued server JPG export…'
+      progress.value = 10
+      await yieldToUI()
+
+      const jobId = await exportJobsService.createJpgExportJob(projectId)
+
+      const { downloadUrl } = await exportJobsService.waitForJobCompletion(jobId, {
+        onProgress: (jobProgress, status, stage) => {
+          const normalized = Math.max(0, Math.min(100, Math.round(jobProgress)))
+          progress.value = Math.max(progress.value, normalized)
+          statusText.value =
+            stage === 'load_project'
+              ? 'Loading project…'
+              : stage === 'prepare_data'
+                ? 'Preparing export…'
+                : stage === 'render_pdf'
+                  ? 'Rendering JPG…'
+                  : stage === 'upload'
+                    ? 'Uploading JPG…'
+                    : stage === 'finalize'
+                      ? 'Finalizing export…'
+                      : status === 'queued'
+                        ? 'Queued server JPG export…'
+                        : status === 'running'
+                          ? 'Generating JPG on server…'
+                          : status === 'completed'
+                            ? 'Downloading JPG…'
+                            : status === 'failed'
+                              ? 'Export failed'
+                              : 'Exporting…'
+        },
+      })
+
+      statusText.value = 'Downloading JPG…'
+      progress.value = Math.max(progress.value, 90)
+      await yieldToUI()
+
+      const response = await fetch(downloadUrl)
+      if (!response.ok) {
+        throw new Error('Failed to download exported JPG')
+      }
+      return await response.blob()
+    }
 
     return imageExportService.exportFabricToJPEG(
       editorStore.canvas,
@@ -476,6 +648,77 @@ export const useExportStore = defineStore('export', () => {
     error.value = null
   }
 
+  async function retryLastServerPdfExport(): Promise<void> {
+    if (!editorStore.project) {
+      error.value = 'No project to export'
+      return
+    }
+
+    const jobId = String(lastServerPdfJobId.value || '').trim()
+    if (!jobId) {
+      error.value = 'No server export job to retry'
+      return
+    }
+
+    exporting.value = true
+    progress.value = 0
+    statusText.value = 'Retrying server export…'
+    error.value = null
+
+    try {
+      await exportJobsService.retryExportJob(jobId)
+
+      const { downloadUrl } = await exportJobsService.waitForJobCompletion(jobId, {
+        onProgress: (jobProgress, status, stage) => {
+          const normalized = Math.max(0, Math.min(100, Math.round(jobProgress)))
+          progress.value = Math.max(progress.value, normalized)
+          statusText.value =
+            stage === 'load_project'
+              ? 'Loading project…'
+              : stage === 'prepare_data'
+                ? 'Preparing export…'
+                : stage === 'render_pdf'
+                  ? 'Rendering PDF…'
+                  : stage === 'upload'
+                    ? 'Uploading PDF…'
+                    : stage === 'finalize'
+                      ? 'Finalizing export…'
+                      : status === 'queued'
+                        ? 'Queued server export…'
+                        : status === 'running'
+                          ? 'Generating PDF on server…'
+                          : status === 'completed'
+                            ? 'Downloading PDF…'
+                            : status === 'failed'
+                              ? 'Export failed'
+                              : 'Exporting…'
+        },
+      })
+
+      statusText.value = 'Downloading PDF…'
+      progress.value = Math.max(progress.value, 90)
+      await yieldToUI()
+
+      const response = await fetch(downloadUrl)
+      if (!response.ok) {
+        throw new Error('Failed to download exported PDF')
+      }
+
+      const blob = await response.blob()
+      const filename = imageExportService.generateFilename(editorStore.project.name || 'calendar', 'pdf')
+      imageExportService.downloadBlob(blob, filename)
+      trackExport(filename)
+
+      progress.value = 100
+      statusText.value = null
+    } catch (e: any) {
+      error.value = e.message || 'Export failed'
+      console.error('Export retry error:', e)
+    } finally {
+      exporting.value = false
+    }
+  }
+
   /**
    * Set format and adjust quality if needed
    */
@@ -502,11 +745,13 @@ export const useExportStore = defineStore('export', () => {
     maxDPI,
     needsWatermark,
     availableFormats,
+    canRetryLastServerExport,
     // Actions
     updateConfig,
     exportProject,
     getEstimatedSize,
     resetState,
     setFormat,
+    retryLastServerPdfExport,
   }
 })

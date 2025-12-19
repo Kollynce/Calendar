@@ -1,5 +1,75 @@
+<script setup lang="ts">
+import AppLayout from '@/layouts/AppLayout.vue'
+import AppButton from '@/components/ui/AppButton.vue'
+import { SwatchIcon, PhotoIcon, LanguageIcon } from '@heroicons/vue/24/outline'
+</script>
+
 <template>
-  <div class="container mx-auto px-4 py-8">
-    <h1 class="text-2xl font-bold">Brand Kit</h1>
-  </div>
+  <AppLayout>
+    <div class="space-y-8">
+      <div>
+        <h1 class="text-2xl sm:text-3xl font-display font-bold text-gray-900 dark:text-white">Brand Kit</h1>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Keep your designs consistent with saved assets.</p>
+      </div>
+
+      <div class="grid lg:grid-cols-3 gap-6">
+        <div class="glass-card p-6">
+          <div class="flex items-center gap-2">
+            <PhotoIcon class="h-5 w-5 text-primary-500" />
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Logos</h2>
+          </div>
+          <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Upload and reuse your brand logo assets.</p>
+          <div class="mt-6 h-32 rounded-xl border-2 border-dashed border-gray-300/60 dark:border-gray-700 flex items-center justify-center text-sm text-gray-500 dark:text-gray-400">
+            Drop logo files here
+          </div>
+          <div class="mt-4">
+            <AppButton variant="secondary" class="w-full">Upload logo</AppButton>
+          </div>
+        </div>
+
+        <div class="glass-card p-6">
+          <div class="flex items-center gap-2">
+            <SwatchIcon class="h-5 w-5 text-primary-500" />
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Colors</h2>
+          </div>
+          <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Save your palette for quick access.</p>
+
+          <div class="mt-6 grid grid-cols-5 gap-2">
+            <div class="h-10 rounded-lg bg-primary-500"></div>
+            <div class="h-10 rounded-lg bg-accent-500"></div>
+            <div class="h-10 rounded-lg bg-gray-900"></div>
+            <div class="h-10 rounded-lg bg-gray-500"></div>
+            <div class="h-10 rounded-lg bg-white border border-gray-200 dark:border-gray-700"></div>
+          </div>
+
+          <div class="mt-4">
+            <AppButton variant="secondary" class="w-full">Edit palette</AppButton>
+          </div>
+        </div>
+
+        <div class="glass-card p-6">
+          <div class="flex items-center gap-2">
+            <LanguageIcon class="h-5 w-5 text-primary-500" />
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Typography</h2>
+          </div>
+          <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Define your default font choices.</p>
+
+          <div class="mt-6 space-y-3">
+            <div class="rounded-xl bg-gray-100 dark:bg-gray-800 p-4">
+              <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Heading font</div>
+              <div class="text-sm text-gray-700 dark:text-gray-200 mt-1">Outfit</div>
+            </div>
+            <div class="rounded-xl bg-gray-100 dark:bg-gray-800 p-4">
+              <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Body font</div>
+              <div class="text-sm text-gray-700 dark:text-gray-200 mt-1">Inter</div>
+            </div>
+          </div>
+
+          <div class="mt-4">
+            <AppButton variant="secondary" class="w-full">Manage fonts</AppButton>
+          </div>
+        </div>
+      </div>
+    </div>
+  </AppLayout>
 </template>

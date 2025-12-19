@@ -31,7 +31,7 @@ const plans = [
       'Brand kit (1)',
       'Custom holidays',
     ],
-    cta: 'Start Free Trial',
+    cta: 'Upgrade to Pro',
     highlighted: true,
   },
   {
@@ -63,7 +63,7 @@ const plans = [
           Simple, Transparent Pricing
         </h1>
         <p class="text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
-          Choose the plan that's right for you. All plans include a 14-day free trial.
+          Choose the plan that's right for you. Start on Free and upgrade anytime.
         </p>
       </div>
 
