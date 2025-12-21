@@ -15,7 +15,8 @@ import {
   DocumentArrowDownIcon, 
   PhotoIcon,
   PrinterIcon,
-  ArrowPathIcon
+  ArrowPathIcon,
+  CodeBracketIcon,
 } from '@heroicons/vue/24/outline'
 
 const props = defineProps<{

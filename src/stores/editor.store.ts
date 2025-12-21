@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed, shallowRef } from 'vue'
+import { ref, computed, shallowRef, watch } from 'vue'
 import { Canvas, Object as FabricObject } from 'fabric'
 import type { 
   Project, 
@@ -341,6 +341,31 @@ export const useEditorStore = defineStore('editor', () => {
     }
   }
 
+  function refreshCalendarGridsForYear(year: number): void {
+    if (!canvas.value) return
+    const y = Number(year)
+    if (!Number.isFinite(y)) return
+
+    const objects = canvas.value.getObjects() ?? []
+    console.log('[Calendar] Refresh calendar grids', {
+      year: y,
+      holidayCount: calendarStore.allHolidays?.length ?? 0,
+      gridCount: objects.filter(
+        (obj) => ((obj as any)?.data?.elementMetadata as CanvasElementMetadata | undefined)?.kind === 'calendar-grid',
+      ).length,
+    })
+    objects.forEach((obj) => {
+      const metadata = (obj as any)?.data?.elementMetadata as CanvasElementMetadata | undefined
+      if (metadata?.kind === 'calendar-grid' && metadata.year === y) {
+        const rebuilt = rebuildElementWithMetadata(obj, metadata)
+        if (!rebuilt) return
+        canvas.value?.remove(obj)
+        canvas.value?.add(rebuilt)
+      }
+    })
+    canvas.value?.renderAll()
+  }
+
   function requestHolidaysForYear(year: number): void {
     const y = Number(year)
     if (!Number.isFinite(y)) return
@@ -367,16 +392,24 @@ export const useEditorStore = defineStore('editor', () => {
 
         holidayCacheByYear.set(y, merged)
 
-        const active = canvas.value?.getActiveObject() ?? null
-        const meta = (active as any)?.data?.elementMetadata as CanvasElementMetadata | undefined
-        if (meta?.kind === 'calendar-grid' && meta.year === y) {
-          rebuildActiveElementFromMetadata(meta)
-        }
+        refreshCalendarGridsForYear(y)
       })
       .finally(() => {
         holidayLoadInFlight.delete(y)
       })
   }
+
+  watch(
+    () => [calendarStore.allHolidays, calendarStore.config.year] as const,
+    ([holidays, year]) => {
+      console.log('[Calendar] Holidays or year changed, refreshing grids', {
+        year,
+        holidayCount: holidays?.length ?? 0,
+      })
+      refreshCalendarGridsForYear(year)
+    },
+    { deep: false, immediate: true },
+  )
 
   function getHolidaysForCalendarYear(year: number): Holiday[] {
     const y = Number(year)
@@ -646,6 +679,7 @@ export const useEditorStore = defineStore('editor', () => {
     setCanvasSize,
     setBackgroundColor,
     updateTemplateOptions,
+    getHolidaysForCalendarYear,
     // Metadata-aware helpers
     getActiveElementMetadata,
     updateSelectedElementMetadata,

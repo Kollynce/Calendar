@@ -102,12 +102,23 @@ function handleWheel(e: WheelEvent) {
     
     panOffset.value = { x: newPanX, y: newPanY }
     editorStore.setZoom(newZoom)
-  } else {
-    // Regular scroll = pan the canvas (move the entire canvas element)
+    return
+  }
+
+  if (e.shiftKey) {
+    // Shift + scroll mimics horizontal pan (Figma-like)
+    const horizontalDelta = e.deltaY || e.deltaX
     panOffset.value = {
-      x: panOffset.value.x - e.deltaX,
-      y: panOffset.value.y - e.deltaY
+      x: panOffset.value.x - horizontalDelta,
+      y: panOffset.value.y,
     }
+    return
+  }
+  
+  // Regular scroll = pan the canvas (move the entire canvas element)
+  panOffset.value = {
+    x: panOffset.value.x - e.deltaX,
+    y: panOffset.value.y - e.deltaY
   }
 }
 

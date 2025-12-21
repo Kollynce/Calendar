@@ -4,7 +4,12 @@ import { pdfExportService } from '@/services/export/pdf.service'
 import { imageExportService } from '@/services/export/image.service'
 import { exportJobsService } from '@/services/export/export-jobs.service'
 import { renderTemplateOnCanvas } from '@/services/editor/template-renderer'
-import { calendarTemplates, type CalendarTemplate } from '@/data/templates/calendar-templates'
+import {
+  calendarTemplates,
+  type CalendarTemplate,
+  buildTemplateInstance,
+  resolveTemplateOptions,
+} from '@/data/templates/calendar-templates'
 import { useEditorStore } from './editor.store'
 import { useAuthStore } from './auth.store'
 import { isFeatureEnabled } from '@/config/features'
@@ -324,20 +329,9 @@ export const useExportStore = defineStore('export', () => {
   }
 
   function buildCustomizedTemplate(template: CalendarTemplate): CalendarTemplate {
-    const options = editorStore.project?.config.templateOptions
-    return {
-      ...template,
-      preview: {
-        ...template.preview,
-        hasPhotoArea: options?.hasPhotoArea ?? template.preview.hasPhotoArea,
-        hasNotesArea: options?.hasNotesArea ?? template.preview.hasNotesArea,
-      },
-      config: {
-        ...template.config,
-        highlightToday: options?.highlightToday ?? template.config.highlightToday,
-        highlightWeekends: options?.highlightWeekends ?? template.config.highlightWeekends,
-      },
-    }
+    const projectOptions = editorStore.project?.config.templateOptions
+    const resolvedOptions = resolveTemplateOptions(template, projectOptions || {})
+    return buildTemplateInstance(template, resolvedOptions)
   }
 
   async function exportAsYearPDF(months?: number[]): Promise<Blob> {

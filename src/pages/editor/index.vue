@@ -2,8 +2,16 @@
 import { ref, onMounted, onBeforeUnmount, computed, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useEditorStore } from '@/stores/editor.store'
+import { useCalendarStore } from '@/stores/calendar.store'
 import { storeToRefs } from 'pinia'
-import { calendarTemplates, templateCategories, type CalendarTemplate } from '@/data/templates/calendar-templates'
+import {
+  calendarTemplates,
+  templateCategories,
+  type CalendarTemplate,
+  buildTemplateInstance,
+  getTemplateDefaultOptions,
+  resolveTemplateOptions,
+} from '@/data/templates/calendar-templates'
 import { 
   ArrowLeftIcon, 
   ArrowDownTrayIcon, 
@@ -19,6 +27,7 @@ import {
   ArrowLongRightIcon
 } from '@heroicons/vue/24/outline'
 import ExportModal from '@/components/export/ExportModal.vue'
+import CanvasSetupModal from '@/components/editor/CanvasSetupModal.vue'
 import ColorPicker from '@/components/editor/ColorPicker.vue'
 import FontPicker from '@/components/editor/FontPicker.vue'
 import CalendarConfigPanel from '@/components/editor/CalendarConfigPanel.vue'
@@ -27,9 +36,11 @@ import TemplatePanel from '@/components/editor/TemplatePanel.vue'
 import AdobeCanvas from '@/components/editor/AdobeCanvas.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import { renderTemplateOnCanvas, generateTemplateThumbnail } from '@/services/editor/template-renderer'
+import { getPresetByCanvasSize } from '@/config/canvas-presets'
 import type {
   CanvasElementMetadata,
   CalendarGridMetadata,
+  TemplateOptions,
   WeekStripMetadata,
   DateCellMetadata,
   PlannerNoteMetadata,
@@ -38,10 +49,12 @@ import type {
   ScheduleMetadata,
   ChecklistMetadata,
 } from '@/types'
+import { DEFAULT_TEMPLATE_OPTIONS } from '@/config/editor-defaults'
 
 const router = useRouter()
 const route = useRoute()
 const editorStore = useEditorStore()
+const calendarStore = useCalendarStore()
 
 // Store refs
 const { 
@@ -58,7 +71,9 @@ const {
 const activeTool = ref('templates')
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const adobeCanvasRef = ref<InstanceType<typeof AdobeCanvas> | null>(null)
+const canvasKey = ref(0) // Key to force AdobeCanvas remount on project switch
 const isExportModalOpen = ref(false)
+const isCanvasSetupModalOpen = ref(false)
 const uploadedImages = ref<{ id: string; url: string; name: string }[]>([])
 const isDragging = ref(false)
 const selectedTemplateCategory = ref('all')
@@ -70,12 +85,7 @@ const activeTemplateId = ref<string | null>(null)
 const isRightSidebarVisible = ref(true)
 const isPropertiesCollapsed = ref(false)
 const isLayersCollapsed = ref(false)
-const templateOverrides = ref({
-  highlightToday: true,
-  highlightWeekends: true,
-  hasPhotoArea: false,
-  hasNotesArea: false,
-})
+const templateOverrides = ref<TemplateOptions>({ ...DEFAULT_TEMPLATE_OPTIONS })
 const alignTarget = ref<'canvas' | 'selection'>('canvas')
 const isApplyingTemplate = ref(false)
 const isSyncingTemplateUiFromProject = ref(false)
@@ -100,6 +110,26 @@ async function handleSaveProject(): Promise<void> {
 const DEFAULT_CANVAS = PAPER_SIZES.portrait
 
 const paperWidth = computed(() => canvasSize.value.width || DEFAULT_CANVAS.width)
+const canvasOrientation = computed(() => {
+  const { width, height } = canvasSize.value
+  if (!width || !height) return 'Portrait'
+  return width >= height ? 'Landscape' : 'Portrait'
+})
+
+const canvasPreset = computed(() => getPresetByCanvasSize(canvasSize.value.width, canvasSize.value.height))
+const activeMonth = computed(() => {
+  return calendarStore.config.currentMonth ?? editorStore.project?.config.currentMonth ?? 1
+})
+
+const canvasSizeLabel = computed(() => {
+  const presetLabel = canvasPreset.value?.label
+  if (presetLabel) {
+    return `${presetLabel} ${canvasOrientation.value}`
+  }
+  const { width, height } = canvasSize.value
+  if (!width || !height) return 'Custom size'
+  return `${width} × ${height}px ${canvasOrientation.value}`
+})
 
 // Tools configuration - Updated with Calendar instead of Holidays
 const tools = [
@@ -128,32 +158,22 @@ async function renderTemplateWithOverrides(
 
   if (!editorStore.canvas) return
 
-  const customizedTemplate: CalendarTemplate = {
-    ...template,
-    preview: {
-      ...template.preview,
-      hasPhotoArea: templateOverrides.value.hasPhotoArea,
-      hasNotesArea: templateOverrides.value.hasNotesArea,
-    },
-    config: {
-      ...template.config,
-      highlightToday: templateOverrides.value.highlightToday,
-      highlightWeekends: templateOverrides.value.highlightWeekends,
-    },
-  }
+  const customizedTemplate = buildTemplateInstance(template, templateOverrides.value)
 
+  let renderWidth = canvasSize.value.width
+  let renderHeight = canvasSize.value.height
   const targetSize = getCanvasSizeForTemplate(customizedTemplate)
-  let sizeChanged = false
 
-  if (editorStore.project) {
-    const { width, height } = editorStore.project.canvas
-    if (width !== targetSize.width || height !== targetSize.height) {
-      editorStore.setCanvasSize(targetSize.width, targetSize.height)
-      sizeChanged = true
-    }
-  }
+  const needsOrientationSwitch =
+    !renderWidth ||
+    !renderHeight ||
+    (customizedTemplate.config.layout === 'landscape' && renderWidth <= renderHeight) ||
+    (customizedTemplate.config.layout === 'portrait' && renderWidth >= renderHeight)
 
-  if (sizeChanged) {
+  if (needsOrientationSwitch) {
+    renderWidth = targetSize.width
+    renderHeight = targetSize.height
+    editorStore.setCanvasSize(renderWidth, renderHeight)
     await nextTick()
     editorStore.canvas?.calcOffset()
   }
@@ -163,7 +183,10 @@ async function renderTemplateWithOverrides(
     customizedTemplate,
     {
       year: editorStore.project?.config.year ?? new Date().getFullYear(),
-      month: editorStore.project?.config.currentMonth ?? 1,
+      month: activeMonth.value,
+      canvasWidth: renderWidth ?? PAPER_SIZES.portrait.width,
+      canvasHeight: renderHeight ?? PAPER_SIZES.portrait.height,
+      getHolidaysForYear: editorStore.getHolidaysForCalendarYear,
     },
     { preserveUserObjects: true },
   )
@@ -175,12 +198,7 @@ async function renderTemplateWithOverrides(
 
 function resetTemplateOverrides() {
   if (!activeTemplate.value) return
-  templateOverrides.value = {
-    highlightToday: activeTemplate.value.config.highlightToday,
-    highlightWeekends: activeTemplate.value.config.highlightWeekends,
-    hasPhotoArea: activeTemplate.value.preview.hasPhotoArea,
-    hasNotesArea: activeTemplate.value.preview.hasNotesArea,
-  }
+  templateOverrides.value = getTemplateDefaultOptions(activeTemplate.value)
 }
 
 watch(
@@ -226,13 +244,8 @@ async function syncTemplateUiFromProject(): Promise<void> {
   isSyncingTemplateUiFromProject.value = true
   activeTemplateId.value = template.id
 
-  const options = editorStore.project?.config.templateOptions
-  templateOverrides.value = {
-    highlightToday: options?.highlightToday ?? template.config.highlightToday,
-    highlightWeekends: options?.highlightWeekends ?? template.config.highlightWeekends,
-    hasPhotoArea: options?.hasPhotoArea ?? template.preview.hasPhotoArea,
-    hasNotesArea: options?.hasNotesArea ?? template.preview.hasNotesArea,
-  }
+  const projectOptions = editorStore.project?.config.templateOptions
+  templateOverrides.value = resolveTemplateOptions(template, projectOptions || {})
 
   await nextTick()
   isSyncingTemplateUiFromProject.value = false
@@ -257,6 +270,15 @@ watch(
     void syncTemplateUiFromProject()
   },
   { deep: true },
+)
+
+watch(
+  () => calendarStore.config.currentMonth,
+  (month) => {
+    if (!editorStore.project) return
+    editorStore.project.config.currentMonth = month ?? editorStore.project.config.currentMonth ?? 1
+  },
+  { immediate: true },
 )
 
 const templateSupportsPhoto = computed(() => !!activeTemplate.value?.preview.photoPosition)
@@ -779,25 +801,34 @@ const projectName = computed({
 
 const routeProjectId = computed(() => {
   const raw = route.params.id
-  return typeof raw === 'string' && raw.length > 0 ? raw : null
+  const result = typeof raw === 'string' && raw.length > 0 ? raw : null
+  console.log('[routeProjectId computed] Route params.id:', raw, '→ result:', result)
+  return result
 })
+
+function buildDefaultProjectConfig() {
+  return {
+    year: new Date().getFullYear(),
+    country: 'KE',
+    language: 'en',
+    layout: 'monthly',
+    startDay: 0,
+    showHolidays: true,
+    showCustomHolidays: false,
+    showWeekNumbers: false,
+  } as const
+}
 
 async function ensureProjectForRoute(): Promise<void> {
   const id = routeProjectId.value
 
   if (id) {
     await editorStore.loadProjectById(id)
-  } else if (!editorStore.project) {
-    editorStore.createNewProject({
-      year: new Date().getFullYear(),
-      country: 'KE',
-      language: 'en',
-      layout: 'monthly',
-      startDay: 0,
-      showHolidays: true,
-      showCustomHolidays: false,
-      showWeekNumbers: false,
-    })
+  } else {
+    if (editorStore.canvas) {
+      editorStore.destroyCanvas()
+    }
+    editorStore.createNewProject(buildDefaultProjectConfig())
   }
 
   const project = editorStore.project
@@ -818,7 +849,10 @@ function shouldAddWelcomeText(): boolean {
   return true
 }
 
+let isInitializing = false
+
 function handleCanvasReady(canvasEl: HTMLCanvasElement): void {
+  console.log('[handleCanvasReady] Canvas element ready, initializing editor canvas')
   canvasRef.value = canvasEl
   void initializeEditorCanvas()
 }
@@ -826,10 +860,35 @@ function handleCanvasReady(canvasEl: HTMLCanvasElement): void {
 async function initializeEditorCanvas(): Promise<void> {
   await nextTick()
 
-  if (!canvasRef.value) return
-  if (editorStore.canvas) return
+  if (!canvasRef.value) {
+    console.log('[initializeEditorCanvas] No canvas ref, skipping')
+    return
+  }
+  if (editorStore.canvas) {
+    console.log('[initializeEditorCanvas] Canvas already exists, skipping')
+    return
+  }
+  if (isInitializing) {
+    console.log('[initializeEditorCanvas] Already initializing, skipping duplicate call')
+    return
+  }
 
-  editorStore.initializeCanvas(canvasRef.value)
+  // Verify the loaded project matches the route before initializing
+  const expectedProjectId = routeProjectId.value
+  const loadedProjectId = editorStore.project?.id
+  if (expectedProjectId && loadedProjectId !== expectedProjectId) {
+    console.log('[initializeEditorCanvas] Project mismatch - route:', expectedProjectId, 'loaded:', loadedProjectId, '- skipping initialization')
+    return
+  }
+
+  isInitializing = true
+  try {
+    console.log('[initializeEditorCanvas] Initializing canvas for project:', editorStore.project?.id)
+    await editorStore.initializeCanvas(canvasRef.value)
+    console.log('[initializeEditorCanvas] Canvas initialized with', editorStore.canvas?.getObjects?.().length || 0, 'objects')
+  } finally {
+    isInitializing = false
+  }
 
   requestAnimationFrame(() => {
     editorStore.setZoom(1)
@@ -864,16 +923,49 @@ onMounted(() => {
 })
 
 watch(routeProjectId, async (next, prev) => {
-  if (next === prev) return
-
-  if (next && editorStore.project?.id === next && editorStore.canvas) {
+  console.log('[routeProjectId watch] Route changed from', prev, 'to', next)
+  console.log('[routeProjectId watch] Current project in store:', editorStore.project?.id)
+  console.log('[routeProjectId watch] Canvas exists:', !!editorStore.canvas)
+  
+  if (next === prev) {
+    console.log('[routeProjectId watch] Same route ID, skipping')
     return
   }
 
-  editorStore.destroyCanvas()
+  // Always destroy and reload if the route project ID doesn't match the loaded project
+  if (next && editorStore.project?.id === next && editorStore.canvas) {
+    console.log('[routeProjectId watch] Same project already loaded, skipping')
+    return
+  }
+
+  console.log('[routeProjectId watch] Destroying canvas and loading new project')
+  
+  // Destroy canvas and clear state before loading new project
+  if (editorStore.canvas) {
+    console.log('[routeProjectId watch] Destroying existing canvas')
+    editorStore.destroyCanvas()
+  }
+  
+  // Clear the canvas ref so it gets recreated
+  canvasRef.value = null
+  
+  // Increment key to force AdobeCanvas component to remount with fresh DOM element
+  canvasKey.value++
+  console.log('[routeProjectId watch] Canvas key incremented to', canvasKey.value)
+  
+  // Wait a tick to ensure canvas component unmounts
+  await nextTick()
+  
+  console.log('[routeProjectId watch] Loading project:', next)
   await ensureProjectForRoute()
-  await initializeEditorCanvas()
-})
+  console.log('[routeProjectId watch] Project loaded:', editorStore.project?.id, 'with', editorStore.project?.canvas.objects.length, 'objects')
+  
+  // Wait another tick to ensure project is fully loaded and AdobeCanvas remounts
+  await nextTick()
+  
+  // AdobeCanvas will emit canvas-ready when it remounts, which will call initializeEditorCanvas
+  console.log('[routeProjectId watch] Waiting for AdobeCanvas to remount and emit canvas-ready')
+}, { immediate: false, flush: 'post' })
 
 onBeforeUnmount(() => {
   editorStore.destroyCanvas()
@@ -889,12 +981,7 @@ async function applyTemplate(template: CalendarTemplate) {
   isApplyingTemplate.value = true
   activeTemplateId.value = template.id
   editorStore.setProjectTemplateId(template.id)
-  templateOverrides.value = {
-    highlightToday: template.config.highlightToday,
-    highlightWeekends: template.config.highlightWeekends,
-    hasPhotoArea: template.preview.hasPhotoArea,
-    hasNotesArea: template.preview.hasNotesArea,
-  }
+  templateOverrides.value = getTemplateDefaultOptions(template)
 
   editorStore.updateTemplateOptions({ ...templateOverrides.value })
 
@@ -1438,7 +1525,18 @@ function handleDistribute(axis: 'horizontal' | 'vertical') {
           </button>
         </div>
 
-        <span class="text-xs text-gray-500 font-medium">A4 Portrait</span>
+        <button
+          type="button"
+          class="text-xs font-medium text-gray-600 dark:text-gray-200 hover:text-primary-500 flex items-center gap-1"
+          @click="isCanvasSetupModalOpen = true"
+        >
+          <span class="inline-flex items-center gap-1">
+            {{ canvasSizeLabel }}
+            <svg class="w-3 h-3" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M4 3l3 3-3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </span>
+        </button>
         <div class="h-6 w-px bg-gray-200 dark:bg-gray-700"></div>
         
         <AppButton variant="secondary-sm" class="flex items-center gap-1.5" type="button">
@@ -1596,6 +1694,7 @@ function handleDistribute(axis: 'horizontal' | 'vertical') {
                         </button>
                       </div>
                     </div>
+
                   </div>
                 </div>
                 
@@ -1689,6 +1788,7 @@ function handleDistribute(axis: 'horizontal' | 'vertical') {
       <!-- Center Canvas Area (Adobe-style) -->
       <main class="flex-1 relative overflow-hidden flex flex-col">
         <AdobeCanvas 
+          :key="canvasKey"
           ref="adobeCanvasRef"
           :canvas-ref="canvasRef"
           @canvas-ready="handleCanvasReady"
@@ -2197,7 +2297,7 @@ function handleDistribute(axis: 'horizontal' | 'vertical') {
                     </div>
                   </div>
 
-                  <div class="pt-3 border-t border-white/10 space-y-3">
+                  <div class="pt-3 border-t border-white/10 space-y-4">
                     <p class="text-[11px] font-semibold text-white/60">Holiday markers</p>
 
                     <div class="flex items-center justify-between gap-4">
@@ -2231,6 +2331,75 @@ function handleDistribute(axis: 'horizontal' | 'vertical') {
                           @change="updateCalendarMetadata((draft) => { draft.holidayMarkerHeight = Math.max(1, Math.min(20, Number(($event.target as HTMLInputElement).value) || 4)) })"
                         />
                       </div>
+                    </div>
+
+                    <div class="pt-3 border-t border-white/10 space-y-3">
+                      <div class="flex items-center justify-between gap-4">
+                        <label class="flex items-center gap-2 text-sm text-white/80">
+                          <input
+                            type="checkbox"
+                            class="accent-primary-400"
+                            :checked="calendarMetadata.showHolidayList !== false"
+                            @change="updateCalendarMetadata((draft) => { draft.showHolidayList = ($event.target as HTMLInputElement).checked })"
+                          >
+                          <span>Show holiday list</span>
+                        </label>
+                        <span class="text-[11px] text-white/50">Uses space below grid</span>
+                      </div>
+
+                      <template v-if="calendarMetadata.showHolidayList !== false">
+                        <div>
+                          <label class="text-xs font-medium text-white/60 mb-1.5 block">List title</label>
+                          <input
+                            type="text"
+                            class="control-glass"
+                            :value="calendarMetadata.holidayListTitle ?? 'Holidays'"
+                            @input="updateCalendarMetadata((draft) => { draft.holidayListTitle = ($event.target as HTMLInputElement).value })"
+                          />
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-3">
+                          <div>
+                            <label class="text-xs font-medium text-white/60 mb-1.5 block">Max items</label>
+                            <input
+                              type="number"
+                              min="1"
+                              max="8"
+                              class="control-glass"
+                              :value="calendarMetadata.holidayListMaxItems ?? 4"
+                              @change="updateCalendarMetadata((draft) => { draft.holidayListMaxItems = Math.max(1, Math.min(8, Number(($event.target as HTMLInputElement).value) || 4)) })"
+                            />
+                          </div>
+                          <div>
+                            <label class="text-xs font-medium text-white/60 mb-1.5 block">List height</label>
+                            <input
+                              type="number"
+                              min="40"
+                              max="220"
+                              class="control-glass"
+                              :value="calendarMetadata.holidayListHeight ?? 96"
+                              @change="updateCalendarMetadata((draft) => { draft.holidayListHeight = Math.max(40, Math.min(220, Number(($event.target as HTMLInputElement).value) || 96)) })"
+                            />
+                          </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-3">
+                          <div>
+                            <label class="text-xs font-medium text-white/60 mb-1.5 block">Text color</label>
+                            <ColorPicker
+                              :model-value="calendarMetadata.holidayListTextColor ?? '#4b5563'"
+                              @update:modelValue="(c) => updateCalendarMetadata((draft) => { draft.holidayListTextColor = c })"
+                            />
+                          </div>
+                          <div>
+                            <label class="text-xs font-medium text-white/60 mb-1.5 block">Accent color</label>
+                            <ColorPicker
+                              :model-value="calendarMetadata.holidayListAccentColor ?? calendarMetadata.holidayMarkerColor ?? '#ef4444'"
+                              @update:modelValue="(c) => updateCalendarMetadata((draft) => { draft.holidayListAccentColor = c })"
+                            />
+                          </div>
+                        </div>
+                      </template>
                     </div>
                   </div>
 
@@ -3034,6 +3203,12 @@ function handleDistribute(axis: 'horizontal' | 'vertical') {
     <ExportModal 
       :is-open="isExportModalOpen" 
       @close="isExportModalOpen = false"
+    />
+
+    <!-- Canvas Setup Modal -->
+    <CanvasSetupModal
+      :is-open="isCanvasSetupModalOpen"
+      @close="isCanvasSetupModalOpen = false"
     />
   </div>
 </template>

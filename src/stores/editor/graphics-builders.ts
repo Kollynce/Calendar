@@ -63,8 +63,10 @@ export function buildCalendarGridGraphics(
   const dayNumberInsetX = Math.max(0, Number(metadata.dayNumberInsetX ?? 12) || 0)
   const dayNumberInsetY = Math.max(0, Number(metadata.dayNumberInsetY ?? 8) || 0)
 
-  const gridHeight = height - headerHeight - weekdayHeight
-  const cellHeight = (gridHeight - cellGap * 5) / 6
+  const listHeightRaw = metadata.showHolidayList ? Math.max(0, metadata.holidayListHeight ?? 96) : 0
+  const maxListHeight = Math.min(listHeightRaw, Math.max(0, height - headerHeight - weekdayHeight))
+  const listHeight = Math.max(0, maxListHeight)
+  const gridAvailableHeight = Math.max(0, height - headerHeight - weekdayHeight - listHeight)
   const cellWidth = (width - cellGap * 6) / 7
 
   objects.push(
@@ -137,6 +139,11 @@ export function buildCalendarGridGraphics(
   const weeks = (monthData?.weeks ?? Array.from({ length: 6 }, () => Array(7).fill(null))) as Array<
     Array<CalendarGridDay | null>
   >
+  const rowCount = Math.max(1, weeks.length || 0)
+  const cellHeight =
+    gridAvailableHeight > 0 && rowCount > 0
+      ? (gridAvailableHeight - cellGap * Math.max(0, rowCount - 1)) / rowCount
+      : 0
 
   weeks.forEach((week: Array<CalendarGridDay | null>, weekIndex: number) => {
     week.forEach((maybeDay: CalendarGridDay | null, dayIndex: number) => {
@@ -223,6 +230,111 @@ export function buildCalendarGridGraphics(
       }
     })
   })
+
+  if (metadata.showHolidayList && listHeight > 0) {
+    const holidaysForYear = getHolidaysForCalendarYear(metadata.year)
+    const monthStr = metadata.month.toString().padStart(2, '0')
+    const monthHolidays = holidaysForYear.filter((holiday) => {
+      if (!holiday?.date) return false
+      return (
+        holiday.date.slice(0, 4) === String(metadata.year) &&
+        holiday.date.slice(5, 7) === monthStr &&
+        holiday.isPublic !== false
+      )
+    })
+
+    const groupedByDate = monthHolidays.reduce<Record<string, string[]>>((acc, holiday) => {
+      if (!holiday?.date) return acc
+      const key = holiday.date
+      const bucket = acc[key] ?? []
+      bucket.push(holiday.localName || holiday.name)
+      acc[key] = bucket
+      return acc
+    }, {})
+
+    const sortedDates = Object.keys(groupedByDate).sort()
+    const maxItems = Math.max(1, metadata.holidayListMaxItems ?? 4)
+    const holidaysToDisplay = sortedDates.slice(0, maxItems)
+
+    const listTop = headerHeight + weekdayHeight + gridAvailableHeight
+    const paddingX = 20
+    const paddingY = 6
+    const bottomPadding = 8
+    const titleFontSize = 14
+    const entryFontSize = 12
+    const titleSpacing = 10
+    const usableListHeight = Math.max(0, listHeight - paddingY - bottomPadding)
+    const entryAreaHeight = Math.max(0, usableListHeight - titleFontSize - titleSpacing)
+    const entrySpacing = holidaysToDisplay.length
+      ? Math.max(entryFontSize + 8, entryAreaHeight / holidaysToDisplay.length)
+      : entryFontSize + 8
+    const textColor = metadata.holidayListTextColor ?? '#4b5563'
+    const accentColor = metadata.holidayListAccentColor ?? metadata.holidayMarkerColor ?? '#ef4444'
+    const title = metadata.holidayListTitle ?? 'Holidays'
+
+    if (holidaysToDisplay.length === 0) {
+      objects.push(
+        new Textbox('No holidays this month', {
+          left: paddingX,
+          top: listTop + paddingY,
+          width: width - paddingX * 2,
+          fontSize: entryFontSize,
+          fontFamily: dayNumberFontFamily,
+          fontWeight: 500,
+          fill: textColor,
+          selectable: false,
+        }),
+      )
+    } else {
+      objects.push(
+        new Textbox(title, {
+          left: paddingX,
+          top: listTop + paddingY,
+          width: width - paddingX * 2,
+          fontSize: titleFontSize,
+          fontFamily: headerFontFamily,
+          fontWeight: 600,
+          fill: textColor,
+          selectable: false,
+        }),
+      )
+
+      const entryTopBase = listTop + paddingY + titleFontSize + titleSpacing
+      holidaysToDisplay.forEach((dateKey, index) => {
+        const entryTop = entryTopBase + index * entrySpacing
+        const dayNumber = Number(dateKey.slice(8, 10))
+        const dateLabel = `${calendarGeneratorService.getMonthName(metadata.month, 'en', 'short')} ${dayNumber}`
+        const namesArray = groupedByDate[dateKey] ?? []
+        const names = namesArray.join(', ')
+
+        objects.push(
+          new Textbox(dateLabel, {
+            left: paddingX,
+            top: entryTop,
+            width: 80,
+            fontSize: entryFontSize,
+            fontFamily: weekdayFontFamily,
+            fontWeight: 600,
+            fill: accentColor,
+            selectable: false,
+          }),
+        )
+
+        objects.push(
+          new Textbox(names, {
+            left: paddingX + 88,
+            top: entryTop,
+            width: width - paddingX * 2 - 88,
+            fontSize: entryFontSize,
+            fontFamily: dayNumberFontFamily,
+            fontWeight: 500,
+            fill: textColor,
+            selectable: false,
+          }),
+        )
+      })
+    }
+  }
 
   return new Group(objects, {
     subTargetCheck: false,

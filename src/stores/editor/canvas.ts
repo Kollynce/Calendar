@@ -9,6 +9,8 @@ type NormalizeCanvasSize = (input: { width?: number; height?: number } | null | 
 
 type EnsureObjectIdentity = (obj: any) => void
 
+type LoadCanvasState = (state: CanvasState) => Promise<void>
+
 type RebuildElementWithMetadata = (
   target: FabricObject,
   metadata: CanvasElementMetadata,
@@ -22,7 +24,7 @@ export function createCanvasModule(params: {
   panOffset: Ref<{ x: number; y: number }>
   isDirty: Ref<boolean>
   normalizeCanvasSize: NormalizeCanvasSize
-  loadCanvasState: (state: CanvasState) => void
+  loadCanvasState: LoadCanvasState
   saveToHistory: () => void
   ensureObjectIdentity: EnsureObjectIdentity
   rebuildElementWithMetadata: RebuildElementWithMetadata
@@ -127,7 +129,7 @@ export function createCanvasModule(params: {
     saveToHistory()
   }
 
-  function initializeCanvas(canvasElement: HTMLCanvasElement): void {
+  async function initializeCanvas(canvasElement: HTMLCanvasElement): Promise<void> {
     if (!project.value) return
 
     const normalized = normalizeCanvasSize(project.value.canvas)
@@ -166,9 +168,13 @@ export function createCanvasModule(params: {
     // Set up event listeners
     setupCanvasEvents()
 
+    // Clear any existing objects before loading new ones
+    canvas.value.clear()
+    canvas.value.backgroundColor = project.value.canvas.backgroundColor || '#ffffff'
+
     // Load existing objects if any
     if (project.value.canvas.objects.length) {
-      loadCanvasState(project.value.canvas)
+      await loadCanvasState(project.value.canvas)
     }
 
     // Save initial state to history
@@ -177,9 +183,18 @@ export function createCanvasModule(params: {
 
   function destroyCanvas(): void {
     if (canvas.value) {
+      // Clear all objects before disposing
+      canvas.value.clear()
+      // Remove all event listeners
+      canvas.value.off()
       canvas.value.dispose()
       canvas.value = null
     }
+    // Reset selection state
+    selectedObjectIds.value = []
+    // Reset zoom and pan
+    zoom.value = 1
+    panOffset.value = { x: 0, y: 0 }
   }
 
   const MIN_ZOOM = 0.1

@@ -8,6 +8,8 @@ const A4_LANDSCAPE = { width: 1052, height: 744 }
 export interface TemplateLayoutOptions {
   month?: number
   year?: number
+  canvasWidth?: number
+  canvasHeight?: number
 }
 
 export interface TemplateLayout {
@@ -66,8 +68,13 @@ export function buildTemplateLayout(
   const year = options.year ?? new Date().getFullYear()
   const month = options.month ?? 1
 
-  const canvasSize =
+  const fallbackSize =
     template.config.layout === 'landscape' ? A4_LANDSCAPE : A4_PORTRAIT
+
+  const canvasSize = {
+    width: options.canvasWidth ?? fallbackSize.width,
+    height: options.canvasHeight ?? fallbackSize.height,
+  }
 
   const padding = template.config.layout === 'landscape' ? 40 : 48
   const backgroundColor = template.preview.colorScheme[2] ?? '#ffffff'

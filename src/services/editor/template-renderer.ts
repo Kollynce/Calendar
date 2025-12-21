@@ -8,11 +8,19 @@ import {
   Object as FabricObject,
 } from 'fabric'
 import type { CalendarTemplate } from '@/data/templates/calendar-templates'
+import { createGridConfig } from '@/data/templates/calendar-templates'
+import type { Holiday } from '@/types'
 import { buildTemplateLayout, type TemplateLayout } from './template-layout'
+import type { CalendarGridMetadata } from '@/types'
+import { getDefaultCalendarMetadata } from '@/stores/editor/metadata-defaults'
+import { buildCalendarGridGraphics } from '@/stores/editor/graphics-builders'
 
 export interface TemplateRenderOptions {
   month?: number
   year?: number
+  canvasWidth?: number
+  canvasHeight?: number
+  getHolidaysForYear?: (year: number) => Holiday[]
 }
 
 export interface TemplateRenderResult {
@@ -31,7 +39,12 @@ export async function renderTemplateOnCanvas(
   options: TemplateRenderOptions = {},
   behavior: TemplateRenderBehavior = {}
 ): Promise<TemplateRenderResult> {
-  const layout = buildTemplateLayout(template, options)
+  const layout = buildTemplateLayout(template, {
+    month: options.month,
+    year: options.year,
+    canvasWidth: options.canvasWidth,
+    canvasHeight: options.canvasHeight,
+  })
 
   const shouldPreserve =
     behavior.preserveUserObjects === true && canvas instanceof Canvas
@@ -42,7 +55,7 @@ export async function renderTemplateOnCanvas(
         .filter((obj) => !(obj as any).data?.templateObject)
     : []
 
-  populateCanvas(canvas, layout)
+  populateCanvas(canvas, layout, template, options)
 
   if (shouldPreserve && preservedObjects.length) {
     preservedObjects.forEach((obj) => canvas.add(obj))
@@ -73,7 +86,12 @@ export async function generateTemplateThumbnail(
   return dataUrl
 }
 
-function populateCanvas(canvas: FabricCanvas, layout: TemplateLayout): void {
+function populateCanvas(
+  canvas: FabricCanvas,
+  layout: TemplateLayout,
+  template: CalendarTemplate,
+  options: TemplateRenderOptions,
+): void {
   canvas.clear()
   canvas.setWidth(layout.canvas.width)
   canvas.setHeight(layout.canvas.height)
@@ -90,10 +108,10 @@ function populateCanvas(canvas: FabricCanvas, layout: TemplateLayout): void {
   }
 
   objects.push(createHeaderText(layout))
-  objects.push(createCalendarGrid(layout))
+  objects.push(createCalendarGrid(layout, template, options))
 
   if (layout.notesArea) {
-    objects.push(...createNotesGuides(layout.notesArea, layout))
+    objects.push(...createNotesGuides(layout.notesArea))
   }
 
   objects.forEach((obj) => {
@@ -133,7 +151,7 @@ function createAreaRect(area: TemplateLayout['photoArea'], dashed = false): Rect
   })
 }
 
-function createNotesGuides(area: TemplateLayout['notesArea'], layout: TemplateLayout): Line[] {
+function createNotesGuides(area: TemplateLayout['notesArea']): Line[] {
   if (!area || area.variant !== 'notes') return []
 
   const lines: Line[] = []
@@ -156,125 +174,24 @@ function createNotesGuides(area: TemplateLayout['notesArea'], layout: TemplateLa
   return lines
 }
 
-function createCalendarGrid(layout: TemplateLayout): Group {
-  const { grid } = layout
-  const totalRows = grid.monthData.weeks.length + 1
-  const cellHeight = grid.size.height / totalRows
-  const cellWidth = grid.size.width / 7
-
-  const objects: FabricObject[] = []
-
-  objects.push(
-    new Rect({
-      width: grid.size.width,
-      height: grid.size.height,
-      fill: grid.style.bodyBackground,
-      stroke: grid.style.borderColor,
-      strokeWidth: 1,
-      selectable: false,
-      evented: false,
-    })
-  )
-
-  objects.push(
-    new Rect({
-      width: grid.size.width,
-      height: cellHeight,
-      fill: grid.style.headerBackground,
-      top: 0,
-      left: 0,
-      selectable: false,
-      evented: false,
-    })
-  )
-
-  grid.weekdayLabels.forEach((label, index) => {
-    objects.push(
-      new Textbox(label, {
-        width: cellWidth,
-        top: cellHeight / 2 - 10,
-        left: index * cellWidth,
-        fontSize: 14,
-        fill: grid.style.headerText,
-        textAlign: 'center',
-        fontWeight: '600',
-        selectable: false,
-        evented: false,
-      })
-    )
+function createCalendarGrid(
+  layout: TemplateLayout,
+  template: CalendarTemplate,
+  options: TemplateRenderOptions,
+): Group {
+  const metadata = buildCalendarMetadataFromTemplate(template, layout, options)
+  const holidayGetter = options.getHolidaysForYear ?? (() => [])
+  const group = buildCalendarGridGraphics(metadata, holidayGetter)
+  group.set({
+    left: layout.grid.position.x,
+    top: layout.grid.position.y,
   })
-
-  grid.monthData.weeks.forEach((week, weekIndex) => {
-    week.forEach((day, dayIndex) => {
-      const top = cellHeight * (weekIndex + 1)
-      const left = cellWidth * dayIndex
-
-      if (grid.style.weekendBackground && day.isWeekend && day.isCurrentMonth) {
-        objects.push(
-          new Rect({
-            top,
-            left,
-            width: cellWidth,
-            height: cellHeight,
-            fill: grid.style.weekendBackground,
-            selectable: false,
-            evented: false,
-          })
-        )
-      }
-
-      if (grid.style.todayBackground && day.isToday) {
-        objects.push(
-          new Rect({
-            top,
-            left,
-            width: cellWidth,
-            height: cellHeight,
-            fill: grid.style.todayBackground,
-            selectable: false,
-            evented: false,
-          })
-        )
-      }
-
-      objects.push(
-        new Rect({
-          top,
-          left,
-          width: cellWidth,
-          height: cellHeight,
-          stroke: grid.style.borderColor,
-          strokeWidth: 0.5,
-          fill: 'transparent',
-          selectable: false,
-          evented: false,
-        })
-      )
-
-      objects.push(
-        new Textbox(String(day.dayOfMonth), {
-          top: top + 8,
-          left: left + cellWidth - 32,
-          width: 24,
-          fontSize: 14,
-          fontWeight: 500,
-          fill: day.isCurrentMonth ? grid.style.dayText : grid.style.mutedText,
-          textAlign: 'right',
-          selectable: false,
-          evented: false,
-        })
-      )
-    })
+  const existingData = (group as any).data ?? {}
+  group.set('data', {
+    ...existingData,
+    elementMetadata: metadata,
   })
-
-  return new Group(objects, {
-    left: grid.position.x,
-    top: grid.position.y,
-    subTargetCheck: false,
-    objectCaching: false,
-    selectable: true,
-    hoverCursor: 'move',
-  })
+  return group
 }
 
 function markTemplateObject(obj: FabricObject): void {
@@ -283,4 +200,34 @@ function markTemplateObject(obj: FabricObject): void {
     ...existingData,
     templateObject: true,
   })
+}
+
+function buildCalendarMetadataFromTemplate(
+  template: CalendarTemplate,
+  layout: TemplateLayout,
+  options: TemplateRenderOptions,
+): CalendarGridMetadata {
+  const targetYear = options.year ?? new Date().getFullYear()
+  const targetMonth = options.month ?? 1
+  const base = getDefaultCalendarMetadata({
+    year: targetYear,
+    month: targetMonth,
+  })
+
+  const gridConfig = createGridConfig(template.config.monthGrid)
+  const fallbackSize = {
+    width: layout.grid.size.width,
+    height: layout.grid.size.height,
+  }
+
+  return {
+    ...base,
+    ...gridConfig,
+    year: targetYear,
+    month: targetMonth,
+    mode: gridConfig.mode ?? 'month',
+    startDay: (gridConfig.startDay ??
+      template.config.weekStartsOn) as CalendarGridMetadata['startDay'],
+    size: gridConfig.size ?? fallbackSize,
+  }
 }

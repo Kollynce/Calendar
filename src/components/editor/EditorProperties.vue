@@ -979,6 +979,114 @@ const objectHeight = computed({
               <span>Show weekdays</span>
             </label>
           </div>
+
+          <div class="pt-3 border-t border-gray-100 dark:border-gray-700 space-y-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-xs font-semibold text-gray-500 uppercase tracking-widest">Holiday markers</p>
+                <p class="text-sm text-gray-600 dark:text-gray-300">Inline marker + list</p>
+              </div>
+              <label class="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
+                <input
+                  type="checkbox"
+                  class="accent-primary-500"
+                  :checked="calendarMetadata.showHolidayMarkers ?? true"
+                  @change="updateCalendarMetadata((draft) => { draft.showHolidayMarkers = ($event.target as HTMLInputElement).checked })"
+                >
+                <span>Show markers</span>
+              </label>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Marker color</label>
+                <ColorPicker
+                  :model-value="calendarMetadata.holidayMarkerColor ?? '#ef4444'"
+                  @update:model-value="(color) => updateCalendarMetadata((draft) => { draft.holidayMarkerColor = color })"
+                />
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Marker height</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="20"
+                  class="input"
+                  :value="calendarMetadata.holidayMarkerHeight ?? 4"
+                  @change="updateCalendarMetadata((draft) => { draft.holidayMarkerHeight = Math.max(1, Math.min(20, Number(($event.target as HTMLInputElement).value) || 4)) })"
+                />
+              </div>
+            </div>
+
+            <div class="pt-3 border-t border-gray-100 dark:border-gray-700 space-y-3">
+              <div class="flex items-center justify-between">
+                <label class="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
+                  <input
+                    type="checkbox"
+                    class="accent-primary-500"
+                    :checked="calendarMetadata.showHolidayList !== false"
+                    @change="updateCalendarMetadata((draft) => { draft.showHolidayList = ($event.target as HTMLInputElement).checked })"
+                  >
+                  <span>Show holiday list</span>
+                </label>
+                <span class="text-[11px] text-gray-500">Uses space below grid</span>
+              </div>
+
+              <template v-if="calendarMetadata.showHolidayList !== false">
+                <div>
+                  <label class="block text-xs text-gray-500 mb-1">List title</label>
+                  <input
+                    type="text"
+                    class="input"
+                    :value="calendarMetadata.holidayListTitle ?? 'Holidays'"
+                    @input="updateCalendarMetadata((draft) => { draft.holidayListTitle = ($event.target as HTMLInputElement).value })"
+                  />
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                    <label class="block text-xs text-gray-500 mb-1">Max items</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="8"
+                      class="input"
+                      :value="calendarMetadata.holidayListMaxItems ?? 4"
+                      @change="updateCalendarMetadata((draft) => { draft.holidayListMaxItems = Math.max(1, Math.min(8, Number(($event.target as HTMLInputElement).value) || 4)) })"
+                    />
+                  </div>
+                  <div>
+                    <label class="block text-xs text-gray-500 mb-1">List height (px)</label>
+                    <input
+                      type="number"
+                      min="40"
+                      max="220"
+                      class="input"
+                      :value="calendarMetadata.holidayListHeight ?? 96"
+                      @change="updateCalendarMetadata((draft) => { draft.holidayListHeight = Math.max(40, Math.min(220, Number(($event.target as HTMLInputElement).value) || 96)) })"
+                    />
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                    <label class="block text-xs text-gray-500 mb-1">Text color</label>
+                    <ColorPicker
+                      :model-value="calendarMetadata.holidayListTextColor ?? '#4b5563'"
+                      @update:model-value="(color) => updateCalendarMetadata((draft) => { draft.holidayListTextColor = color })"
+                    />
+                  </div>
+                  <div>
+                    <label class="block text-xs text-gray-500 mb-1">Accent color</label>
+                    <ColorPicker
+                      :model-value="calendarMetadata.holidayListAccentColor ?? calendarMetadata.holidayMarkerColor ?? '#ef4444'"
+                      @update:model-value="(color) => updateCalendarMetadata((draft) => { draft.holidayListAccentColor = color })"
+                    />
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
         </div>
       </template>
 

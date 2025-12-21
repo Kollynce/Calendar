@@ -59,6 +59,12 @@ export function getDefaultCalendarMetadata(
     showHolidayMarkers: overrides.showHolidayMarkers ?? true,
     holidayMarkerColor: overrides.holidayMarkerColor ?? '#ef4444',
     holidayMarkerHeight: overrides.holidayMarkerHeight ?? 4,
+    showHolidayList: overrides.showHolidayList ?? true,
+    holidayListTitle: overrides.holidayListTitle ?? 'Holidays',
+    holidayListMaxItems: overrides.holidayListMaxItems ?? 4,
+    holidayListTextColor: overrides.holidayListTextColor ?? '#4b5563',
+    holidayListAccentColor: overrides.holidayListAccentColor ?? '#ef4444',
+    holidayListHeight: overrides.holidayListHeight ?? 96,
     size,
   }
 }

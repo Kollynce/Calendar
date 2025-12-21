@@ -140,6 +140,10 @@ export function createProjectModule(params: {
         return
       }
 
+      console.log('[loadProjectById] Loaded project from Firebase:', id)
+      console.log('[loadProjectById] Canvas has', found.canvas?.objects?.length || 0, 'objects')
+      console.log('[loadProjectById] First object:', JSON.stringify(found.canvas?.objects?.[0], null, 2))
+      
       loadProject(found)
     } finally {
       loading.value = false
@@ -148,6 +152,10 @@ export function createProjectModule(params: {
 
   function loadProject(loadedProject: Project): void {
     const normalized = normalizeCanvasSize(loadedProject?.canvas)
+    
+    // Deep clone the canvas state to prevent reference issues
+    const canvasClone = JSON.parse(JSON.stringify(loadedProject.canvas))
+    
     project.value = {
       ...loadedProject,
       config: {
@@ -155,7 +163,7 @@ export function createProjectModule(params: {
         templateOptions: ensureTemplateOptions(loadedProject.config.templateOptions),
       },
       canvas: {
-        ...loadedProject.canvas,
+        ...canvasClone,
         width: normalized.width,
         height: normalized.height,
       },
@@ -173,6 +181,7 @@ export function createProjectModule(params: {
 
   function getCanvasState(): CanvasState | null {
     if (!canvas.value) return null
+    
     const json = (canvas.value as any).toJSON([
       'id',
       'name',
@@ -184,6 +193,50 @@ export function createProjectModule(params: {
       'height',
       'backgroundColor',
     ])
+    
+    // Manually inject id and data properties from the actual objects
+    const objects = canvas.value.getObjects() as any[]
+    
+    function injectDataIntoJSON(fabricObj: any, jsonObj: any, depth = 0): void {
+      // Inject id and data from the Fabric object into the JSON object
+      if (fabricObj.id) {
+        jsonObj.id = fabricObj.id
+      }
+      if (fabricObj.data) {
+        jsonObj.data = fabricObj.data
+        if (depth === 0) {
+          console.log(`[injectData] Object ${fabricObj.id} has data:`, !!fabricObj.data, 'metadata:', fabricObj.data?.elementMetadata?.kind)
+        }
+      }
+      
+      // Process nested objects in groups
+      if (fabricObj.type === 'group' && Array.isArray(fabricObj._objects) && Array.isArray(jsonObj.objects)) {
+        for (let i = 0; i < fabricObj._objects.length; i++) {
+          if (jsonObj.objects[i]) {
+            injectDataIntoJSON(fabricObj._objects[i], jsonObj.objects[i], depth + 1)
+          }
+        }
+      }
+    }
+    
+    // Inject data for all top-level objects
+    if (Array.isArray(json.objects)) {
+      for (let i = 0; i < objects.length; i++) {
+        if (json.objects[i]) {
+          injectDataIntoJSON(objects[i], json.objects[i])
+        }
+      }
+    }
+    
+    // Log what we're saving
+    console.log('[getCanvasState] Serialized', json.objects?.length || 0, 'objects')
+    if (json.objects?.[0]) {
+      console.log('[getCanvasState] First object has id:', json.objects[0].id, 'data:', !!json.objects[0].data)
+      if (json.objects[0].data?.elementMetadata) {
+        console.log('[getCanvasState] First object metadata:', json.objects[0].data.elementMetadata.kind)
+      }
+    }
+    
     return {
       ...json,
       width: canvas.value.width,
@@ -193,12 +246,18 @@ export function createProjectModule(params: {
   }
 
   async function saveProject(): Promise<void> {
-    if (!project.value || !canvas.value) return
+    console.log('[saveProject] Save triggered')
+    if (!project.value || !canvas.value) {
+      console.log('[saveProject] Aborted - no project or canvas')
+      return
+    }
 
     saving.value = true
 
     try {
+      console.log('[saveProject] Getting canvas state...')
       project.value.canvas = getCanvasState() as CanvasState
+      console.log('[saveProject] Canvas state captured')
       project.value.updatedAt = new Date().toISOString()
 
       const canvasWidth = canvas.value.getWidth?.() ?? canvas.value.width ?? 0

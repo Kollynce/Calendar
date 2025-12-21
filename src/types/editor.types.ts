@@ -161,6 +161,12 @@ export interface CalendarGridMetadata {
   showHolidayMarkers?: boolean
   holidayMarkerColor?: string
   holidayMarkerHeight?: number
+  showHolidayList?: boolean
+  holidayListTitle?: string
+  holidayListMaxItems?: number
+  holidayListTextColor?: string
+  holidayListAccentColor?: string
+  holidayListHeight?: number
   size: {
     width: number
     height: number
