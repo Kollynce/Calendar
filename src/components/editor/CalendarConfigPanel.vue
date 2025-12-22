@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useEditorStore } from '@/stores/editor.store'
-import { calendarGeneratorService } from '@/services/calendar/generator.service'
 import { staticHolidays } from '@/data/holidays'
 import type { CountryCode, Holiday, WeekDay } from '@/types'
 import {
@@ -131,9 +130,106 @@ function addCustomEvent() {
   showAddEvent.value = false
 }
 
-// Remove custom event
-function removeEvent(id: string) {
-  customEvents.value = customEvents.value.filter(e => e.id !== id)
+const DEFAULT_PADDING = 36
+const COMPACT_PADDING = 20
+
+interface GridBlockOptions {
+  month: number
+  year: number
+  areaWidth: number
+  areaHeight: number
+  offsetX: number
+  offsetY: number
+  padding?: number
+  showHeader?: boolean
+  showWeekdays?: boolean
+  showHolidayList?: boolean
+}
+
+interface PageSpacing {
+  margin: number
+  padding: number
+  compactPadding: number
+  gutter: number
+  compactGutter: number
+}
+
+interface LayoutSlot {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+type SlotRenderOptions = Omit<
+  GridBlockOptions,
+  'areaWidth' | 'areaHeight' | 'offsetX' | 'offsetY' | 'padding'
+>
+
+const clampValue = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
+
+function computePageSpacing(canvasWidth: number, canvasHeight: number): PageSpacing {
+  const shortestEdge = Math.min(canvasWidth, canvasHeight)
+  const baseMargin = clampValue(shortestEdge * 0.05, 24, 72)
+  const padding = clampValue(shortestEdge * 0.035, 20, 44)
+  const compactPadding = clampValue(shortestEdge * 0.025, 12, 32)
+  const margin = Math.max(baseMargin, Math.max(padding, compactPadding) + 12)
+  const gutter = clampValue(shortestEdge * 0.04, 24, 56)
+  const compactGutter = clampValue(shortestEdge * 0.025, 14, 36)
+
+  return {
+    margin,
+    padding,
+    compactPadding,
+    gutter,
+    compactGutter,
+  }
+}
+
+function createGridSlots(
+  canvasWidth: number,
+  canvasHeight: number,
+  cols: number,
+  rows: number,
+  spacing: PageSpacing,
+  compact = false,
+): LayoutSlot[] {
+  const gutterX = cols > 1 ? (compact ? spacing.compactGutter : spacing.gutter) : 0
+  const gutterY = rows > 1 ? (compact ? spacing.compactGutter : spacing.gutter) : 0
+  const usableWidth = canvasWidth - spacing.margin * 2 - gutterX * (cols - 1)
+  const usableHeight = canvasHeight - spacing.margin * 2 - gutterY * (rows - 1)
+
+  const slotWidth = (usableWidth > 0 ? usableWidth : canvasWidth - spacing.margin * 2) / cols
+  const slotHeight = (usableHeight > 0 ? usableHeight : canvasHeight - spacing.margin * 2) / rows
+
+  const slots: LayoutSlot[] = []
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      slots.push({
+        width: slotWidth,
+        height: slotHeight,
+        x: spacing.margin + col * (slotWidth + gutterX),
+        y: spacing.margin + row * (slotHeight + gutterY),
+      })
+    }
+  }
+  return slots
+}
+
+function renderBlockInSlot(slot: LayoutSlot, padding: number, options: SlotRenderOptions) {
+  const offsetX = slot.x - padding
+  const offsetY = slot.y - padding
+  const areaWidth = slot.width + padding * 2
+  const areaHeight = slot.height + padding * 2
+
+  renderCalendarGridBlock({
+    ...options,
+    areaWidth,
+    areaHeight,
+    offsetX,
+    offsetY,
+    padding,
+  })
 }
 
 // Generate calendar with dynamic dates
@@ -164,360 +260,146 @@ function generateCalendar() {
 // Render calendar with support for multiple months - SYNCHRONOUS for performance
 function renderMonthlyCalendar(canvasWidth: number, canvasHeight: number) {
   const numMonths = monthsPerPage.value
-  
-  // Helper to calculate year offset when months wrap
-  const getYearForMonth = (monthOffset: number) => {
-    const totalMonths = startingMonth.value - 1 + monthOffset
-    return year.value + Math.floor(totalMonths / 12)
+  const spacing = computePageSpacing(canvasWidth, canvasHeight)
+
+  const getOffsetMonth = (offset: number) => {
+    const totalMonths = startingMonth.value - 1 + offset
+    const yearOffset = Math.floor(totalMonths / 12)
+    const month = ((totalMonths % 12) + 12) % 12
+    return {
+      month: month + 1,
+      year: year.value + yearOffset,
+    }
   }
-  
-  const getMonthNum = (monthOffset: number) => {
-    return ((startingMonth.value - 1 + monthOffset) % 12) + 1
-  }
-  
-  // Calculate layout based on number of months - all synchronous
+
   if (numMonths === 1) {
-    renderSingleMonth(canvasWidth, canvasHeight, startingMonth.value, year.value, 0, 0)
-  } else if (numMonths === 2) {
-    const halfWidth = canvasWidth / 2
-    renderSingleMonth(halfWidth, canvasHeight, startingMonth.value, year.value, 0, 0, 0.85)
-    renderSingleMonth(halfWidth, canvasHeight, getMonthNum(1), getYearForMonth(1), halfWidth, 0, 0.85)
-  } else if (numMonths === 3) {
-    const thirdWidth = canvasWidth / 3
-    for (let i = 0; i < 3; i++) {
-      renderSingleMonth(thirdWidth, canvasHeight, getMonthNum(i), getYearForMonth(i), i * thirdWidth, 0, 0.65)
-    }
-  } else if (numMonths === 6) {
-    const cellWidth = canvasWidth / 3
-    const cellHeight = canvasHeight / 2
-    for (let i = 0; i < 6; i++) {
-      const col = i % 3
-      const row = Math.floor(i / 3)
-      renderSingleMonth(cellWidth, cellHeight, getMonthNum(i), getYearForMonth(i), col * cellWidth, row * cellHeight, 0.55)
-    }
-  }
-}
-
-// Render a single month at a specific position - SYNCHRONOUS
-function renderSingleMonth(
-  areaWidth: number, 
-  _areaHeight: number, 
-  monthNum: number, 
-  yearNum: number,
-  offsetX: number, 
-  offsetY: number, 
-  scale: number = 1
-) {
-  const margin = 50 * scale
-  const gridWidth = areaWidth - margin * 2
-  const gridStartY = (140 * scale) + offsetY
-  
-  // Generate actual calendar data
-  const monthData = calendarGeneratorService.generateMonth(
-    yearNum,
-    monthNum,
-    holidays.value,
-    weekStartsOn.value as WeekDay,
-    'en'
-  )
-  
-  // Month title
-  editorStore.addObject('text', {
-    content: monthData.name,
-    x: margin + offsetX,
-    y: (50 * scale) + offsetY,
-    fontSize: Math.round(48 * scale),
-    fontFamily: 'Outfit',
-    color: '#1a1a1a',
-    fontWeight: 'bold'
-  })
-  
-  // Year - positioned below month name
-  editorStore.addObject('text', {
-    content: yearNum.toString(),
-    x: margin + offsetX,
-    y: (95 * scale) + offsetY,
-    fontSize: Math.round(28 * scale),
-    fontFamily: 'Outfit',
-    color: '#6b7280',
-    fontWeight: '500'
-  })
-  
-  // Weekday headers
-  const weekdayNames = calendarGeneratorService.getWeekdayNames(weekStartsOn.value as WeekDay, 'en', 'short')
-  const dayWidth = gridWidth / 7
-  
-  weekdayNames.forEach((dayName, index) => {
-    editorStore.addObject('text', {
-      content: dayName,
-      x: margin + offsetX + index * dayWidth + dayWidth / 2 - (12 * scale),
-      y: gridStartY,
-      fontSize: Math.round(11 * scale),
-      fontFamily: 'Inter',
-      color: '#9ca3af',
-      fontWeight: '600'
-    })
-  })
-  
-  // Render date grid
-  const cellHeight = 55 * scale
-  const gridTopY = gridStartY + (25 * scale)
-  
-  monthData.weeks.forEach((week, weekIndex) => {
-    week.forEach((day, dayIndex) => {
-      const cellX = margin + offsetX + dayIndex * dayWidth
-      const cellY = gridTopY + weekIndex * cellHeight
-      
-      // Draw cell background for weekends if enabled
-      if (highlightWeekends.value && day.isWeekend && day.isCurrentMonth) {
-        editorStore.addObject('shape', {
-          x: cellX + 2,
-          y: cellY,
-          width: dayWidth - 4,
-          height: cellHeight - 4,
-          fill: '#f8fafc',
-          shapeType: 'rect'
-        })
-      }
-      
-      // Day number
-      const dayColor = !day.isCurrentMonth ? '#e5e7eb' 
-        : day.isWeekend && highlightWeekends.value ? '#94a3b8'
-        : day.isToday ? '#ffffff'
-        : '#1f2937'
-      
-      // Today highlight
-      if (day.isToday && day.isCurrentMonth) {
-        editorStore.addObject('shape', {
-          x: cellX + dayWidth / 2 - (14 * scale),
-          y: cellY + (4 * scale),
-          width: 28 * scale,
-          height: 28 * scale,
-          fill: '#3b82f6',
-          shapeType: 'circle'
-        })
-      }
-      
-      editorStore.addObject('text', {
-        content: day.dayOfMonth.toString(),
-        x: cellX + dayWidth / 2 - (day.dayOfMonth >= 10 ? 10 * scale : 5 * scale),
-        y: cellY + (10 * scale),
-        fontSize: Math.round(15 * scale),
-        fontFamily: 'Inter',
-        color: dayColor,
-        fontWeight: day.isToday ? '700' : '500'
+    const [slot] = createGridSlots(canvasWidth, canvasHeight, 1, 1, spacing)
+    if (slot) {
+      renderBlockInSlot(slot, spacing.padding, {
+        ...getOffsetMonth(0),
+        showHolidayList: true,
       })
-      
-      // Holiday indicator - only show if current month and scale allows
-      if (day.holidays.length > 0 && day.isCurrentMonth && scale >= 0.7) {
-        const holidayName = day.holidays[0]?.name || 'Holiday'
-        const maxChars = Math.floor(dayWidth / (5 * scale))
-        const displayName = holidayName.length > maxChars 
-          ? holidayName.substring(0, maxChars - 2) + '..' 
-          : holidayName
-        editorStore.addObject('text', {
-          content: displayName,
-          x: cellX + 4,
-          y: cellY + (36 * scale),
-          fontSize: Math.round(7 * scale),
-          fontFamily: 'Inter',
-          color: '#dc2626',
-          fontWeight: '500'
-        })
-      }
+    }
+    return
+  }
+
+  if (numMonths === 2) {
+    const slots = createGridSlots(canvasWidth, canvasHeight, 2, 1, spacing)
+    slots.forEach((slot, index) => {
+      renderBlockInSlot(slot, spacing.padding, {
+        ...getOffsetMonth(index),
+      })
     })
-  })
-  
-  // Show week numbers if enabled
-  if (showWeekNumbers.value && scale >= 0.8) {
-    monthData.weeks.forEach((week, weekIndex) => {
-      if (week[0]) {
-        editorStore.addObject('text', {
-          content: `W${week[0].weekNumber}`,
-          x: 15 + offsetX,
-          y: gridTopY + weekIndex * cellHeight + (12 * scale),
-          fontSize: Math.round(9 * scale),
-          fontFamily: 'Inter',
-          color: '#cbd5e1',
-          fontWeight: '500'
-        })
-      }
+    return
+  }
+
+  if (numMonths === 3) {
+    const slots = createGridSlots(canvasWidth, canvasHeight, 3, 1, spacing)
+    slots.forEach((slot, index) => {
+      renderBlockInSlot(slot, spacing.padding, {
+        ...getOffsetMonth(index),
+      })
+    })
+    return
+  }
+
+  if (numMonths === 6) {
+    const slots = createGridSlots(canvasWidth, canvasHeight, 3, 2, spacing, true)
+    slots.forEach((slot, index) => {
+      renderBlockInSlot(slot, spacing.compactPadding, {
+        ...getOffsetMonth(index),
+        showHeader: false,
+        showHolidayList: false,
+      })
     })
   }
 }
 
-// Render quarterly calendar (3 months)
+// Render quarterly calendar (3 months stacked)
 function renderQuarterlyCalendar(canvasWidth: number, canvasHeight: number) {
-  const margin = 30
-  const monthHeight = (canvasHeight - 100) / 3
-  
-  for (let i = 0; i < 3; i++) {
-    const monthIndex = (startingMonth.value - 1 + i) % 12
-    const actualMonth = monthIndex + 1
-    const actualYear = monthIndex < startingMonth.value - 1 ? year.value + 1 : year.value
-    
-    const monthData = calendarGeneratorService.generateMonth(
-      actualYear,
-      actualMonth,
-      holidays.value,
-      weekStartsOn.value as WeekDay,
-      'en'
-    )
-    
-    const yOffset = 30 + i * monthHeight
-    
-    // Month title
-    editorStore.addObject('text', {
-      content: `${monthData.name} ${actualYear}`,
-      x: margin,
-      y: yOffset,
-      fontSize: 20,
-      fontFamily: 'Outfit',
-      color: '#1a1a1a',
-      fontWeight: 'bold'
+  const monthsPerColumn = 3
+  const spacing = computePageSpacing(canvasWidth, canvasHeight)
+  const slots = createGridSlots(canvasWidth, canvasHeight, 1, monthsPerColumn, spacing)
+
+  slots.forEach((slot, index) => {
+    const totalMonths = startingMonth.value - 1 + index
+    const monthValue = ((totalMonths % 12) + 12) % 12
+    const resolvedYear = year.value + Math.floor(totalMonths / 12)
+    renderBlockInSlot(slot, spacing.padding, {
+      month: monthValue + 1,
+      year: resolvedYear,
+      showHolidayList: false,
     })
-    
-    // Render compact date grid
-    setTimeout(() => {
-      renderCompactMonthGrid(monthData, margin, yOffset + 35, canvasWidth - margin * 2, monthHeight - 60)
-    }, 100 + i * 100)
-  }
+  })
 }
 
 // Render yearly calendar (4x3 grid)
 function renderYearlyCalendar(canvasWidth: number, canvasHeight: number) {
-  const margin = 25
   const cols = 4
   const rows = 3
-  const cellWidth = (canvasWidth - margin * 2 - 30) / cols
-  const cellHeight = (canvasHeight - 100) / rows
-  
-  // Year title
-  editorStore.addObject('text', {
-    content: year.value.toString(),
-    x: canvasWidth / 2 - 40,
-    y: 25,
-    fontSize: 36,
-    fontFamily: 'Outfit',
-    color: '#1a1a1a',
-    fontWeight: 'bold'
-  })
-  
-  for (let row = 0; row < rows; row++) {
-    for (let col = 0; col < cols; col++) {
-      const monthIndex = row * cols + col
-      const monthData = calendarGeneratorService.generateMonth(
-        year.value,
-        monthIndex + 1,
-        holidays.value,
-        weekStartsOn.value as WeekDay,
-        'en'
-      )
-      
-      const xPos = margin + col * (cellWidth + 10)
-      const yPos = 70 + row * cellHeight
-      
-      // Month label
-      editorStore.addObject('text', {
-        content: monthData.shortName,
-        x: xPos,
-        y: yPos,
-        fontSize: 11,
-        fontFamily: 'Inter',
-        color: '#374151',
-        fontWeight: '700'
-      })
-      
-      // Render mini calendar grid
-      setTimeout(() => {
-        renderMiniMonthGrid(monthData, xPos, yPos + 18, cellWidth, cellHeight - 30)
-      }, 50 + (row * cols + col) * 30)
-    }
-  }
-}
+  const spacing = computePageSpacing(canvasWidth, canvasHeight)
+  const slots = createGridSlots(canvasWidth, canvasHeight, cols, rows, spacing, true)
 
-// Render compact month grid for quarterly view
-function renderCompactMonthGrid(monthData: any, x: number, y: number, width: number, height: number) {
-  const dayWidth = width / 7
-  const weekdayNames = calendarGeneratorService.getWeekdayNames(weekStartsOn.value as WeekDay, 'en', 'narrow')
-  
-  // Weekday headers
-  weekdayNames.forEach((dayName, index) => {
-    editorStore.addObject('text', {
-      content: dayName,
-      x: x + index * dayWidth + dayWidth / 2 - 4,
-      y: y,
-      fontSize: 9,
-      fontFamily: 'Inter',
-      color: '#9ca3af',
-      fontWeight: '600'
-    })
-  })
-  
-  // Date cells
-  const cellHeight = Math.min(20, (height - 20) / monthData.weeks.length)
-  monthData.weeks.forEach((week: any[], weekIndex: number) => {
-    week.forEach((day: any, dayIndex: number) => {
-      if (!day.isCurrentMonth) return
-      
-      const cellX = x + dayIndex * dayWidth
-      const cellY = y + 15 + weekIndex * cellHeight
-      
-      const dayColor = day.isWeekend && highlightWeekends.value ? '#9ca3af' : '#374151'
-      
-      editorStore.addObject('text', {
-        content: day.dayOfMonth.toString(),
-        x: cellX + dayWidth / 2 - 5,
-        y: cellY,
-        fontSize: 10,
-        fontFamily: 'Inter',
-        color: dayColor,
-        fontWeight: '400'
-      })
+  slots.forEach((slot, index) => {
+    renderBlockInSlot(slot, spacing.compactPadding, {
+      month: index + 1,
+      year: year.value,
+      showHeader: true,
+      showWeekdays: true,
+      showHolidayList: false,
     })
   })
 }
 
-// Render mini month grid for yearly view
-function renderMiniMonthGrid(monthData: any, x: number, y: number, width: number, height: number) {
-  const dayWidth = width / 7
-  const cellHeight = Math.min(12, height / 6)
-  
-  // Weekday headers (single letter)
-  const weekdayNames = calendarGeneratorService.getWeekdayNames(weekStartsOn.value as WeekDay, 'en', 'narrow')
-  weekdayNames.forEach((dayName, index) => {
-    editorStore.addObject('text', {
-      content: dayName,
-      x: x + index * dayWidth + 1,
-      y: y,
-      fontSize: 7,
-      fontFamily: 'Inter',
-      color: '#9ca3af',
-      fontWeight: '600'
-    })
-  })
-  
-  // Date cells (minimal)
-  monthData.weeks.forEach((week: any[], weekIndex: number) => {
-    week.forEach((day: any, dayIndex: number) => {
-      if (!day.isCurrentMonth) return
-      
-      const cellX = x + dayIndex * dayWidth
-      const cellY = y + 10 + weekIndex * cellHeight
-      
-      const isHoliday = day.holidays.length > 0
-      const dayColor = isHoliday ? '#dc2626' : (day.isWeekend ? '#9ca3af' : '#6b7280')
-      
-      editorStore.addObject('text', {
-        content: day.dayOfMonth.toString(),
-        x: cellX + 1,
-        y: cellY,
-        fontSize: 7,
-        fontFamily: 'Inter',
-        color: dayColor,
-        fontWeight: isHoliday ? '700' : '400'
-      })
-    })
+interface GridBlockOptions {
+  month: number
+  year: number
+  areaWidth: number
+  areaHeight: number
+  offsetX: number
+  offsetY: number
+  padding?: number
+  showHeader?: boolean
+  showWeekdays?: boolean
+  showHolidayList?: boolean
+}
+
+function renderCalendarGridBlock({
+  month,
+  year: yearValue,
+  areaWidth,
+  areaHeight,
+  offsetX,
+  offsetY,
+  padding = DEFAULT_PADDING,
+  showHeader = true,
+  showWeekdays = true,
+  showHolidayList = false,
+}: GridBlockOptions) {
+  const width = Math.max(160, areaWidth - padding * 2)
+  const height = Math.max(180, areaHeight - padding * 2)
+  const x = offsetX + padding
+  const y = offsetY + padding
+
+  editorStore.addObject('calendar-grid', {
+    calendarMode: 'month',
+    year: yearValue,
+    month,
+    startDay: weekStartsOn.value as WeekDay,
+    x,
+    y,
+    width,
+    height,
+    showHeader,
+    showWeekdays,
+    showHolidayList: showHolidayList && showPublicHolidays.value,
+    showHolidayMarkers: showPublicHolidays.value,
+    weekendBackgroundColor: highlightWeekends.value ? '#f8fafc' : undefined,
+    todayBackgroundColor: '#dbeafe',
+    headerBackgroundColor: '#0f172a',
+    headerTextColor: '#ffffff',
+    borderColor: '#e5e7eb',
+    backgroundColor: '#ffffff',
   })
 }
 </script>
@@ -577,13 +459,13 @@ function renderMiniMonthGrid(monthData: any, x: number, y: number, width: number
       <label class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1.5 block">
         Months per Page
       </label>
-      <div class="flex gap-2">
+      <div class="grid grid-cols-2 gap-2">
         <button
           v-for="option in monthsPerPageOptions"
           :key="option.value"
           @click="monthsPerPage = option.value"
           :class="[
-            'flex-1 py-2 px-3 text-xs font-medium rounded-lg transition-colors',
+            'py-2 px-3 text-xs font-medium rounded-lg transition-colors',
             monthsPerPage === option.value
               ? 'bg-primary-500 text-white'
               : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
@@ -752,6 +634,7 @@ input[type="checkbox"] {
 
 input[type="color"] {
   -webkit-appearance: none;
+  appearance: none;
   padding: 0;
 }
 input[type="color"]::-webkit-color-swatch-wrapper {

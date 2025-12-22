@@ -1,0 +1,19 @@
+[
+  {
+    "origin": [
+      "http://localhost:3000",
+      "http://localhost:4173",
+      "https://calendardesigners.web.app",
+      "https://calendardesigners.firebaseapp.com",
+      "https://calendardesigners.app"
+    ],
+    "method": ["GET", "HEAD", "PUT", "POST", "DELETE", "OPTIONS"],
+    "responseHeader": [
+      "Content-Type",
+      "Authorization",
+      "x-goog-meta-userid",
+      "x-goog-meta-assetid"
+    ],
+    "maxAgeSeconds": 3600
+  }
+]
