@@ -1,6 +1,6 @@
 import Holidays from 'date-holidays'
 import { format, parseISO } from 'date-fns'
-import type { Holiday, CustomHoliday, CountryCode } from '@/types'
+import type { Holiday, CustomHoliday, CountryCode, LanguageCode } from '@/types'
 import { staticHolidays } from '@/data/holidays'
 
 class HolidayService {
@@ -17,25 +17,26 @@ class HolidayService {
    * Fetch holidays for a specific country and year
    */
   async getHolidays(
-    country: CountryCode, 
+    country: CountryCode,
     year: number,
+    language?: LanguageCode,
     forceRefresh = false
   ): Promise<{ holidays: Holiday[]; source: 'api' | 'static' }> {
-    const cacheKey = `${country}-${year}`
-    
+    const cacheKey = `${country}-${year}-${language || 'en'}`
+
     // Check cache
     if (!forceRefresh && this.isCacheValid(cacheKey)) {
-      return { 
-        holidays: this.cache.get(cacheKey)!, 
-        source: 'api' 
+      return {
+        holidays: this.cache.get(cacheKey)!,
+        source: 'api'
       }
     }
 
     try {
       // Try API first
-      this.holidayLib.init(country)
+      this.holidayLib.init(country, language)
       const apiHolidays = this.holidayLib.getHolidays(year)
-      
+
       const holidays: Holiday[] = apiHolidays.map((h, index) => ({
         id: `${country}-${year}-${index}`,
         date: format(new Date(h.date), 'yyyy-MM-dd'),
@@ -49,7 +50,7 @@ class HolidayService {
       // Update cache
       this.cache.set(cacheKey, holidays)
       this.cacheExpiry.set(cacheKey, Date.now() + this.CACHE_TTL)
-      
+
       return { holidays, source: 'api' }
     } catch (error) {
       console.warn(`API failed for ${country}/${year}, using static data`)
@@ -62,12 +63,13 @@ class HolidayService {
    * Get holidays for a specific month
    */
   async getHolidaysForMonth(
-    country: CountryCode, 
-    year: number, 
-    month: number
+    country: CountryCode,
+    year: number,
+    month: number,
+    language?: LanguageCode
   ): Promise<Holiday[]> {
-    const { holidays } = await this.getHolidays(country, year)
-    
+    const { holidays } = await this.getHolidays(country, year, language)
+
     return holidays.filter((h) => {
       const date = parseISO(h.date)
       return date.getMonth() + 1 === month
@@ -79,12 +81,13 @@ class HolidayService {
    */
   async getHolidaysForDate(
     country: CountryCode,
-    date: Date
+    date: Date,
+    language?: LanguageCode
   ): Promise<Holiday[]> {
     const year = date.getFullYear()
-    const { holidays } = await this.getHolidays(country, year)
+    const { holidays } = await this.getHolidays(country, year, language)
     const dateStr = format(date, 'yyyy-MM-dd')
-    
+
     return holidays.filter((h) => h.date === dateStr)
   }
 
@@ -98,9 +101,9 @@ class HolidayService {
   ): Holiday[] {
     // Expand recurring custom holidays
     const expandedCustom = this.expandRecurringHolidays(customHolidays, year)
-    
+
     const merged = [...holidays]
-    
+
     for (const custom of expandedCustom) {
       // Check for duplicates by date
       const existingIndex = merged.findIndex((h) => h.date === custom.date)
@@ -117,7 +120,7 @@ class HolidayService {
    * Expand recurring holidays for a specific year
    */
   private expandRecurringHolidays(
-    holidays: CustomHoliday[], 
+    holidays: CustomHoliday[],
     year: number
   ): CustomHoliday[] {
     const expanded: CustomHoliday[] = []
@@ -143,7 +146,7 @@ class HolidayService {
           originalDate.getMonth(),
           originalDate.getDate()
         )
-        
+
         if (instanceDate <= end) {
           expanded.push({
             ...holiday,
@@ -163,7 +166,7 @@ class HolidayService {
    */
   private getStaticHolidays(country: CountryCode, year: number): Holiday[] {
     const countryHolidays = staticHolidays[country] || []
-    
+
     return countryHolidays.map((h, index) => ({
       id: `static-${country}-${year}-${index}`,
       date: `${year}-${h.month.toString().padStart(2, '0')}-${h.day.toString().padStart(2, '0')}`,

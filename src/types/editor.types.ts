@@ -42,7 +42,7 @@ export interface CanvasObject {
   properties: ObjectProperties
 }
 
-export type ObjectType = 
+export type ObjectType =
   | 'calendar-grid'
   | 'week-strip'
   | 'date-cell'
@@ -54,7 +54,7 @@ export type ObjectType =
   | 'shape'
   | 'logo'
 
-export type ObjectProperties = 
+export type ObjectProperties =
   | CalendarGridProperties
   | TextProperties
   | ImageProperties
@@ -159,6 +159,7 @@ export interface CalendarGridMetadata {
   weekendBackgroundColor?: string
   todayBackgroundColor?: string
   showHolidayMarkers?: boolean
+  holidayMarkerStyle?: 'bar' | 'dot' | 'square' | 'background' | 'text' | 'border' | 'triangle'
   holidayMarkerColor?: string
   holidayMarkerHeight?: number
   showHolidayList?: boolean
@@ -167,6 +168,8 @@ export interface CalendarGridMetadata {
   holidayListTextColor?: string
   holidayListAccentColor?: string
   holidayListHeight?: number
+  holidayListTitleFontSize?: number
+  holidayListEntryFontSize?: number
   size: {
     width: number
     height: number

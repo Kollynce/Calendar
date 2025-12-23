@@ -1,20 +1,37 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useEditorStore } from '@/stores/editor.store'
-import { staticHolidays } from '@/data/holidays'
-import type { CountryCode, Holiday, WeekDay } from '@/types'
+import type { WeekDay } from '@/types'
 import {
   PlusIcon,
   TrashIcon,
   SparklesIcon,
-  GlobeAltIcon
+  GlobeAltIcon,
+  LanguageIcon
 } from '@heroicons/vue/24/outline'
+import AppSearchableSelect from '@/components/ui/AppSearchableSelect.vue'
+import { countries } from '@/data/countries'
+import { localizationService } from '@/services/calendar/localization.service'
+import { useCalendarStore } from '@/stores/calendar.store'
 
 const emit = defineEmits<{
   (e: 'generate'): void
 }>()
 
 const editorStore = useEditorStore()
+const calendarStore = useCalendarStore()
+
+// Options for searchables
+const countryOptions = computed(() => 
+  countries.map(c => ({ id: c.code, name: c.name, icon: c.flag }))
+)
+
+const languageOptions = computed(() => 
+  localizationService.getAvailableLanguages().map(l => ({ 
+    id: l.code, 
+    name: `${l.name} (${l.nativeName})` 
+  }))
+)
 
 // Calendar Configuration State
 const calendarType = ref<'monthly' | 'quarterly' | 'yearly'>('monthly')
@@ -23,8 +40,21 @@ const startingMonth = ref(new Date().getMonth() + 1)
 const monthsPerPage = ref(1)
 const weekStartsOn = ref<0 | 1>(0) // 0 = Sunday, 1 = Monday
 const showWeekNumbers = ref(false)
-const selectedCountry = ref<CountryCode>('KE')
-const showPublicHolidays = ref(true)
+const selectedCountry = computed({
+  get: () => calendarStore.config.country,
+  set: (val) => calendarStore.setCountry(val as any)
+})
+
+const selectedLanguage = computed({
+  get: () => calendarStore.config.language,
+  set: (val) => calendarStore.setLanguage(val as any)
+})
+
+const showPublicHolidays = computed({
+  get: () => calendarStore.config.showHolidays,
+  set: (val) => calendarStore.toggleHolidays(val)
+})
+
 const highlightWeekends = ref(true)
 
 // Custom Events
@@ -63,17 +93,7 @@ const monthsList = [
   { value: 12, name: 'December' }
 ]
 
-// Countries with flags
-const countries = [
-  { code: 'ZA' as CountryCode, name: 'South Africa', flag: '🇿🇦' },
-  { code: 'NG' as CountryCode, name: 'Nigeria', flag: '🇳🇬' },
-  { code: 'KE' as CountryCode, name: 'Kenya', flag: '🇰🇪' },
-  { code: 'EG' as CountryCode, name: 'Egypt', flag: '🇪🇬' },
-  { code: 'GH' as CountryCode, name: 'Ghana', flag: '🇬🇭' },
-  { code: 'TZ' as CountryCode, name: 'Tanzania', flag: '🇹🇿' },
-  { code: 'UG' as CountryCode, name: 'Uganda', flag: '🇺🇬' },
-  { code: 'ET' as CountryCode, name: 'Ethiopia', flag: '🇪🇹' },
-]
+// Countries list is now imported from data/countries
 
 // Months per page options based on calendar type
 const monthsPerPageOptions = computed(() => {
@@ -94,23 +114,9 @@ watch(calendarType, (type) => {
   else monthsPerPage.value = 1
 })
 
-// Get holidays for the selected country and year
-const holidays = computed((): Holiday[] => {
-  if (!showPublicHolidays.value) return []
-  const countryHolidays = staticHolidays[selectedCountry.value] || []
-  return countryHolidays.map((h, index) => ({
-    id: `static-${selectedCountry.value}-${year.value}-${index}`,
-    date: `${year.value}-${h.month.toString().padStart(2, '0')}-${h.day.toString().padStart(2, '0')}`,
-    name: h.name,
-    type: h.type || 'public',
-    isPublic: h.type === 'public',
-    country: selectedCountry.value,
-  }))
-})
-
 // Holiday count for selected country
 const holidayCount = computed(() => {
-  return staticHolidays[selectedCountry.value]?.length || 0
+  return calendarStore.holidayCount
 })
 
 // Add custom event
@@ -130,8 +136,11 @@ function addCustomEvent() {
   showAddEvent.value = false
 }
 
+function removeEvent(id: string) {
+  customEvents.value = customEvents.value.filter(e => e.id !== id)
+}
+
 const DEFAULT_PADDING = 36
-const COMPACT_PADDING = 20
 
 interface GridBlockOptions {
   month: number
@@ -144,6 +153,9 @@ interface GridBlockOptions {
   showHeader?: boolean
   showWeekdays?: boolean
   showHolidayList?: boolean
+  showHolidayMarkers?: boolean
+  holidayListTitleFontSize?: number
+  holidayListEntryFontSize?: number
 }
 
 interface PageSpacing {
@@ -261,6 +273,7 @@ function generateCalendar() {
 function renderMonthlyCalendar(canvasWidth: number, canvasHeight: number) {
   const numMonths = monthsPerPage.value
   const spacing = computePageSpacing(canvasWidth, canvasHeight)
+  const isPortrait = canvasWidth < canvasHeight
 
   const getOffsetMonth = (offset: number) => {
     const totalMonths = startingMonth.value - 1 + offset
@@ -284,7 +297,10 @@ function renderMonthlyCalendar(canvasWidth: number, canvasHeight: number) {
   }
 
   if (numMonths === 2) {
-    const slots = createGridSlots(canvasWidth, canvasHeight, 2, 1, spacing)
+    // Portrait: 1 col x 2 rows. Landscape: 2 cols x 1 row.
+    const cols = isPortrait ? 1 : 2
+    const rows = isPortrait ? 2 : 1
+    const slots = createGridSlots(canvasWidth, canvasHeight, cols, rows, spacing)
     slots.forEach((slot, index) => {
       renderBlockInSlot(slot, spacing.padding, {
         ...getOffsetMonth(index),
@@ -294,7 +310,10 @@ function renderMonthlyCalendar(canvasWidth: number, canvasHeight: number) {
   }
 
   if (numMonths === 3) {
-    const slots = createGridSlots(canvasWidth, canvasHeight, 3, 1, spacing)
+    // Portrait: 1 col x 3 rows. Landscape: 3 cols x 1 row.
+    const cols = isPortrait ? 1 : 3
+    const rows = isPortrait ? 3 : 1
+    const slots = createGridSlots(canvasWidth, canvasHeight, cols, rows, spacing)
     slots.forEach((slot, index) => {
       renderBlockInSlot(slot, spacing.padding, {
         ...getOffsetMonth(index),
@@ -304,22 +323,31 @@ function renderMonthlyCalendar(canvasWidth: number, canvasHeight: number) {
   }
 
   if (numMonths === 6) {
-    const slots = createGridSlots(canvasWidth, canvasHeight, 3, 2, spacing, true)
+    // Portrait: 2 cols x 3 rows. Landscape: 3 cols x 2 rows
+    const cols = isPortrait ? 2 : 3
+    const rows = isPortrait ? 3 : 2
+    const slots = createGridSlots(canvasWidth, canvasHeight, cols, rows, spacing, true)
     slots.forEach((slot, index) => {
       renderBlockInSlot(slot, spacing.compactPadding, {
         ...getOffsetMonth(index),
-        showHeader: false,
+        showHeader: true,
         showHolidayList: false,
       })
     })
   }
 }
 
-// Render quarterly calendar (3 months stacked)
+// Render quarterly calendar (3 months adaptive)
 function renderQuarterlyCalendar(canvasWidth: number, canvasHeight: number) {
-  const monthsPerColumn = 3
+  const isPortrait = canvasWidth < canvasHeight
+  
+  // Portrait: 1 col x 3 rows (vertical stack)
+  // Landscape: 3 cols x 1 row (horizontal strip)
+  const cols = isPortrait ? 1 : 3
+  const rows = isPortrait ? 3 : 1
+  
   const spacing = computePageSpacing(canvasWidth, canvasHeight)
-  const slots = createGridSlots(canvasWidth, canvasHeight, 1, monthsPerColumn, spacing)
+  const slots = createGridSlots(canvasWidth, canvasHeight, cols, rows, spacing)
 
   slots.forEach((slot, index) => {
     const totalMonths = startingMonth.value - 1 + index
@@ -328,25 +356,50 @@ function renderQuarterlyCalendar(canvasWidth: number, canvasHeight: number) {
     renderBlockInSlot(slot, spacing.padding, {
       month: monthValue + 1,
       year: resolvedYear,
-      showHolidayList: false,
+      showHolidayList: false, 
+      showHolidayMarkers: true,
     })
   })
 }
 
 // Render yearly calendar (4x3 grid)
+// Render yearly calendar (Dynamic grid based on orientation)
 function renderYearlyCalendar(canvasWidth: number, canvasHeight: number) {
-  const cols = 4
-  const rows = 3
+  const isPortrait = canvasWidth < canvasHeight
+  // Portrait: 3 columns x 4 rows
+  // Landscape: 4 columns x 3 rows
+  const cols = isPortrait ? 3 : 4
+  const rows = isPortrait ? 4 : 3
+  
   const spacing = computePageSpacing(canvasWidth, canvasHeight)
   const slots = createGridSlots(canvasWidth, canvasHeight, cols, rows, spacing, true)
 
   slots.forEach((slot, index) => {
+    const monthName = monthsList[index]?.name || `Month ${index + 1}`
     renderBlockInSlot(slot, spacing.compactPadding, {
       month: index + 1,
       year: year.value,
+      title: monthName, // Only show month name in yearly grid
       showHeader: true,
       showWeekdays: true,
       showHolidayList: false,
+      // Keep markers (red text/dots) so holidays are visible, but remove the list
+      showHolidayMarkers: true,
+      // Compact styling for year grid
+      holidayMarkerHeight: 2,
+      headerHeight: 18, // Even more compact header
+      headerFontSize: 9,
+      weekdayHeight: 14,
+      weekdayFontSize: 7,
+      dayNumberFontSize: 10,
+      holidayListTitleFontSize: 10,
+      holidayListEntryFontSize: 10,
+      dayNumberInsetX: 2,
+      dayNumberInsetY: 2,
+      gridLineWidth: 0.5,
+      cornerRadius: 4,
+      borderWidth: 1,
+      cellGap: 0,
     })
   })
 }
@@ -354,6 +407,7 @@ function renderYearlyCalendar(canvasWidth: number, canvasHeight: number) {
 interface GridBlockOptions {
   month: number
   year: number
+  title?: string
   areaWidth: number
   areaHeight: number
   offsetX: number
@@ -362,11 +416,30 @@ interface GridBlockOptions {
   showHeader?: boolean
   showWeekdays?: boolean
   showHolidayList?: boolean
+  showHolidayMarkers?: boolean
+  // Style overrides
+  headerHeight?: number
+  headerFontSize?: number
+  weekdayHeight?: number
+  weekdayFontSize?: number
+  dayNumberFontSize?: number
+  dayNumberInsetX?: number
+  dayNumberInsetY?: number
+  gridLineWidth?: number
+  cornerRadius?: number
+  borderWidth?: number
+  cellGap?: number
+  holidayListMaxItems?: number
+  holidayListHeight?: number
+  holidayMarkerHeight?: number
+  holidayListTitleFontSize?: number
+  holidayListEntryFontSize?: number
 }
 
 function renderCalendarGridBlock({
   month,
   year: yearValue,
+  title,
   areaWidth,
   areaHeight,
   offsetX,
@@ -375,16 +448,24 @@ function renderCalendarGridBlock({
   showHeader = true,
   showWeekdays = true,
   showHolidayList = false,
+  showHolidayMarkers,
+  ...styleOverrides
 }: GridBlockOptions) {
-  const width = Math.max(160, areaWidth - padding * 2)
-  const height = Math.max(180, areaHeight - padding * 2)
+  const width = areaWidth - padding * 2
+  const height = areaHeight - padding * 2
   const x = offsetX + padding
   const y = offsetY + padding
+
+  // Force disable holiday list for yearly view to prevent clutter
+  const isYearly = calendarType.value === 'yearly'
+  const effectiveShowHolidayList = isYearly ? false : (showHolidayList && showPublicHolidays.value)
+  const effectiveShowHolidayMarkers = showHolidayMarkers ?? showPublicHolidays.value
 
   editorStore.addObject('calendar-grid', {
     calendarMode: 'month',
     year: yearValue,
     month,
+    title,
     startDay: weekStartsOn.value as WeekDay,
     x,
     y,
@@ -392,14 +473,15 @@ function renderCalendarGridBlock({
     height,
     showHeader,
     showWeekdays,
-    showHolidayList: showHolidayList && showPublicHolidays.value,
-    showHolidayMarkers: showPublicHolidays.value,
+    showHolidayList: effectiveShowHolidayList,
+    showHolidayMarkers: effectiveShowHolidayMarkers,
     weekendBackgroundColor: highlightWeekends.value ? '#f8fafc' : undefined,
     todayBackgroundColor: '#dbeafe',
     headerBackgroundColor: '#0f172a',
     headerTextColor: '#ffffff',
     borderColor: '#e5e7eb',
     backgroundColor: '#ffffff',
+    ...styleOverrides,
   })
 }
 </script>
@@ -517,17 +599,26 @@ function renderCalendarGridBlock({
         <p class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Holidays</p>
       </div>
       
-      <div>
-        <label class="text-xs text-gray-500 mb-1 block">Country</label>
-        <select
+      <div class="grid grid-cols-1 gap-3">
+        <AppSearchableSelect
           v-model="selectedCountry"
-          class="select"
+          :options="countryOptions"
+          label="Country"
+          placeholder="Search country..."
+        />
+        
+        <AppSearchableSelect
+          v-model="selectedLanguage"
+          :options="languageOptions"
+          label="Interface Language"
+          placeholder="Search language..."
         >
-          <option v-for="country in countries" :key="country.code" :value="country.code">
-            {{ country.flag }} {{ country.name }}
-          </option>
-        </select>
-        <p class="text-xs text-gray-400 mt-1">{{ holidayCount }} public holidays available</p>
+          <template #label-prefix>
+            <LanguageIcon class="w-3 h-3 inline-block mr-1 opacity-70" />
+          </template>
+        </AppSearchableSelect>
+        
+        <p class="text-xs text-gray-400">{{ holidayCount }} public holidays available</p>
       </div>
       
       <label class="flex items-center gap-3 cursor-pointer">

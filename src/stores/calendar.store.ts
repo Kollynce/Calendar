@@ -5,10 +5,10 @@ import { holidayService } from '@/services/calendar/holiday.service'
 import { customHolidaysService } from '@/services/calendar/custom-holidays.service'
 import { calendarGeneratorService } from '@/services/calendar/generator.service'
 import { localizationService } from '@/services/calendar/localization.service'
-import type { 
-  CalendarConfig, 
-  CalendarYear, 
-  Holiday, 
+import type {
+  CalendarConfig,
+  CalendarYear,
+  Holiday,
   CustomHoliday,
   CountryCode,
   LanguageCode,
@@ -90,9 +90,10 @@ export const useCalendarStore = defineStore('calendar', () => {
       // Fetch holidays
       const { holidays: fetchedHolidays, source } = await holidayService.getHolidays(
         config.value.country,
-        config.value.year
+        config.value.year,
+        config.value.language
       )
-      
+
       holidays.value = fetchedHolidays
       holidaySource.value = source
 

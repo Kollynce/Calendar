@@ -1,10 +1,10 @@
 import { defineStore } from 'pinia'
 import { ref, computed, shallowRef, watch } from 'vue'
 import { Canvas, Object as FabricObject } from 'fabric'
-import type { 
-  Project, 
-  CanvasState, 
-  CanvasObject, 
+import type {
+  Project,
+  CanvasState,
+  CanvasObject,
   CanvasElementMetadata,
   Holiday,
 } from '@/types'
@@ -58,7 +58,7 @@ export const useEditorStore = defineStore('editor', () => {
   const clipboard = ref<CanvasObject | null>(null)
   const zoom = ref(1)
   const panOffset = ref({ x: 0, y: 0 })
-  
+
   // History for undo/redo
   const history = ref<CanvasState[]>([])
   const historyIndex = ref(-1)
@@ -221,9 +221,9 @@ export const useEditorStore = defineStore('editor', () => {
       fontsStylesheetReady = isLoaded
         ? Promise.resolve()
         : new Promise<void>((resolve) => {
-            existing.addEventListener('load', () => resolve(), { once: true })
-            existing.addEventListener('error', () => resolve(), { once: true })
-          })
+          existing.addEventListener('load', () => resolve(), { once: true })
+          existing.addEventListener('error', () => resolve(), { once: true })
+        })
       return fontsStylesheetReady
     }
 
@@ -375,8 +375,9 @@ export const useEditorStore = defineStore('editor', () => {
     holidayLoadInFlight.add(y)
 
     const country = calendarStore.config?.country ?? 'KE'
+    const language = calendarStore.config?.language ?? 'en'
     holidayService
-      .getHolidays(country, y)
+      .getHolidays(country, y, language)
       .then(({ holidays }) => {
         const showHolidays = calendarStore.config?.showHolidays ?? true
         const showCustom = calendarStore.config?.showCustomHolidays ?? true
@@ -384,10 +385,10 @@ export const useEditorStore = defineStore('editor', () => {
         const merged =
           showCustom
             ? holidayService.mergeWithCustomHolidays(
-                base,
-                (calendarStore.customHolidays as any) ?? [],
-                y,
-              )
+              base,
+              (calendarStore.customHolidays as any) ?? [],
+              y,
+            )
             : base
 
         holidayCacheByYear.set(y, merged)
@@ -480,7 +481,7 @@ export const useEditorStore = defineStore('editor', () => {
       name: getLayerNameForMetadata(metadata),
     })
 
-    ;(rebuilt as any).id = (target as any).id
+      ; (rebuilt as any).id = (target as any).id
     attachElementMetadata(rebuilt, metadata)
     return rebuilt
   }
@@ -570,13 +571,13 @@ export const useEditorStore = defineStore('editor', () => {
   // ═══════════════════════════════════════════════════════════════
   const selectedObjects = computed(() => {
     // Depend on selectedObjectIds to ensure reactivity when selection changes
-    selectedObjectIds.value 
+    selectedObjectIds.value
     if (!canvas.value) return []
     return canvas.value.getActiveObjects()
   })
 
   const hasSelection = computed(() => selectedObjectIds.value.length > 0)
-  
+
   const canUndo = computed(() => historyIndex.value > 0)
   const canRedo = computed(() => historyIndex.value < history.value.length - 1)
 

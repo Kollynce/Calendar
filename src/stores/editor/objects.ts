@@ -108,7 +108,7 @@ export function createObjectIdentityHelper(params: {
       top: 0,
     } as any)
 
-    ;(line as any).set?.({ x1: 0, y1: 0, x2: len, y2: 0 } as any)
+      ; (line as any).set?.({ x1: 0, y1: 0, x2: len, y2: 0 } as any)
 
     if (startHead) {
       startHead.set({ originX: 'left', originY: 'center', left: offsetX + 0, top: 0 } as any)
@@ -118,10 +118,10 @@ export function createObjectIdentityHelper(params: {
       endHead.set({ originX: 'left', originY: 'center', left: offsetX + (width - headLength), top: 0 } as any)
     }
 
-    ;(group as any).dirty = true
-    ;(group as any)._calcBounds?.()
-    ;(group as any)._updateObjectsCoords?.()
-    ;(group as any).setCoords?.()
+    ; (group as any).dirty = true
+      ; (group as any)._calcBounds?.()
+      ; (group as any)._updateObjectsCoords?.()
+      ; (group as any).setCoords?.()
   }
 
   function ensureObjectIdentity(obj: any): void {
@@ -152,7 +152,7 @@ export function createObjectIdentityHelper(params: {
         (Array.isArray(obj?._objects) && obj._objects.some((o: any) => o?.data?.arrowPart)))
 
     if (isArrowGroup) {
-      ;(obj as any).data = {
+      ; (obj as any).data = {
         ...((obj as any).data ?? {}),
         shapeKind: 'arrow',
       }
@@ -405,15 +405,15 @@ export function createObjectsModule(params: {
     const points =
       part === 'endHead'
         ? [
-            { x: 0, y: 0 },
-            { x: 0, y: headWidth },
-            { x: headLength, y: headWidth / 2 },
-          ]
+          { x: 0, y: 0 },
+          { x: 0, y: headWidth },
+          { x: headLength, y: headWidth / 2 },
+        ]
         : [
-            { x: headLength, y: 0 },
-            { x: headLength, y: headWidth },
-            { x: 0, y: headWidth / 2 },
-          ]
+          { x: headLength, y: 0 },
+          { x: headLength, y: headWidth },
+          { x: 0, y: headWidth / 2 },
+        ]
 
     const isOpen = style === 'open'
 
@@ -428,7 +428,7 @@ export function createObjectsModule(params: {
       objectCaching: false,
     })
 
-    ;(poly as any).data = { ...(poly as any).data, arrowPart: part }
+      ; (poly as any).data = { ...(poly as any).data, arrowPart: part }
     return poly
   }
 
@@ -484,7 +484,7 @@ export function createObjectsModule(params: {
       evented: false,
       objectCaching: false,
     })
-    ;(line as any).data = { ...(line as any).data, arrowPart: 'line' }
+      ; (line as any).data = { ...(line as any).data, arrowPart: 'line' }
 
     const objects: FabricObject[] = [line]
 
@@ -531,19 +531,19 @@ export function createObjectsModule(params: {
       ...groupOther,
     })
 
-    ;(group as any).data = {
-      ...((group as any).data ?? {}),
-      shapeKind: 'arrow',
-      arrowOptions: {
-        baseWidth: width,
-        arrowHeadLength: headLength,
-        arrowHeadWidth: headWidth,
-        arrowHeadStyle: headStyle,
-        arrowEnds,
-        stroke,
-        strokeWidth,
-      },
-    }
+      ; (group as any).data = {
+        ...((group as any).data ?? {}),
+        shapeKind: 'arrow',
+        arrowOptions: {
+          baseWidth: width,
+          arrowHeadLength: headLength,
+          arrowHeadWidth: headWidth,
+          arrowHeadStyle: headStyle,
+          arrowEnds,
+          stroke,
+          strokeWidth,
+        },
+      }
 
     refreshArrowGroupGeometry(group)
     return group
@@ -551,13 +551,9 @@ export function createObjectsModule(params: {
 
   function createCalendarGridObject(id: string, options: any): FabricObject {
     const metadata = getDefaultCalendarMetadata({
-      mode: options.calendarMode,
-      year: options.year,
-      month: options.month,
-      startDay: options.startDay,
-      showHeader: options.showHeader,
-      showWeekdays: options.showWeekdays,
-      size: options.width && options.height ? { width: options.width, height: options.height } : undefined,
+      ...options,
+      mode: options.calendarMode || options.mode,
+      size: options.width && options.height ? { width: options.width, height: options.height } : options.size,
     })
     const group = buildCalendarGridGraphics(metadata, getHolidaysForCalendarYear)
     group.set({
@@ -574,10 +570,8 @@ export function createObjectsModule(params: {
 
   function createWeekStripObject(id: string, options: any): FabricObject {
     const metadata = getDefaultWeekStripMetadata({
-      startDate: options.startDate,
-      startDay: options.startDay,
-      label: options.label,
-      size: options.width && options.height ? { width: options.width, height: options.height } : undefined,
+      ...options,
+      size: options.width && options.height ? { width: options.width, height: options.height } : options.size,
     })
     const group = buildWeekStripGraphics(metadata)
     group.set({
@@ -594,10 +588,8 @@ export function createObjectsModule(params: {
 
   function createDateCellObject(id: string, options: any): FabricObject {
     const metadata = getDefaultDateCellMetadata({
-      date: options.date,
-      highlightAccent: options.highlightAccent,
-      notePlaceholder: options.notePlaceholder,
-      size: options.width && options.height ? { width: options.width, height: options.height } : undefined,
+      ...options,
+      size: options.width && options.height ? { width: options.width, height: options.height } : options.size,
     })
     const group = buildDateCellGraphics(metadata)
     group.set({
@@ -614,19 +606,8 @@ export function createObjectsModule(params: {
 
   function createNotesPanelObject(id: string, options: any): FabricObject {
     const metadata = getDefaultPlannerNoteMetadata(options.pattern ?? 'hero', {
-      title: options.title,
-      accentColor: options.accentColor,
-      headerStyle: options.headerStyle,
-      backgroundColor: options.backgroundColor,
-      borderColor: options.borderColor,
-      borderWidth: options.borderWidth,
-      cornerRadius: options.cornerRadius,
-      titleColor: options.titleColor,
-      headerBackgroundColor: options.headerBackgroundColor,
-      headerBackgroundOpacity: options.headerBackgroundOpacity,
-      guideColor: options.guideColor,
-      dotColor: options.dotColor,
-      size: options.width && options.height ? { width: options.width, height: options.height } : undefined,
+      ...options,
+      size: options.width && options.height ? { width: options.width, height: options.height } : options.size,
     })
     const group = buildPlannerNoteGraphics(metadata)
     group.set({
@@ -643,22 +624,8 @@ export function createObjectsModule(params: {
 
   function createScheduleObject(id: string, options: any): FabricObject {
     const metadata = getDefaultScheduleMetadata({
-      title: options.title,
-      accentColor: options.accentColor,
-      startHour: options.startHour,
-      endHour: options.endHour,
-      intervalMinutes: options.intervalMinutes,
-      headerStyle: options.headerStyle,
-      backgroundColor: options.backgroundColor,
-      borderColor: options.borderColor,
-      borderWidth: options.borderWidth,
-      cornerRadius: options.cornerRadius,
-      titleColor: options.titleColor,
-      headerBackgroundColor: options.headerBackgroundColor,
-      headerBackgroundOpacity: options.headerBackgroundOpacity,
-      lineColor: options.lineColor,
-      timeLabelColor: options.timeLabelColor,
-      size: options.width && options.height ? { width: options.width, height: options.height } : undefined,
+      ...options,
+      size: options.width && options.height ? { width: options.width, height: options.height } : options.size,
     })
     const group = buildScheduleGraphics(metadata)
     group.set({
@@ -675,21 +642,8 @@ export function createObjectsModule(params: {
 
   function createChecklistObject(id: string, options: any): FabricObject {
     const metadata = getDefaultChecklistMetadata({
-      title: options.title,
-      accentColor: options.accentColor,
-      rows: options.rows,
-      showCheckboxes: options.showCheckboxes,
-      headerStyle: options.headerStyle,
-      backgroundColor: options.backgroundColor,
-      borderColor: options.borderColor,
-      borderWidth: options.borderWidth,
-      cornerRadius: options.cornerRadius,
-      titleColor: options.titleColor,
-      headerBackgroundColor: options.headerBackgroundColor,
-      headerBackgroundOpacity: options.headerBackgroundOpacity,
-      lineColor: options.lineColor,
-      checkboxColor: options.checkboxColor,
-      size: options.width && options.height ? { width: options.width, height: options.height } : undefined,
+      ...options,
+      size: options.width && options.height ? { width: options.width, height: options.height } : options.size,
     })
     const group = buildChecklistGraphics(metadata)
     group.set({
@@ -926,7 +880,7 @@ export function createObjectsModule(params: {
         if (typeof canvasAny.moveObjectTo === 'function') {
           canvasAny.moveObjectTo(group, insertIndex)
         } else if (typeof (group as any).moveTo === 'function') {
-          ;(group as any).moveTo(insertIndex)
+          ; (group as any).moveTo(insertIndex)
         }
 
         canvas.value.setActiveObject(group)
@@ -1022,7 +976,7 @@ export function createObjectsModule(params: {
     canvas.value.remove(group)
 
     children.forEach((obj) => {
-      ;(obj as any).group = undefined
+      ; (obj as any).group = undefined
       ensureObjectIdentity(obj as any)
       canvas.value!.add(obj)
       obj.setCoords?.()
@@ -1128,28 +1082,28 @@ export function createObjectsModule(params: {
         }
         const headStyle = (opts.arrowHeadStyle ?? 'filled') as 'filled' | 'open'
         const isOpen = headStyle === 'open'
-        ;[startHead, endHead].filter(Boolean).forEach((h: any) => {
-          h.set({
-            fill: isOpen ? 'transparent' : nextStroke,
-            stroke: nextStroke,
-            strokeWidth: isOpen ? nextWidth : 0,
-          } as any)
-        })
-        ;(group as any).data = {
-          ...data,
-          arrowOptions: {
-            ...opts,
-            stroke: nextStroke,
-            strokeWidth: nextWidth,
-          },
-        }
+          ;[startHead, endHead].filter(Boolean).forEach((h: any) => {
+            h.set({
+              fill: isOpen ? 'transparent' : nextStroke,
+              stroke: nextStroke,
+              strokeWidth: isOpen ? nextWidth : 0,
+            } as any)
+          })
+          ; (group as any).data = {
+            ...data,
+            arrowOptions: {
+              ...opts,
+              stroke: nextStroke,
+              strokeWidth: nextWidth,
+            },
+          }
         refreshArrowGroupGeometry(group)
       } else if (property === 'strokeDashArray' || property === 'strokeLineCap' || property === 'strokeLineJoin') {
         if (line) {
           line.set({ [property]: value } as any)
         }
 
-        ;(group as any).data = {
+        ; (group as any).data = {
           ...data,
           arrowOptions: {
             ...opts,
@@ -1164,7 +1118,7 @@ export function createObjectsModule(params: {
         property === 'arrowHeadWidth' ||
         property === 'arrowHeadStyle'
       ) {
-        ;(group as any).data = {
+        ; (group as any).data = {
           ...data,
           arrowOptions: {
             ...opts,
@@ -1195,12 +1149,12 @@ export function createObjectsModule(params: {
         requestFontLoad(family, weight, size)
       }
 
-      ;(activeObject as any).dirty = true
+      ; (activeObject as any).dirty = true
       if (typeof (activeObject as any).initDimensions === 'function') {
-        ;(activeObject as any).initDimensions()
+        ; (activeObject as any).initDimensions()
       }
       if (typeof (activeObject as any).setCoords === 'function') {
-        ;(activeObject as any).setCoords()
+        ; (activeObject as any).setCoords()
       }
     }
 
@@ -1422,36 +1376,36 @@ export function createObjectsModule(params: {
     const targetBounds: BoundsAccumulator =
       mode === 'canvas'
         ? {
-            left: 0,
-            top: 0,
-            right: canvasWidth,
-            bottom: canvasHeight,
-            centerX: canvasWidth / 2,
-            centerY: canvasHeight / 2,
-          }
+          left: 0,
+          top: 0,
+          right: canvasWidth,
+          bottom: canvasHeight,
+          centerX: canvasWidth / 2,
+          centerY: canvasHeight / 2,
+        }
         : keyEntry
           ? (keyEntry.bounds as any)
           : (objectBounds.reduce(
-              (acc: BoundsAccumulator, entry: ObjectBoundsEntry) => {
-                acc.left = Math.min(acc.left, entry.bounds.left)
-                acc.top = Math.min(acc.top, entry.bounds.top)
-                acc.right = Math.max(acc.right, entry.bounds.right)
-                acc.bottom = Math.max(acc.bottom, entry.bounds.bottom)
-                return acc
-              },
-              {
-                left: Number.POSITIVE_INFINITY,
-                top: Number.POSITIVE_INFINITY,
-                right: Number.NEGATIVE_INFINITY,
-                bottom: Number.NEGATIVE_INFINITY,
-                centerX: 0,
-                centerY: 0,
-              },
-            ) as any)
+            (acc: BoundsAccumulator, entry: ObjectBoundsEntry) => {
+              acc.left = Math.min(acc.left, entry.bounds.left)
+              acc.top = Math.min(acc.top, entry.bounds.top)
+              acc.right = Math.max(acc.right, entry.bounds.right)
+              acc.bottom = Math.max(acc.bottom, entry.bounds.bottom)
+              return acc
+            },
+            {
+              left: Number.POSITIVE_INFINITY,
+              top: Number.POSITIVE_INFINITY,
+              right: Number.NEGATIVE_INFINITY,
+              bottom: Number.NEGATIVE_INFINITY,
+              centerX: 0,
+              centerY: 0,
+            },
+          ) as any)
 
     if (!('centerX' in targetBounds) || targetBounds.centerX === 0) {
-      ;(targetBounds as any).centerX = (targetBounds.left + targetBounds.right) / 2
-      ;(targetBounds as any).centerY = (targetBounds.top + targetBounds.bottom) / 2
+      ; (targetBounds as any).centerX = (targetBounds.left + targetBounds.right) / 2
+        ; (targetBounds as any).centerY = (targetBounds.top + targetBounds.bottom) / 2
     }
 
     objectBounds.forEach(({ obj, bounds }: { obj: FabricObject; bounds: ReturnType<typeof getObjectBounds> }) => {

@@ -65,6 +65,8 @@ export function getDefaultCalendarMetadata(
     holidayListTextColor: overrides.holidayListTextColor ?? '#4b5563',
     holidayListAccentColor: overrides.holidayListAccentColor ?? '#ef4444',
     holidayListHeight: overrides.holidayListHeight ?? 96,
+    holidayListTitleFontSize: overrides.holidayListTitleFontSize ?? 14,
+    holidayListEntryFontSize: overrides.holidayListEntryFontSize ?? 12,
     size,
   }
 }

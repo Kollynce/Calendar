@@ -21,7 +21,7 @@ export interface TemplateOptions {
   backgroundColor?: string
 }
 
-export type CalendarLayout = 
+export type CalendarLayout =
   | 'year-grid'
   | 'monthly'
   | 'weekly'
@@ -30,15 +30,16 @@ export type CalendarLayout =
 export type WeekDay = 0 | 1 | 2 | 3 | 4 | 5 | 6
 
 // African countries
-export type CountryCode = 
+export type CountryCode =
   | 'DZ' | 'AO' | 'BJ' | 'BW' | 'BF' | 'BI' | 'CV' | 'CM' | 'CF' | 'TD'
   | 'KM' | 'CG' | 'CD' | 'CI' | 'DJ' | 'EG' | 'GQ' | 'ER' | 'SZ' | 'ET'
   | 'GA' | 'GM' | 'GH' | 'GN' | 'GW' | 'KE' | 'LS' | 'LR' | 'LY' | 'MG'
   | 'MW' | 'ML' | 'MR' | 'MU' | 'MA' | 'MZ' | 'NA' | 'NE' | 'NG' | 'RW'
   | 'ST' | 'SN' | 'SC' | 'SL' | 'SO' | 'ZA' | 'SS' | 'SD' | 'TZ' | 'TG'
   | 'TN' | 'UG' | 'ZM' | 'ZW'
+  | (string & {})
 
-export type LanguageCode = 
+export type LanguageCode =
   | 'en' | 'sw' | 'am' | 'yo' | 'zu' | 'ar' | 'fr' | 'pt' | 'ha' | 'ig'
 
 export interface Holiday {
@@ -51,7 +52,7 @@ export interface Holiday {
   country: CountryCode
 }
 
-export type HolidayType = 
+export type HolidayType =
   | 'public'
   | 'bank'
   | 'school'

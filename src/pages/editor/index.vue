@@ -1042,7 +1042,7 @@ async function initializeEditorCanvas(): Promise<void> {
     console.log('[initializeEditorCanvas] Initializing canvas for project:', editorStore.project?.id)
     await editorStore.initializeCanvas(canvasRef.value)
     const currentCanvas = editorStore.canvas
-    const objectCount = currentCanvas?.getObjects?.().length ?? 0
+    const objectCount = (currentCanvas as any)?.getObjects?.().length ?? 0
     console.log('[initializeEditorCanvas] Canvas initialized with', objectCount, 'objects')
   } finally {
     isInitializing = false
@@ -2315,7 +2315,7 @@ function handleDistribute(axis: 'horizontal' | 'vertical') {
               <!-- CALENDAR PANEL - Full configuration -->
               <!-- ═══════════════════════════════════════════════════ -->
               <div v-else-if="activeTool === 'calendar'">
-                <CalendarConfigPanel @generate="activeTool = ''" />
+                <CalendarConfigPanel />
               </div>
 
             </div>
@@ -2847,9 +2847,8 @@ function handleDistribute(axis: 'horizontal' | 'vertical') {
                   </div>
 
                   <div class="pt-3 border-t border-white/10 space-y-4">
-                    <p class="text-[11px] font-semibold text-white/60">Holiday markers</p>
-
-                    <div class="flex items-center justify-between gap-4">
+                    <div class="flex items-center justify-between">
+                      <p class="text-[11px] font-semibold text-white/60">Holidays</p>
                       <label class="flex items-center gap-2 text-sm text-white/80">
                         <input
                           type="checkbox"
@@ -2861,24 +2860,43 @@ function handleDistribute(axis: 'horizontal' | 'vertical') {
                       </label>
                     </div>
 
-                    <div class="grid grid-cols-2 gap-3">
+                    <div v-if="calendarMetadata.showHolidayMarkers !== false" class="space-y-3">
                       <div>
-                        <label class="text-xs font-medium text-white/60 mb-1.5 block">Color</label>
-                        <ColorPicker
-                          :model-value="calendarMetadata.holidayMarkerColor ?? '#ef4444'"
-                          @update:modelValue="(c) => updateCalendarMetadata((draft) => { draft.holidayMarkerColor = c })"
-                        />
-                      </div>
-                      <div>
-                        <label class="text-xs font-medium text-white/60 mb-1.5 block">Height</label>
-                        <input
-                          type="number"
-                          min="1"
-                          max="20"
+                        <label class="text-xs font-medium text-white/60 mb-1.5 block">Marker Style</label>
+                        <select
                           class="control-glass"
-                          :value="calendarMetadata.holidayMarkerHeight ?? 4"
-                          @change="updateCalendarMetadata((draft) => { draft.holidayMarkerHeight = Math.max(1, Math.min(20, Number(($event.target as HTMLInputElement).value) || 4)) })"
-                        />
+                          :value="calendarMetadata.holidayMarkerStyle ?? 'text'"
+                          @change="updateCalendarMetadata((draft) => { draft.holidayMarkerStyle = ($event.target as HTMLSelectElement).value as any })"
+                        >
+                          <option value="bar">Bar (Bottom)</option>
+                          <option value="dot">Dot (Circle)</option>
+                          <option value="square">Square (Solid)</option>
+                          <option value="border">Border (Ring)</option>
+                          <option value="triangle">Corner (Triangle)</option>
+                          <option value="background">Background (Fill)</option>
+                          <option value="text">Text (Highlight)</option>
+                        </select>
+                      </div>
+
+                      <div class="grid grid-cols-2 gap-3">
+                        <div>
+                          <label class="text-xs font-medium text-white/60 mb-1.5 block">Color</label>
+                          <ColorPicker
+                            :model-value="calendarMetadata.holidayMarkerColor ?? '#ef4444'"
+                            @update:modelValue="(c) => updateCalendarMetadata((draft) => { draft.holidayMarkerColor = c })"
+                          />
+                        </div>
+                        <div v-if="!['background', 'text'].includes(calendarMetadata.holidayMarkerStyle ?? 'text')">
+                          <label class="text-xs font-medium text-white/60 mb-1.5 block">{{ (calendarMetadata.holidayMarkerStyle === 'dot' || calendarMetadata.holidayMarkerStyle === 'square' || calendarMetadata.holidayMarkerStyle === 'triangle') ? 'Size' : (calendarMetadata.holidayMarkerStyle === 'border' ? 'Width' : 'Height') }}</label>
+                          <input
+                            type="number"
+                            min="1"
+                            max="20"
+                            class="control-glass"
+                            :value="calendarMetadata.holidayMarkerHeight ?? 4"
+                            @change="updateCalendarMetadata((draft) => { draft.holidayMarkerHeight = Math.max(1, Math.min(20, Number(($event.target as HTMLInputElement).value) || 4)) })"
+                          />
+                        </div>
                       </div>
                     </div>
 

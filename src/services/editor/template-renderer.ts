@@ -214,11 +214,18 @@ function buildCalendarMetadataFromTemplate(
     month: targetMonth,
   })
 
-  const gridConfig = createGridConfig(template.config.monthGrid)
+  const gridOverrides = template.config.monthGrid
+  const gridConfig = createGridConfig(gridOverrides)
   const fallbackSize = {
     width: layout.grid.size.width,
     height: layout.grid.size.height,
   }
+  const resolvedSize = gridOverrides?.size
+    ? {
+        width: gridOverrides.size.width ?? fallbackSize.width,
+        height: gridOverrides.size.height ?? fallbackSize.height,
+      }
+    : fallbackSize
 
   return {
     ...base,
@@ -228,6 +235,6 @@ function buildCalendarMetadataFromTemplate(
     mode: gridConfig.mode ?? 'month',
     startDay: (gridConfig.startDay ??
       template.config.weekStartsOn) as CalendarGridMetadata['startDay'],
-    size: gridConfig.size ?? fallbackSize,
+    size: resolvedSize,
   }
 }
