@@ -47,6 +47,7 @@ export function getDefaultCalendarMetadata(
     weekdayFontFamily: overrides.weekdayFontFamily ?? 'Inter',
     weekdayFontSize: overrides.weekdayFontSize ?? 12,
     weekdayFontWeight: overrides.weekdayFontWeight ?? 600,
+    weekdayFormat: overrides.weekdayFormat ?? 'short',
     gridLineColor: overrides.gridLineColor ?? '#e5e7eb',
     gridLineWidth: overrides.gridLineWidth ?? 1,
     dayNumberColor: overrides.dayNumberColor ?? '#1f2937',
@@ -67,6 +68,8 @@ export function getDefaultCalendarMetadata(
     holidayListHeight: overrides.holidayListHeight ?? 96,
     holidayListTitleFontSize: overrides.holidayListTitleFontSize ?? 14,
     holidayListEntryFontSize: overrides.holidayListEntryFontSize ?? 12,
+    country: overrides.country ?? 'KE',
+    language: overrides.language ?? 'en',
     size,
   }
 }
@@ -99,6 +102,8 @@ export function getDefaultWeekStripMetadata(
     dayNumberFontFamily: overrides.dayNumberFontFamily ?? 'Inter',
     dayNumberFontSize: overrides.dayNumberFontSize ?? 22,
     dayNumberFontWeight: overrides.dayNumberFontWeight ?? 700,
+    country: overrides.country ?? 'KE',
+    language: overrides.language ?? 'en',
     size,
   }
 }
@@ -157,6 +162,8 @@ export function getDefaultDateCellMetadata(
     placeholderFontFamily: overrides.placeholderFontFamily ?? 'Inter',
     placeholderFontSize: overrides.placeholderFontSize ?? 13,
     placeholderFontWeight: overrides.placeholderFontWeight ?? 400,
+    country: overrides.country ?? 'KE',
+    language: overrides.language ?? 'en',
     size,
   }
 }

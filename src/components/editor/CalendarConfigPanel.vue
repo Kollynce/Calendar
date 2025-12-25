@@ -12,6 +12,7 @@ import {
 import AppSearchableSelect from '@/components/ui/AppSearchableSelect.vue'
 import { countries } from '@/data/countries'
 import { localizationService } from '@/services/calendar/localization.service'
+import { calendarGeneratorService } from '@/services/calendar/generator.service'
 import { useCalendarStore } from '@/stores/calendar.store'
 
 const emit = defineEmits<{
@@ -47,7 +48,18 @@ const selectedCountry = computed({
 
 const selectedLanguage = computed({
   get: () => calendarStore.config.language,
-  set: (val) => calendarStore.setLanguage(val as any)
+  set: (val) => {
+    // If holiday language was same as previous global language (or unset), update it too
+    if (!calendarStore.config.holidayLanguage || calendarStore.config.holidayLanguage === calendarStore.config.language) {
+      calendarStore.setHolidayLanguage(val as any)
+    }
+    calendarStore.setLanguage(val as any)
+  }
+})
+
+const selectedHolidayLanguage = computed({
+  get: () => calendarStore.config.holidayLanguage || calendarStore.config.language,
+  set: (val) => calendarStore.setHolidayLanguage(val as any)
 })
 
 const showPublicHolidays = computed({
@@ -77,21 +89,17 @@ const calendarTypes = [
   { id: 'yearly', name: 'Year Grid', description: '12 months overview', icon: '🗓️' }
 ]
 
-// Month options
-const monthsList = [
-  { value: 1, name: 'January' },
-  { value: 2, name: 'February' },
-  { value: 3, name: 'March' },
-  { value: 4, name: 'April' },
-  { value: 5, name: 'May' },
-  { value: 6, name: 'June' },
-  { value: 7, name: 'July' },
-  { value: 8, name: 'August' },
-  { value: 9, name: 'September' },
-  { value: 10, name: 'October' },
-  { value: 11, name: 'November' },
-  { value: 12, name: 'December' }
-]
+const monthNames = computed(() =>
+  calendarGeneratorService.getAllMonthNames(calendarStore.config.language, 'long'),
+)
+
+// Month options (localized)
+const monthsList = computed(() =>
+  monthNames.value.map((name, index) => ({
+    value: index + 1,
+    name: name || `Month ${index + 1}`,
+  })),
+)
 
 // Countries list is now imported from data/countries
 
@@ -154,6 +162,7 @@ interface GridBlockOptions {
   showWeekdays?: boolean
   showHolidayList?: boolean
   showHolidayMarkers?: boolean
+  weekdayFormat?: 'long' | 'short' | 'narrow'
   holidayListTitleFontSize?: number
   holidayListEntryFontSize?: number
 }
@@ -375,7 +384,7 @@ function renderYearlyCalendar(canvasWidth: number, canvasHeight: number) {
   const slots = createGridSlots(canvasWidth, canvasHeight, cols, rows, spacing, true)
 
   slots.forEach((slot, index) => {
-    const monthName = monthsList[index]?.name || `Month ${index + 1}`
+    const monthName = monthsList.value[index]?.name || monthNames.value[index] || `Month ${index + 1}`
     renderBlockInSlot(slot, spacing.compactPadding, {
       month: index + 1,
       year: year.value,
@@ -391,6 +400,7 @@ function renderYearlyCalendar(canvasWidth: number, canvasHeight: number) {
       headerFontSize: 9,
       weekdayHeight: 14,
       weekdayFontSize: 7,
+      weekdayFormat: 'narrow',
       dayNumberFontSize: 10,
       holidayListTitleFontSize: 10,
       holidayListEntryFontSize: 10,
@@ -467,6 +477,7 @@ function renderCalendarGridBlock({
     month,
     title,
     startDay: weekStartsOn.value as WeekDay,
+    language: calendarStore.config.language,
     x,
     y,
     width,
@@ -610,8 +621,19 @@ function renderCalendarGridBlock({
         <AppSearchableSelect
           v-model="selectedLanguage"
           :options="languageOptions"
-          label="Interface Language"
-          placeholder="Search language..."
+          label="Calendar Language"
+          placeholder="Select language..."
+        >
+          <template #label-prefix>
+            <LanguageIcon class="w-3 h-3 inline-block mr-1 opacity-70" />
+          </template>
+        </AppSearchableSelect>
+
+        <AppSearchableSelect
+          v-model="selectedHolidayLanguage"
+          :options="languageOptions"
+          label="Holiday Language"
+          placeholder="Same as calendar"
         >
           <template #label-prefix>
             <LanguageIcon class="w-3 h-3 inline-block mr-1 opacity-70" />

@@ -10,7 +10,7 @@ import type {
 } from '@/types'
 import { calendarGeneratorService } from '@/services/calendar/generator.service'
 
-export type HolidaysGetter = (year: number) => Holiday[]
+export type HolidaysGetter = (year: number, country?: string, language?: string) => Holiday[]
 
 type CalendarGridDay = {
   dayOfMonth: number
@@ -27,7 +27,7 @@ type WeekStripDay = {
 
 export function buildCalendarGridGraphics(
   metadata: CalendarGridMetadata,
-  getHolidaysForCalendarYear: HolidaysGetter,
+  getHolidaysForCalendarYear: (year: number, country?: string, language?: string) => Holiday[],
 ): Group {
   const width = metadata.size.width
   const baseHeight = metadata.size.height
@@ -64,7 +64,7 @@ export function buildCalendarGridGraphics(
   const dayNumberInsetX = Math.max(0, Number(metadata.dayNumberInsetX ?? 12) || 0)
   const dayNumberInsetY = Math.max(0, Number(metadata.dayNumberInsetY ?? 8) || 0)
 
-  const holidaysForYear = getHolidaysForCalendarYear(metadata.year)
+  const holidaysForYear = getHolidaysForCalendarYear(metadata.year, metadata.country, metadata.language)
   const monthStr = metadata.month.toString().padStart(2, '0')
   const monthHolidays = holidaysForYear.filter((holiday) => {
     if (!holiday?.date) return false
@@ -129,7 +129,7 @@ export function buildCalendarGridGraphics(
   )
 
   if (metadata.showHeader) {
-    const monthName = calendarGeneratorService.getMonthName(metadata.month)
+    const monthName = calendarGeneratorService.getMonthName(metadata.month, metadata.language)
     const headerText = metadata.title ?? `${monthName} ${metadata.year}`
     const headerTextTop = Math.max(0, (headerHeight - headerFontSize) / 2)
     objects.push(
@@ -162,7 +162,12 @@ export function buildCalendarGridGraphics(
   const effectiveStyle = metadata.holidayMarkerStyle ?? 'text'
 
   if (metadata.showWeekdays) {
-    const labels = calendarGeneratorService.getWeekdayNames(metadata.startDay, 'en', 'short') as string[]
+    const weekdayFormat = metadata.weekdayFormat ?? 'short'
+    const labels = calendarGeneratorService.getWeekdayNames(
+      metadata.startDay,
+      metadata.language || 'en',
+      weekdayFormat,
+    ) as string[]
     const weekdayTextTop = headerHeight + Math.max(0, (weekdayHeight - weekdayFontSize) / 2)
     labels.forEach((label: string, index: number) => {
       objects.push(
@@ -188,6 +193,7 @@ export function buildCalendarGridGraphics(
         metadata.month,
         holidaysForYear,
         metadata.startDay,
+        metadata.language,
       )
       : null
   const weeks = (monthData?.weeks ?? Array.from({ length: 6 }, () => Array(7).fill(null))) as Array<
@@ -418,7 +424,8 @@ export function buildCalendarGridGraphics(
     itemsToShow.forEach((dateKey, index) => {
       const entryTop = entryTopBase + index * entrySpacing
       const dayNumber = Number(dateKey.slice(8, 10))
-      const dateLabel = `${calendarGeneratorService.getMonthName(metadata.month, 'en', 'short')} ${dayNumber}`
+      const monthName = calendarGeneratorService.getMonthName(metadata.month, metadata.language, 'short')
+      const dateLabel = `${monthName} ${dayNumber}`
       const namesArray = groupedByDate[dateKey] ?? []
       const names = namesArray.join(', ')
 
@@ -540,8 +547,9 @@ export function buildWeekStripGraphics(metadata: WeekStripMetadata): Group {
     const weekdayFontSizeEff = Math.min(weekdayFontSize, Math.max(8, Math.floor(weekdayRowHeight * 0.55)))
     const weekdayTextTop = headerHeight + Math.max(0, (weekdayRowHeight - weekdayFontSizeEff) / 2)
     days.forEach((day: WeekStripDay, index: number) => {
+      const dayName = day.date.toLocaleDateString(metadata.language || 'en', { weekday: 'short' }).toUpperCase()
       objects.push(
-        new Textbox(day.date.toLocaleDateString('en', { weekday: 'short' }).toUpperCase(), {
+        new Textbox(dayName, {
           left: index * cellWidth + cellInsetX,
           top: weekdayTextTop,
           width: cellWidth - cellInsetX * 2,
@@ -654,8 +662,10 @@ export function buildDateCellGraphics(metadata: DateCellMetadata): Group {
     Math.min(dayNumberFontSize, Math.floor(accentHeight - dayNumberTopBase - 10)),
   )
 
+  const weekdayName = date.toLocaleDateString(metadata.language || 'en', { weekday: 'long' })
+
   objects.push(
-    new Textbox(date.toLocaleDateString('en', { weekday: 'long' }), {
+    new Textbox(weekdayName, {
       left: paddingX,
       top: weekdayTop,
       width: width - paddingX * 2,

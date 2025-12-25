@@ -91,7 +91,7 @@ export const useCalendarStore = defineStore('calendar', () => {
       const { holidays: fetchedHolidays, source } = await holidayService.getHolidays(
         config.value.country,
         config.value.year,
-        config.value.language
+        config.value.holidayLanguage || config.value.language
       )
 
       holidays.value = fetchedHolidays
@@ -143,6 +143,14 @@ export const useCalendarStore = defineStore('calendar', () => {
    */
   function setLanguage(language: LanguageCode): void {
     config.value.language = language
+    generateCalendar()
+  }
+
+  /**
+   * Set holiday language override
+   */
+  function setHolidayLanguage(language: LanguageCode | undefined): void {
+    config.value.holidayLanguage = language
     generateCalendar()
   }
 
@@ -343,6 +351,7 @@ export const useCalendarStore = defineStore('calendar', () => {
     setYear,
     setCountry,
     setLanguage,
+    setHolidayLanguage,
     setLayout,
     setStartDay,
     previousMonth,

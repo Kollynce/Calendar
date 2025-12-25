@@ -178,7 +178,7 @@ export function createObjectsModule(params: {
   generateObjectId: (prefix: string) => string
   ensureObjectIdentity: (obj: any) => void
   getLayerNameForMetadata: (metadata: CanvasElementMetadata) => string
-  getHolidaysForCalendarYear: (year: number) => any[]
+  getHolidaysForCalendarYear: (year: number, country?: string, language?: string) => any[]
   attachElementMetadata: (obj: FabricObject, metadata?: CanvasElementMetadata) => void
   snapshotCanvasState: () => void
   queueHistorySave: () => void

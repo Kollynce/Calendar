@@ -206,8 +206,8 @@ export const useEditorStore = defineStore('editor', () => {
 
   const loadedFontKeys = new Set<string>()
   const requestedFontKeys = new Set<string>()
-  const holidayCacheByYear = new Map<number, Holiday[]>()
-  const holidayLoadInFlight = new Set<number>()
+  const holidayCacheByKey = new Map<string, Holiday[]>()
+  const holidayLoadInFlight = new Set<string>()
 
   let fontsStylesheetReady: Promise<void> | null = null
 
@@ -357,6 +357,11 @@ export const useEditorStore = defineStore('editor', () => {
     objects.forEach((obj) => {
       const metadata = (obj as any)?.data?.elementMetadata as CanvasElementMetadata | undefined
       if (metadata?.kind === 'calendar-grid' && metadata.year === y) {
+        // Ensure language is in sync with global config
+        if (calendarStore.config?.language) {
+          metadata.language = calendarStore.config.language
+        }
+
         const rebuilt = rebuildElementWithMetadata(obj, metadata)
         if (!rebuilt) return
         canvas.value?.remove(obj)
@@ -366,18 +371,18 @@ export const useEditorStore = defineStore('editor', () => {
     canvas.value?.renderAll()
   }
 
-  function requestHolidaysForYear(year: number): void {
+  function requestHolidaysForYear(year: number, country: string, language: string): void {
     const y = Number(year)
     if (!Number.isFinite(y)) return
-    if (holidayCacheByYear.has(y)) return
-    if (holidayLoadInFlight.has(y)) return
+    
+    const cacheKey = `${country}-${language}-${y}`
+    if (holidayCacheByKey.has(cacheKey)) return
+    if (holidayLoadInFlight.has(cacheKey)) return
 
-    holidayLoadInFlight.add(y)
+    holidayLoadInFlight.add(cacheKey)
 
-    const country = calendarStore.config?.country ?? 'KE'
-    const language = calendarStore.config?.language ?? 'en'
     holidayService
-      .getHolidays(country, y, language)
+      .getHolidays(country as any, y, language as any)
       .then(({ holidays }) => {
         const showHolidays = calendarStore.config?.showHolidays ?? true
         const showCustom = calendarStore.config?.showCustomHolidays ?? true
@@ -391,12 +396,28 @@ export const useEditorStore = defineStore('editor', () => {
             )
             : base
 
-        holidayCacheByYear.set(y, merged)
+        holidayCacheByKey.set(cacheKey, merged)
 
-        refreshCalendarGridsForYear(y)
+        // Refresh all calendar grids that use this year/country/language
+        if (!canvas.value) return
+        canvas.value.getObjects().forEach((obj) => {
+          const metadata = (obj as any).data?.elementMetadata as CanvasElementMetadata | undefined
+          if (metadata?.kind === 'calendar-grid' && metadata.year === y) {
+            const objCountry = metadata.country ?? calendarStore.config?.country ?? 'KE'
+            const objLanguage = metadata.language ?? calendarStore.config?.language ?? 'en'
+            if (objCountry === country && objLanguage === language) {
+              const rebuilt = rebuildElementWithMetadata(obj, metadata)
+              if (rebuilt) {
+                canvas.value?.remove(obj)
+                canvas.value?.add(rebuilt)
+              }
+            }
+          }
+        })
+        canvas.value?.renderAll()
       })
       .finally(() => {
-        holidayLoadInFlight.delete(y)
+        holidayLoadInFlight.delete(cacheKey)
       })
   }
 
@@ -412,18 +433,22 @@ export const useEditorStore = defineStore('editor', () => {
     { deep: false, immediate: true },
   )
 
-  function getHolidaysForCalendarYear(year: number): Holiday[] {
+  function getHolidaysForCalendarYear(year: number, country?: string, language?: string): Holiday[] {
     const y = Number(year)
     if (!Number.isFinite(y)) return []
 
-    const cfgYear = calendarStore.config?.year
-    if (cfgYear === y) {
-      return (calendarStore.allHolidays ?? []) as Holiday[]
-    }
+    const effectiveCountry = country ?? calendarStore.config?.country ?? 'KE'
+    const effectiveLanguage = language ?? calendarStore.config?.language ?? 'en'
+    const cacheKey = `${effectiveCountry}-${effectiveLanguage}-${y}`
 
-    const cached = holidayCacheByYear.get(y)
+    // Check cache first
+    const cached = holidayCacheByKey.get(cacheKey)
     if (cached) return cached
-    requestHolidaysForYear(y)
+
+    // If not cached, request it
+    requestHolidaysForYear(y, effectiveCountry, effectiveLanguage)
+    
+    // Return empty array while loading
     return []
   }
 

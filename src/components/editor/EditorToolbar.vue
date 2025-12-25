@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useEditorStore } from '@/stores/editor.store'
+import { useCalendarStore } from '@/stores/calendar.store'
 import ExportModal from '@/components/export/ExportModal.vue'
 import { MenuItem } from '@headlessui/vue'
 import AppDropdownMenu from '@/components/ui/AppDropdownMenu.vue'
@@ -25,6 +26,7 @@ import {
 } from '@heroicons/vue/24/outline'
 
 const editorStore = useEditorStore()
+const calendarStore = useCalendarStore()
 const { 
   canUndo, 
   canRedo, 
@@ -42,7 +44,7 @@ function selectTool(toolId: string): void {
   if (toolId === 'text') {
     editorStore.addObject('text')
   } else if (toolId === 'calendar') {
-    editorStore.addObject('calendar-grid')
+    editorStore.addObject('calendar-grid', { language: calendarStore.config.language })
   } else if (toolId === 'image') {
       handleImageUpload()
   } else if (toolId === 'select') {

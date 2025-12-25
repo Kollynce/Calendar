@@ -1,7 +1,8 @@
 export interface CalendarConfig {
   year: number
   country: CountryCode
-  language: LanguageCode
+  language: LanguageCode // Global language
+  holidayLanguage?: LanguageCode // Holiday override
   layout: CalendarLayout
   startDay: WeekDay
   showHolidays: boolean

@@ -1,4 +1,4 @@
-import type { CalendarConfig, WeekDay } from './calendar.types'
+import type { CalendarConfig, WeekDay, LanguageCode, CountryCode } from './calendar.types'
 
 export interface Project {
   id: string
@@ -129,6 +129,7 @@ export interface CalendarGridMetadata {
   startDay: WeekDay
   showHeader: boolean
   showWeekdays: boolean
+  weekdayFormat?: 'long' | 'short' | 'narrow'
   title?: string
   backgroundColor?: string
   borderColor?: string
@@ -170,6 +171,8 @@ export interface CalendarGridMetadata {
   holidayListHeight?: number
   holidayListTitleFontSize?: number
   holidayListEntryFontSize?: number
+  country?: CountryCode
+  language?: LanguageCode
   size: {
     width: number
     height: number
@@ -199,6 +202,8 @@ export interface WeekStripMetadata {
   dayNumberFontFamily?: string
   dayNumberFontSize?: number
   dayNumberFontWeight?: string | number
+  country?: CountryCode
+  language?: LanguageCode
   size: {
     width: number
     height: number
@@ -227,6 +232,8 @@ export interface DateCellMetadata {
   placeholderFontFamily?: string
   placeholderFontSize?: number
   placeholderFontWeight?: string | number
+  country?: CountryCode
+  language?: LanguageCode
   size: {
     width: number
     height: number

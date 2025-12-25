@@ -33,8 +33,9 @@ class HolidayService {
     }
 
     try {
-      // Try API first
-      this.holidayLib.init(country, language)
+      // Try API first with language support
+      const initOptions = language ? { languages: [language], timezone: 'UTC' } : { timezone: 'UTC' }
+      this.holidayLib.init(country, initOptions)
       const apiHolidays = this.holidayLib.getHolidays(year)
 
       const holidays: Holiday[] = apiHolidays.map((h, index) => ({

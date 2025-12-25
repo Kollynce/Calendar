@@ -36,7 +36,10 @@ import TemplatePanel from '@/components/editor/TemplatePanel.vue'
 import AdobeCanvas from '@/components/editor/AdobeCanvas.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppAlert from '@/components/ui/AppAlert.vue'
+import AppSearchableSelect from '@/components/ui/AppSearchableSelect.vue'
 import { renderTemplateOnCanvas, generateTemplateThumbnail } from '@/services/editor/template-renderer'
+import { localizationService } from '@/services/calendar/localization.service'
+import { countries } from '@/data/countries'
 import { getPresetByCanvasSize } from '@/config/canvas-presets'
 import {
   uploadUserAsset,
@@ -107,6 +110,8 @@ const activeTemplateId = ref<string | null>(null)
 const isRightSidebarVisible = ref(true)
 const isPropertiesCollapsed = ref(false)
 const isLayersCollapsed = ref(false)
+const rightSidebarWidth = ref(256)
+const isResizingRightSidebar = ref(false)
 const templateOverrides = ref<TemplateOptions>({ ...DEFAULT_TEMPLATE_OPTIONS })
 const alignTarget = ref<'canvas' | 'selection'>('canvas')
 const isApplyingTemplate = ref(false)
@@ -252,6 +257,35 @@ async function handleSaveProject(): Promise<void> {
     console.error('Failed to save project', e)
   }
 }
+
+function startResizingRightSidebar(e: MouseEvent) {
+  e.preventDefault()
+  isResizingRightSidebar.value = true
+  document.body.style.cursor = 'ew-resize'
+  document.body.style.userSelect = 'none'
+}
+
+function handleResizeRightSidebar(e: MouseEvent) {
+  if (!isResizingRightSidebar.value) return
+  const newWidth = window.innerWidth - e.clientX
+  rightSidebarWidth.value = Math.max(200, Math.min(600, newWidth))
+}
+
+function stopResizingRightSidebar() {
+  isResizingRightSidebar.value = false
+  document.body.style.cursor = ''
+  document.body.style.userSelect = ''
+}
+
+onMounted(() => {
+  document.addEventListener('mousemove', handleResizeRightSidebar)
+  document.addEventListener('mouseup', stopResizingRightSidebar)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('mousemove', handleResizeRightSidebar)
+  document.removeEventListener('mouseup', stopResizingRightSidebar)
+})
 
 const uploadCategoryOptions: { id: UploadCategory; label: string; description: string }[] = [
   { id: 'sticker', label: 'Stickers', description: 'Ideal for overlays & elements' },
@@ -847,20 +881,19 @@ function updateDateCellMetadata(updater: (draft: DateCellMetadata) => void) {
   })
 }
 
-const monthOptions = [
-  { value: 1, label: 'January' },
-  { value: 2, label: 'February' },
-  { value: 3, label: 'March' },
-  { value: 4, label: 'April' },
-  { value: 5, label: 'May' },
-  { value: 6, label: 'June' },
-  { value: 7, label: 'July' },
-  { value: 8, label: 'August' },
-  { value: 9, label: 'September' },
-  { value: 10, label: 'October' },
-  { value: 11, label: 'November' },
-  { value: 12, label: 'December' },
-]
+const languageOptions = computed(() =>
+  localizationService.getAvailableLanguages().map(l => ({
+    id: l.code,
+    name: `${l.name} (${l.nativeName})`
+  }))
+)
+
+const countryOptions = computed(() =>
+  countries.map(c => ({
+    id: c.code,
+    name: `${c.flag} ${c.name}`
+  }))
+)
 
 const weekStartOptions: { value: 0 | 1 | 2 | 3 | 4 | 5 | 6; label: string }[] = [
   { value: 0, label: 'Sunday' },
@@ -2357,8 +2390,15 @@ function handleDistribute(axis: 'horizontal' | 'vertical') {
       <!-- Right Sidebar (Properties + Layers) -->
       <aside 
         v-show="isRightSidebarVisible"
-        class="w-56 xl:w-64 bg-[#0f1627] text-white border-l border-white/10 shrink-0 hidden lg:flex flex-col z-10 overflow-hidden transition-all duration-200"
+        :style="{ width: `${rightSidebarWidth}px` }"
+        class="bg-[#0f1627] text-white border-l border-white/10 shrink-0 hidden lg:flex flex-col z-10 overflow-hidden relative"
       >
+        <!-- Resize Handle -->
+        <div
+          @mousedown="startResizingRightSidebar"
+          class="absolute left-0 top-0 bottom-0 w-1 cursor-ew-resize hover:bg-primary-500/50 transition-colors z-20"
+          :class="{ 'bg-primary-500': isResizingRightSidebar }"
+        ></div>
         <!-- Sidebar Header with Hide Button -->
         <div class="px-3 py-2 border-b border-white/10 flex items-center justify-between shrink-0">
           <span class="text-[10px] font-semibold uppercase tracking-wider text-white/50">Inspector</span>
@@ -2586,28 +2626,43 @@ function handleDistribute(axis: 'horizontal' | 'vertical') {
                     </select>
                   </div>
 
-                  <div class="grid grid-cols-2 gap-3">
-                    <div>
-                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Year</label>
-                      <input
-                        type="number"
-                        min="1900"
-                        max="2100"
-                        class="control-glass"
-                        :value="calendarMetadata.year"
-                        @change="updateCalendarMetadata((draft) => { draft.year = Number(($event.target as HTMLInputElement).value) || draft.year })"
-                      />
-                    </div>
-                    <div>
-                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Month</label>
-                      <select
-                        class="control-glass"
-                        :value="calendarMetadata.month"
-                        @change="updateCalendarMetadata((draft) => { draft.month = Number(($event.target as HTMLSelectElement).value) || draft.month })"
-                      >
-                        <option v-for="m in monthOptions" :key="m.value" :value="m.value">{{ m.label }}</option>
-                      </select>
-                    </div>
+                  <div>
+                    <label class="text-xs font-medium text-white/60 mb-1.5 block">Date</label>
+                    <input
+                      type="date"
+                      class="control-glass"
+                      :value="`${calendarMetadata.year}-${String(calendarMetadata.month).padStart(2, '0')}-01`"
+                      @change="(e) => {
+                        const val = (e.target as HTMLInputElement).value
+                        if (val) {
+                          const [year, month] = val.split('-').map(Number)
+                          updateCalendarMetadata((draft) => {
+                            draft.year = year || draft.year
+                            draft.month = month || draft.month
+                          })
+                        }
+                      }"
+                    />
+                  </div>
+
+                  <div>
+                    <label class="text-xs font-medium text-white/60 mb-1.5 block">Country</label>
+                    <AppSearchableSelect
+                      :model-value="calendarMetadata.country ?? 'US'"
+                      :options="countryOptions"
+                      placeholder="Select country..."
+                      @update:model-value="(val: string | number | null) => updateCalendarMetadata((draft) => { draft.country = val as any })"
+                    />
+                  </div>
+
+                  <div>
+                    <label class="text-xs font-medium text-white/60 mb-1.5 block">Language</label>
+                    <AppSearchableSelect
+                      :model-value="calendarMetadata.language ?? 'en'"
+                      :options="languageOptions"
+                      placeholder="Select language..."
+                      @update:model-value="(val: string | number | null) => updateCalendarMetadata((draft) => { draft.language = val as any })"
+                    />
                   </div>
 
                   <div>
