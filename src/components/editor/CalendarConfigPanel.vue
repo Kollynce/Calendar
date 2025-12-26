@@ -30,7 +30,7 @@ const countryOptions = computed(() =>
 const languageOptions = computed(() => 
   localizationService.getAvailableLanguages().map(l => ({ 
     id: l.code, 
-    name: `${l.name} (${l.nativeName})` 
+    name: l.nativeName ? `${l.name} (${l.nativeName})` : l.name
   }))
 )
 

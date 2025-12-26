@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Languages API</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .loading { background: #d1ecf1; color: #0c5460; }
+        .languages-list {
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin-top: 20px;
+        }
+        .language-item {
+            padding: 5px;
+            border-bottom: 1px solid #eee;
+        }
+    </style>
+</head>
+<body>
+    <h1>Languages API Test</h1>
+    <div id="status" class="status loading">Loading languages...</div>
+    <div id="count"></div>
+    <div id="languages" class="languages-list"></div>
+
+    <script>
+        async function testLanguagesAPI() {
+            const statusEl = document.getElementById('status');
+            const countEl = document.getElementById('count');
+            const languagesEl = document.getElementById('languages');
+
+            try {
+                statusEl.textContent = 'Fetching languages from DataHub.io...';
+                
+                const response = await fetch(
+                    'https://r2.datahub.io/clt98kk8k0006ia08uw22gqib/main/raw/data/language-codes.csv'
+                );
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const csvText = await response.text();
+                const lines = csvText.trim().split('\n');
+                const languages = [];
+
+                for (let i = 1; i < lines.length; i++) {
+                    const line = lines[i].trim();
+                    if (!line) continue;
+
+                    const match = line.match(/^"([^"]+)","([^"]+)"$/);
+                    if (match) {
+                        const [, code, name] = match;
+                        languages.push({
+                            code: code.toLowerCase(),
+                            name: name.split(';')[0].trim()
+                        });
+                    }
+                }
+
+                languages.sort((a, b) => a.name.localeCompare(b.name));
+
+                statusEl.className = 'status success';
+                statusEl.textContent = '✓ Languages loaded successfully!';
+                countEl.textContent = `Total languages: ${languages.length}`;
+
+                languagesEl.innerHTML = languages
+                    .map(lang => `<div class="language-item"><strong>${lang.code}</strong>: ${lang.name}</div>`)
+                    .join('');
+
+            } catch (error) {
+                statusEl.className = 'status error';
+                statusEl.textContent = `✗ Error: ${error.message}`;
+                console.error('Error fetching languages:', error);
+            }
+        }
+
+        testLanguagesAPI();
+    </script>
+</body>
+</html>

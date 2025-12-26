@@ -573,7 +573,7 @@ export function createObjectsModule(params: {
       ...options,
       size: options.width && options.height ? { width: options.width, height: options.height } : options.size,
     })
-    const group = buildWeekStripGraphics(metadata)
+    const group = buildWeekStripGraphics(metadata, getHolidaysForCalendarYear)
     group.set({
       left: options.x ?? options.left ?? 80,
       top: options.y ?? options.top ?? 120,
@@ -591,7 +591,7 @@ export function createObjectsModule(params: {
       ...options,
       size: options.width && options.height ? { width: options.width, height: options.height } : options.size,
     })
-    const group = buildDateCellGraphics(metadata)
+    const group = buildDateCellGraphics(metadata, getHolidaysForCalendarYear)
     group.set({
       left: options.x ?? options.left ?? 120,
       top: options.y ?? options.top ?? 140,

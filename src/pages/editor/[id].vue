@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { useRouter } from 'vue-router'
 import { 
   ArrowLeftIcon, 
   ArrowDownTrayIcon, 
@@ -9,11 +9,11 @@ import {
   PhotoIcon,
   LanguageIcon,
   SwatchIcon,
-  Cog6ToothIcon
+  CalendarDaysIcon
 } from '@heroicons/vue/24/outline'
+import * as fabric from 'fabric'
 
 const router = useRouter()
-const route = useRoute()
 
 // Editor State
 const activeTool = ref('templates')
@@ -21,9 +21,6 @@ const zoom = ref(100)
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const isExportModalOpen = ref(false)
 const canvas = ref<fabric.Canvas | null>(null)
-
-import * as fabric from 'fabric'
-import { CalendarDaysIcon, RectangleGroupIcon, StopIcon } from '@heroicons/vue/24/outline'
 
 const tools = [
   { id: 'templates', name: 'Templates', icon: Squares2X2Icon },

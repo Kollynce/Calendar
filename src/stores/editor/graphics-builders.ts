@@ -1,5 +1,6 @@
 import { Group, Line, Polygon, Rect, Textbox, type Object as FabricObject } from 'fabric'
 import type {
+  CalendarDay,
   CalendarGridMetadata,
   ChecklistMetadata,
   DateCellMetadata,
@@ -20,10 +21,7 @@ type CalendarGridDay = {
   holidays?: unknown[]
 }
 
-type WeekStripDay = {
-  date: Date
-  dayOfMonth: number
-}
+type WeekStripDay = CalendarDay
 
 export function buildCalendarGridGraphics(
   metadata: CalendarGridMetadata,
@@ -464,8 +462,13 @@ export function buildCalendarGridGraphics(
   })
 }
 
-export function buildWeekStripGraphics(metadata: WeekStripMetadata): Group {
-  const { width, height } = metadata.size
+export function buildWeekStripGraphics(
+  metadata: WeekStripMetadata,
+  getHolidaysForCalendarYear?: HolidaysGetter,
+): Group {
+  const { width } = metadata.size
+  const baseHeight = metadata.size.height
+  let height = baseHeight
   const objects: FabricObject[] = []
 
   const cornerRadius = Math.max(0, metadata.cornerRadius ?? 24)
@@ -490,6 +493,63 @@ export function buildWeekStripGraphics(metadata: WeekStripMetadata): Group {
   const dayNumberFontSize = metadata.dayNumberFontSize ?? 22
   const dayNumberFontWeight = metadata.dayNumberFontWeight ?? 700
 
+  const label = metadata.label ?? 'Weekly Focus'
+  const paddingX = 24
+  const computeHeaderHeight = (targetHeight: number): number =>
+    Math.min(Math.max(40, Math.round(labelFontSize + 24)), Math.max(44, Math.round(targetHeight * 0.45)))
+  const startDate = new Date(metadata.startDate)
+  const holidaysForYear = getHolidaysForCalendarYear
+    ? getHolidaysForCalendarYear(startDate.getFullYear(), metadata.country, metadata.language)
+    : []
+  const days = calendarGeneratorService.generateWeek(startDate, holidaysForYear, metadata.startDay) as WeekStripDay[]
+
+  const holidayEntries = days
+    .filter((day) => (day.holidays?.length ?? 0) > 0)
+    .map((day) => {
+      const names =
+        day.holidays
+          ?.map((holiday) => (holiday.localName || holiday.name || '').replace(/\s*\([^)]*\)/g, '').trim())
+          .filter(Boolean) ?? []
+      return {
+        day,
+        names,
+      }
+    })
+
+  const maxListItems = Math.max(1, metadata.holidayListMaxItems ?? 4)
+  const listEntries = holidayEntries.slice(0, maxListItems)
+  const showHolidayList = metadata.showHolidayList !== false && listEntries.length > 0
+  const configuredListHeight = metadata.holidayListHeight ?? 96
+
+  const holidayDataAvailable = (holidaysForYear?.length ?? 0) > 0
+  const reserveSpaceForList = holidayDataAvailable ? showHolidayList : metadata.showHolidayList !== false
+
+  if (!reserveSpaceForList) {
+    const estimatedListSpace = Math.max(48, Math.min(height * 0.6, configuredListHeight))
+    const headerForBase = computeHeaderHeight(height)
+    const basePadding = Math.max(12, Math.round(height * 0.12))
+    const baseBodyMin =
+      height > 140 ? Math.max(56, Math.round(height * 0.28)) : Math.max(32, Math.round(height * 0.25))
+    const minContentHeight = headerForBase + baseBodyMin + basePadding
+    height = Math.max(minContentHeight, height - estimatedListSpace)
+  }
+
+  const headerHeight = computeHeaderHeight(height)
+  const labelTop = Math.max(12, Math.min(20, Math.round((headerHeight - labelFontSize) / 2)))
+
+  // Calculate layout assuming holidays might be shown to prevent layout shifts
+  const paddingBottomBase = Math.max(12, Math.round(height * 0.12))
+  const paddingBottom = reserveSpaceForList ? Math.max(8, Math.round(height * 0.06)) : paddingBottomBase
+
+  // Adjust bodyMinHeight based on total height to be more reasonable
+  const bodyMinHeight = height > 140 ? Math.max(56, Math.round(height * 0.28)) : Math.max(32, Math.round(height * 0.25))
+
+  const availableForList = Math.max(0, height - headerHeight - paddingBottom - bodyMinHeight)
+  const desiredListHeight = Math.max(48, Math.min(height * 0.6, configuredListHeight))
+  // Use reserveSpaceForList for layout calculations to reserve space only when needed
+  const listHeight = reserveSpaceForList ? Math.min(desiredListHeight, availableForList) : 0
+  const listTop = height - listHeight
+
   objects.push(
     new Rect({
       width,
@@ -502,15 +562,6 @@ export function buildWeekStripGraphics(metadata: WeekStripMetadata): Group {
     }),
   )
 
-  const label = metadata.label ?? 'Weekly Focus'
-
-  const paddingX = 24
-  const paddingBottom = Math.max(12, Math.round(height * 0.12))
-  const headerHeight = Math.min(
-    Math.max(40, Math.round(labelFontSize + 24)),
-    Math.max(44, Math.round(height * 0.45)),
-  )
-  const labelTop = Math.max(12, Math.min(20, Math.round((headerHeight - labelFontSize) / 2)))
   objects.push(
     new Textbox(label, {
       left: paddingX,
@@ -524,20 +575,14 @@ export function buildWeekStripGraphics(metadata: WeekStripMetadata): Group {
     }),
   )
 
-  const days = calendarGeneratorService.generateWeek(
-    new Date(metadata.startDate),
-    [],
-    metadata.startDay,
-  ) as WeekStripDay[]
-  const cellWidth = width / days.length
-
   const weekdayRowHeightRaw = Math.max(18, Math.round(height * 0.16))
   const weekdayRowHeight = Math.max(
-    0,
-    Math.min(34, Math.min(weekdayRowHeightRaw, height - headerHeight - paddingBottom)),
+    12,
+    Math.min(34, Math.min(weekdayRowHeightRaw, height - headerHeight - paddingBottom - listHeight - 48)),
   )
   const bodyTop = headerHeight + weekdayRowHeight
-  const cellHeight = Math.max(0, height - bodyTop - paddingBottom)
+  const cellHeight = Math.max(32, height - bodyTop - paddingBottom - listHeight)
+  const cellWidth = days.length > 0 ? width / days.length : width
 
   const cellInsetX = 12
   const dayNumberInsetX = 12
@@ -567,8 +612,30 @@ export function buildWeekStripGraphics(metadata: WeekStripMetadata): Group {
   const dayNumberFontSizeEff = Math.min(dayNumberFontSize, Math.max(10, Math.floor(cellHeight * 0.42)))
   const dayNumberBoxWidth = Math.max(18, Math.min(40, dayNumberFontSizeEff * 2))
 
+  const showHolidayMarkers = metadata.showHolidayMarkers !== false
+  const markerStyle = metadata.holidayMarkerStyle ?? 'text'
+  const markerColor = metadata.holidayMarkerColor ?? '#ef4444'
+  const markerHeight = Math.max(1, metadata.holidayMarkerHeight ?? 4)
+
   days.forEach((day: WeekStripDay, index: number) => {
     const left = index * cellWidth
+    const dayHasHoliday = (day.holidays?.length ?? 0) > 0
+
+    if (dayHasHoliday && showHolidayMarkers && markerStyle === 'background') {
+      objects.push(
+        new Rect({
+          left,
+          top: bodyTop,
+          width: cellWidth,
+          height: cellHeight,
+          fill: markerColor,
+          opacity: 0.15,
+          selectable: false,
+          evented: false,
+        }),
+      )
+    }
+
     objects.push(
       new Rect({
         left,
@@ -589,12 +656,147 @@ export function buildWeekStripGraphics(metadata: WeekStripMetadata): Group {
         fontSize: dayNumberFontSizeEff,
         fontFamily: dayNumberFontFamily,
         fontWeight: dayNumberFontWeight,
-        fill: dayNumberColor,
+        fill: showHolidayMarkers && markerStyle === 'text' && dayHasHoliday ? markerColor : dayNumberColor,
         textAlign: 'right',
         selectable: false,
       }),
     )
+
+    if (!dayHasHoliday || !showHolidayMarkers || markerStyle === 'text' || markerStyle === 'background') {
+      return
+    }
+
+    if (markerStyle === 'dot') {
+      const size = markerHeight
+      objects.push(
+        new Rect({
+          left: left + cellWidth / 2 - size,
+          top: bodyTop + cellHeight - 12 - size * 2,
+          width: size * 2,
+          height: size * 2,
+          rx: size,
+          ry: size,
+          fill: markerColor,
+          selectable: false,
+        }),
+      )
+    } else if (markerStyle === 'square') {
+      const size = markerHeight * 1.2
+      objects.push(
+        new Rect({
+          left: left + cellWidth / 2 - size / 2,
+          top: bodyTop + cellHeight - 12 - size,
+          width: size,
+          height: size,
+          fill: markerColor,
+          selectable: false,
+        }),
+      )
+    } else if (markerStyle === 'border') {
+      objects.push(
+        new Rect({
+          left: left + markerHeight / 2,
+          top: bodyTop + markerHeight / 2,
+          width: cellWidth - markerHeight,
+          height: cellHeight - markerHeight,
+          fill: 'transparent',
+          stroke: markerColor,
+          strokeWidth: markerHeight,
+          selectable: false,
+        }),
+      )
+    } else if (markerStyle === 'triangle') {
+      const size = Math.max(6, markerHeight * 2)
+      objects.push(
+        new Polygon(
+          [
+            { x: 0, y: 0 },
+            { x: size, y: 0 },
+            { x: size, y: size },
+          ],
+          {
+            left: left + cellWidth - size - 4,
+            top: bodyTop + 4,
+            fill: markerColor,
+            selectable: false,
+          },
+        ),
+      )
+    } else if (markerStyle === 'bar') {
+      objects.push(
+        new Rect({
+          left: left + 12,
+          top: bodyTop + cellHeight - markerHeight - 6,
+          width: cellWidth - 24,
+          height: markerHeight,
+          rx: Math.min(3, markerHeight),
+          ry: Math.min(3, markerHeight),
+          fill: markerColor,
+          selectable: false,
+        }),
+      )
+    }
   })
+
+  if (showHolidayList && listHeight > 0) {
+    const title = metadata.holidayListTitle ?? 'Holidays'
+    const textColor = metadata.holidayListTextColor ?? '#4b5563'
+    const accentColor = metadata.holidayListAccentColor ?? markerColor
+    const listPaddingX = 18
+    const listPaddingY = 10
+    const titleFontSize = 13
+    const entryFontSize = 12
+
+    objects.push(
+      new Textbox(title, {
+        left: listPaddingX,
+        top: listTop + listPaddingY,
+        width: width - listPaddingX * 2,
+        fontSize: titleFontSize,
+        fontFamily: labelFontFamily,
+        fontWeight: 600,
+        fill: textColor,
+        selectable: false,
+      }),
+    )
+
+    const entryTopBase = listTop + listPaddingY + titleFontSize + 6
+    const availableHeight = Math.max(0, listTop + listHeight - entryTopBase - listPaddingY)
+    const spacing = listEntries.length ? Math.max(entryFontSize + 6, availableHeight / listEntries.length) : 0
+
+    listEntries.forEach(({ day, names }, index) => {
+      const entryTop = entryTopBase + index * spacing
+      const locale = metadata.language || 'en'
+      const dateLabel = day.date.toLocaleDateString(locale, { weekday: 'short', day: 'numeric' })
+      const namesText = names.join(', ')
+
+      objects.push(
+        new Textbox(dateLabel.toUpperCase(), {
+          left: listPaddingX,
+          top: entryTop,
+          width: 60,
+          fontSize: entryFontSize,
+          fontFamily: weekdayFontFamily,
+          fontWeight: 600,
+          fill: accentColor,
+          selectable: false,
+        }),
+      )
+
+      objects.push(
+        new Textbox(namesText, {
+          left: listPaddingX + 64,
+          top: entryTop,
+          width: width - listPaddingX * 2 - 64,
+          fontSize: entryFontSize,
+          fontFamily: dayNumberFontFamily,
+          fontWeight: 500,
+          fill: textColor,
+          selectable: false,
+        }),
+      )
+    })
+  }
 
   return new Group(objects, {
     subTargetCheck: false,
@@ -602,10 +804,27 @@ export function buildWeekStripGraphics(metadata: WeekStripMetadata): Group {
   })
 }
 
-export function buildDateCellGraphics(metadata: DateCellMetadata): Group {
+export function buildDateCellGraphics(
+  metadata: DateCellMetadata,
+  getHolidaysForCalendarYear?: HolidaysGetter,
+): Group {
   const { width, height } = metadata.size
   const objects: FabricObject[] = []
   const date = new Date(metadata.date)
+  const dateKey = (metadata.date ?? '').split('T')[0] ?? ''
+  const yearFromDate = dateKey ? Number(dateKey.slice(0, 4)) : undefined
+  const holidaysForYear =
+    getHolidaysForCalendarYear && yearFromDate
+      ? getHolidaysForCalendarYear(yearFromDate, metadata.country, metadata.language)
+      : []
+  const holidayNames =
+    dateKey && holidaysForYear.length
+      ? holidaysForYear
+          .filter((holiday) => holiday?.date?.slice(0, 10) === dateKey)
+          .map((holiday) => (holiday?.localName || holiday?.name || '').replace(/\s*\([^)]*\)/g, '').trim())
+          .filter(Boolean)
+      : []
+  const hasHoliday = holidayNames.length > 0
 
   const cornerRadius = Math.max(0, metadata.cornerRadius ?? 24)
   const borderWidth = Math.max(0, metadata.borderWidth ?? 1)
@@ -621,17 +840,19 @@ export function buildDateCellGraphics(metadata: DateCellMetadata): Group {
   const weekdayFontFamily = metadata.weekdayFontFamily ?? 'Inter'
   const weekdayFontSize = metadata.weekdayFontSize ?? 13
   const weekdayFontWeight = metadata.weekdayFontWeight ?? 600
-
-  const dayNumberColor = metadata.dayNumberColor ?? '#92400e'
+  const dayNumberColor = metadata.dayNumberColor ?? '#1f2937'
   const dayNumberFontFamily = metadata.dayNumberFontFamily ?? 'Inter'
-  const dayNumberFontSize = metadata.dayNumberFontSize ?? 52
+  const dayNumberFontSize = metadata.dayNumberFontSize ?? 48
   const dayNumberFontWeight = metadata.dayNumberFontWeight ?? 700
-
-  const placeholderColor = metadata.placeholderColor ?? '#475569'
+  const placeholderColor = metadata.placeholderColor ?? '#94a3b8'
   const placeholderFontFamily = metadata.placeholderFontFamily ?? 'Inter'
-  const placeholderFontSize = metadata.placeholderFontSize ?? 13
-  const placeholderFontWeight = metadata.placeholderFontWeight ?? 400
-
+  const placeholderFontSize = metadata.placeholderFontSize ?? 14
+  const placeholderFontWeight = metadata.placeholderFontWeight ?? 500
+  const showHolidayMarkers = metadata.showHolidayMarkers !== false
+  const markerStyle = metadata.holidayMarkerStyle ?? 'text'
+  const markerColor = metadata.holidayMarkerColor ?? '#ef4444'
+  const markerHeight = Math.max(1, metadata.holidayMarkerHeight ?? 6)
+  const effectiveDayNumberColor = showHolidayMarkers && markerStyle === 'text' && hasHoliday ? markerColor : (metadata.dayNumberColor ?? dayNumberColor)
   objects.push(
     new Rect({
       width,
@@ -653,6 +874,21 @@ export function buildDateCellGraphics(metadata: DateCellMetadata): Group {
       fill: metadata.highlightAccent,
     }),
   )
+
+  if (hasHoliday && showHolidayMarkers && markerStyle === 'background') {
+    objects.push(
+      new Rect({
+        width,
+        height: accentHeight,
+        rx: cornerRadius,
+        ry: cornerRadius,
+        fill: markerColor,
+        opacity: 0.25,
+        selectable: false,
+        evented: false,
+      }),
+    )
+  }
 
   const weekdayFontSizeEff = Math.min(weekdayFontSize, Math.max(10, Math.floor(accentHeight * 0.22)))
   const weekdayTop = Math.max(12, Math.min(paddingY, Math.floor(accentHeight * 0.18)))
@@ -685,7 +921,7 @@ export function buildDateCellGraphics(metadata: DateCellMetadata): Group {
       fontSize: dayNumberFontSizeEff,
       fontFamily: dayNumberFontFamily,
       fontWeight: dayNumberFontWeight,
-      fill: dayNumberColor,
+      fill: effectiveDayNumberColor,
       selectable: false,
     }),
   )
@@ -707,6 +943,141 @@ export function buildDateCellGraphics(metadata: DateCellMetadata): Group {
       selectable: false,
     }),
   )
+
+  if (hasHoliday && showHolidayMarkers && markerStyle !== 'text' && markerStyle !== 'background') {
+    const markerLeft = width - paddingX - markerHeight * 2
+    if (markerStyle === 'dot') {
+      const radius = markerHeight
+      objects.push(
+        new Rect({
+          left: markerLeft,
+          top: weekdayTop - radius,
+          width: radius * 2,
+          height: radius * 2,
+          rx: radius,
+          ry: radius,
+          fill: markerColor,
+          selectable: false,
+        }),
+      )
+    } else if (markerStyle === 'square') {
+      const size = markerHeight * 1.5
+      objects.push(
+        new Rect({
+          left: width - paddingX - size,
+          top: weekdayTop - size / 2,
+          width: size,
+          height: size,
+          fill: markerColor,
+          selectable: false,
+        }),
+      )
+    } else if (markerStyle === 'triangle') {
+      const size = Math.max(6, markerHeight * 2)
+      objects.push(
+        new Polygon(
+          [
+            { x: 0, y: size },
+            { x: size, y: size },
+            { x: size, y: 0 },
+          ],
+          {
+            left: width - paddingX - size,
+            top: weekdayTop - size / 2,
+            fill: markerColor,
+            selectable: false,
+          },
+        ),
+      )
+    } else if (markerStyle === 'border') {
+      objects.push(
+        new Rect({
+          left: markerHeight / 2,
+          top: markerHeight / 2,
+          width: width - markerHeight,
+          height: height - markerHeight,
+          rx: Math.max(0, cornerRadius - markerHeight / 2),
+          ry: Math.max(0, cornerRadius - markerHeight / 2),
+          fill: 'transparent',
+          stroke: markerColor,
+          strokeWidth: markerHeight,
+          selectable: false,
+        }),
+      )
+    } else if (markerStyle === 'bar') {
+      objects.push(
+        new Rect({
+          left: paddingX,
+          top: height - markerHeight - paddingY / 2,
+          width: width - paddingX * 2,
+          height: markerHeight,
+          rx: Math.min(3, markerHeight),
+          ry: Math.min(3, markerHeight),
+          fill: markerColor,
+          selectable: false,
+        }),
+      )
+    }
+  }
+
+  const showHolidayInfo = metadata.showHolidayInfo !== false
+  if (hasHoliday && showHolidayInfo) {
+    const infoPosition = metadata.holidayInfoPosition ?? 'bottom'
+    const infoFontSize = Math.max(8, Math.min(24, metadata.holidayInfoFontSize ?? 12))
+    const infoTextColor = metadata.holidayInfoTextColor ?? '#475569'
+    const infoAccentColor = metadata.holidayInfoAccentColor ?? markerColor
+    const infoText = holidayNames.join(', ')
+    const prefix = holidayNames.length > 1 ? 'Holidays' : 'Holiday'
+    let infoTop = placeholderTop + placeholderFontSizeEff + 10
+    if (infoPosition === 'top') {
+      infoTop = weekdayTop + weekdayFontSizeEff + 6
+    } else if (infoPosition === 'overlay') {
+      infoTop = dayNumberTopBase + (dayNumberFontSizeEff / 2) - infoFontSize / 2
+    }
+    infoTop = Math.min(height - paddingY - infoFontSize, Math.max(weekdayTop, infoTop))
+    const infoWidth = width - paddingX * 2
+
+    if (infoPosition === 'overlay') {
+      objects.push(
+        new Rect({
+          left: paddingX - 4,
+          top: infoTop - 4,
+          width: infoWidth + 8,
+          height: infoFontSize + 8,
+          rx: 10,
+          ry: 10,
+          fill: infoAccentColor,
+          opacity: 0.15,
+          selectable: false,
+          evented: false,
+        }),
+      )
+    }
+
+    objects.push(
+      new Rect({
+        left: paddingX,
+        top: infoTop,
+        width: 4,
+        height: infoFontSize + 4,
+        fill: infoAccentColor,
+        selectable: false,
+      }),
+    )
+
+    objects.push(
+      new Textbox(`${prefix}: ${infoText}`, {
+        left: paddingX + 8,
+        top: infoTop,
+        width: infoWidth - 8,
+        fontSize: infoFontSize,
+        fontFamily: placeholderFontFamily,
+        fontWeight: 600,
+        fill: infoTextColor,
+        selectable: false,
+      }),
+    )
+  }
 
   return new Group(objects, {
     subTargetCheck: false,

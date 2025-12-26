@@ -37,8 +37,8 @@ export const translations: Record<LanguageCode, LocaleStrings> = {
     },
     weekdays: {
       long: ['Jumapili', 'Jumatatu', 'Jumanne', 'Jumatano', 'Alhamisi', 'Ijumaa', 'Jumamosi'],
-      short: ['Jpi', 'Jtt', 'Jnn', 'Jtn', 'Alh', 'Iju', 'Jms'],
-      narrow: ['P', 'T', 'N', 'T', 'A', 'I', 'M'],
+      short: ['Jpili', 'Jtatu', 'Jnne', 'Jtano', 'Alh.', 'Iju.', 'Jmosi'],
+      narrow: ['J2', 'J3', 'J4', 'J5', 'Al.', 'Ij.', 'J1'],
     },
     ui: {
       today: 'Leo',

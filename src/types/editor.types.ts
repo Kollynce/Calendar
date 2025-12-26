@@ -202,6 +202,16 @@ export interface WeekStripMetadata {
   dayNumberFontFamily?: string
   dayNumberFontSize?: number
   dayNumberFontWeight?: string | number
+  showHolidayMarkers?: boolean
+  holidayMarkerStyle?: 'bar' | 'dot' | 'square' | 'background' | 'text' | 'border' | 'triangle'
+  holidayMarkerColor?: string
+  holidayMarkerHeight?: number
+  showHolidayList?: boolean
+  holidayListTitle?: string
+  holidayListMaxItems?: number
+  holidayListHeight?: number
+  holidayListTextColor?: string
+  holidayListAccentColor?: string
   country?: CountryCode
   language?: LanguageCode
   size: {
@@ -232,6 +242,21 @@ export interface DateCellMetadata {
   placeholderFontFamily?: string
   placeholderFontSize?: number
   placeholderFontWeight?: string | number
+  showHolidayMarkers?: boolean
+  holidayMarkerStyle?: 'bar' | 'dot' | 'square' | 'background' | 'text' | 'border' | 'triangle'
+  holidayMarkerColor?: string
+  holidayMarkerHeight?: number
+  showHolidayList?: boolean
+  holidayListTitle?: string
+  holidayListMaxItems?: number
+  holidayListHeight?: number
+  holidayListTextColor?: string
+  holidayListAccentColor?: string
+  showHolidayInfo?: boolean
+  holidayInfoPosition?: 'top' | 'bottom' | 'overlay'
+  holidayInfoTextColor?: string
+  holidayInfoAccentColor?: string
+  holidayInfoFontSize?: number
   country?: CountryCode
   language?: LanguageCode
   size: {

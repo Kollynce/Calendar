@@ -304,7 +304,7 @@ function openExportModal(): void {
     </button>
 
     <!-- Export Modal -->
-    <ExportModal v-model:open="showExportModal" />
+    <ExportModal :isOpen="showExportModal" @close="showExportModal = false" />
   </header>
 </template>
 

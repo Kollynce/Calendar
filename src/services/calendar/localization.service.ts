@@ -1,5 +1,6 @@
 import type { LanguageCode } from '@/types'
 import { translations } from '@/data/translations'
+import { languagesService, type Language } from '@/services/languages.service'
 
 export interface LocaleStrings {
   months: {
@@ -96,21 +97,17 @@ class LocalizationService {
   }
 
   /**
-   * Get available languages
+   * Get available languages (synchronously from cache)
    */
-  getAvailableLanguages(): Array<{ code: LanguageCode; name: string; nativeName: string }> {
-    return [
-      { code: 'en', name: 'English', nativeName: 'English' },
-      { code: 'sw', name: 'Swahili', nativeName: 'Kiswahili' },
-      { code: 'am', name: 'Amharic', nativeName: 'አማርኛ' },
-      { code: 'yo', name: 'Yoruba', nativeName: 'Yorùbá' },
-      { code: 'zu', name: 'Zulu', nativeName: 'isiZulu' },
-      { code: 'ar', name: 'Arabic', nativeName: 'العربية' },
-      { code: 'fr', name: 'French', nativeName: 'Français' },
-      { code: 'pt', name: 'Portuguese', nativeName: 'Português' },
-      { code: 'ha', name: 'Hausa', nativeName: 'Hausa' },
-      { code: 'ig', name: 'Igbo', nativeName: 'Igbo' },
-    ]
+  getAvailableLanguages(): Language[] {
+    return languagesService.getAvailableLanguagesSync()
+  }
+
+  /**
+   * Get available languages (async, fetches if needed)
+   */
+  async getAvailableLanguagesAsync(): Promise<Language[]> {
+    return languagesService.getAvailableLanguages()
   }
 }
 

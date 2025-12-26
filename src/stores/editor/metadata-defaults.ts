@@ -77,7 +77,7 @@ export function getDefaultCalendarMetadata(
 export function getDefaultWeekStripMetadata(
   overrides: Partial<WeekStripMetadata> = {},
 ): WeekStripMetadata {
-  const defaultSize = { width: 520, height: 110 }
+  const defaultSize = { width: 520, height: 150 }
   const size = overrides.size ? { ...defaultSize, ...overrides.size } : defaultSize
   return {
     kind: 'week-strip',
@@ -102,6 +102,16 @@ export function getDefaultWeekStripMetadata(
     dayNumberFontFamily: overrides.dayNumberFontFamily ?? 'Inter',
     dayNumberFontSize: overrides.dayNumberFontSize ?? 22,
     dayNumberFontWeight: overrides.dayNumberFontWeight ?? 700,
+    showHolidayMarkers: overrides.showHolidayMarkers ?? true,
+    holidayMarkerStyle: overrides.holidayMarkerStyle ?? 'text',
+    holidayMarkerColor: overrides.holidayMarkerColor ?? '#ef4444',
+    holidayMarkerHeight: overrides.holidayMarkerHeight ?? 4,
+    showHolidayList: overrides.showHolidayList !== false,
+    holidayListTitle: overrides.holidayListTitle ?? 'Holidays',
+    holidayListMaxItems: overrides.holidayListMaxItems ?? 4,
+    holidayListHeight: overrides.holidayListHeight ?? 96,
+    holidayListTextColor: overrides.holidayListTextColor ?? '#4b5563',
+    holidayListAccentColor: overrides.holidayListAccentColor ?? overrides.holidayMarkerColor ?? '#ef4444',
     country: overrides.country ?? 'KE',
     language: overrides.language ?? 'en',
     size,
@@ -162,6 +172,16 @@ export function getDefaultDateCellMetadata(
     placeholderFontFamily: overrides.placeholderFontFamily ?? 'Inter',
     placeholderFontSize: overrides.placeholderFontSize ?? 13,
     placeholderFontWeight: overrides.placeholderFontWeight ?? 400,
+    showHolidayMarkers: overrides.showHolidayMarkers ?? true,
+    holidayMarkerStyle: overrides.holidayMarkerStyle ?? 'dot',
+    holidayMarkerColor: overrides.holidayMarkerColor ?? '#ef4444',
+    holidayMarkerHeight: overrides.holidayMarkerHeight ?? 4,
+    showHolidayList: overrides.showHolidayList ?? true,
+    holidayListTitle: overrides.holidayListTitle ?? 'Holidays',
+    holidayListMaxItems: overrides.holidayListMaxItems ?? 4,
+    holidayListHeight: overrides.holidayListHeight ?? 96,
+    holidayListTextColor: overrides.holidayListTextColor ?? '#4b5563',
+    holidayListAccentColor: overrides.holidayListAccentColor ?? overrides.holidayMarkerColor ?? '#ef4444',
     country: overrides.country ?? 'KE',
     language: overrides.language ?? 'en',
     size,

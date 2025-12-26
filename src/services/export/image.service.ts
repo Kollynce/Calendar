@@ -10,7 +10,7 @@ class ImageExportService {
   async exportToPNG(
     element: HTMLElement,
     config: ExportConfig,
-    filename: string
+    _filename: string
   ): Promise<Blob> {
     const canvas = await this.renderToCanvas(element, config)
     
@@ -34,7 +34,7 @@ class ImageExportService {
   async exportToJPEG(
     element: HTMLElement,
     config: ExportConfig,
-    filename: string,
+    _filename: string,
     quality: number = 0.92
   ): Promise<Blob> {
     const canvas = await this.renderToCanvas(element, config)
@@ -138,8 +138,12 @@ class ImageExportService {
   private dataURLToBlob(dataURL: string): Promise<Blob> {
     return new Promise((resolve, reject) => {
       try {
-        const byteString = atob(dataURL.split(',')[1])
-        const mimeString = dataURL.split(',')[0].split(':')[1].split(';')[0]
+        const parts = dataURL.split(',')
+        if (!parts[1]) throw new Error('Invalid data URL')
+        const byteString = atob(parts[1])
+        const mimeParts = parts[0]?.split(':')[1]?.split(';')
+        if (!mimeParts?.[0]) throw new Error('Invalid MIME type')
+        const mimeString = mimeParts[0]
         const ab = new ArrayBuffer(byteString.length)
         const ia = new Uint8Array(ab)
         

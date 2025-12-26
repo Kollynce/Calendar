@@ -398,20 +398,36 @@ export const useEditorStore = defineStore('editor', () => {
 
         holidayCacheByKey.set(cacheKey, merged)
 
-        // Refresh all calendar grids that use this year/country/language
         if (!canvas.value) return
+
+        const shouldRefreshElement = (metadata?: CanvasElementMetadata): boolean => {
+          if (!metadata) return false
+          const objCountry = (metadata as any).country ?? calendarStore.config?.country ?? 'KE'
+          const objLanguage = (metadata as any).language ?? calendarStore.config?.language ?? 'en'
+          if (objCountry !== country || objLanguage !== language) return false
+
+          if (metadata.kind === 'calendar-grid') {
+            return metadata.year === y
+          }
+          if (metadata.kind === 'week-strip') {
+            const startYear = Number(new Date(metadata.startDate).getFullYear())
+            return Number.isFinite(startYear) && startYear === y
+          }
+          if (metadata.kind === 'date-cell') {
+            const cellYear = Number(new Date(metadata.date).getFullYear())
+            return Number.isFinite(cellYear) && cellYear === y
+          }
+          return false
+        }
+
         canvas.value.getObjects().forEach((obj) => {
           const metadata = (obj as any).data?.elementMetadata as CanvasElementMetadata | undefined
-          if (metadata?.kind === 'calendar-grid' && metadata.year === y) {
-            const objCountry = metadata.country ?? calendarStore.config?.country ?? 'KE'
-            const objLanguage = metadata.language ?? calendarStore.config?.language ?? 'en'
-            if (objCountry === country && objLanguage === language) {
-              const rebuilt = rebuildElementWithMetadata(obj, metadata)
-              if (rebuilt) {
-                canvas.value?.remove(obj)
-                canvas.value?.add(rebuilt)
-              }
-            }
+          if (!shouldRefreshElement(metadata)) return
+
+          const rebuilt = rebuildElementWithMetadata(obj, metadata!)
+          if (rebuilt) {
+            canvas.value?.remove(obj)
+            canvas.value?.add(rebuilt)
           }
         })
         canvas.value?.renderAll()
@@ -475,7 +491,7 @@ export const useEditorStore = defineStore('editor', () => {
         rebuilt = buildCalendarGridGraphics(metadata, getHolidaysForCalendarYear)
         break
       case 'week-strip':
-        rebuilt = buildWeekStripGraphics(metadata)
+        rebuilt = buildWeekStripGraphics(metadata, getHolidaysForCalendarYear)
         break
       case 'date-cell':
         rebuilt = buildDateCellGraphics(metadata)

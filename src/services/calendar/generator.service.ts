@@ -18,6 +18,8 @@ import type {
   CalendarMonth,
   CalendarYear,
 } from '@/types'
+import { translations } from '@/data/translations'
+import type { LanguageCode } from '@/types'
 
 const LOCALE_MAP: Record<string, string> = {
   en: 'en-US',
@@ -61,7 +63,8 @@ class CalendarGeneratorService {
     startDay: WeekDay = 0,
     language: string = 'en'
   ): CalendarMonth {
-    const locale = LOCALE_MAP[language] || language
+    // Note: locale mapping available but not currently used
+    // const locale = LOCALE_MAP[language] || language
     const date = new Date(year, month - 1, 1)
     const monthStart = startOfMonth(date)
     const monthEnd = endOfMonth(date)
@@ -133,13 +136,34 @@ class CalendarGeneratorService {
     language: string = 'en',
     formatStyle: 'long' | 'short' | 'narrow' = 'short'
   ): string[] {
+    // Check if we have translations for this language
+    const langCode = language as LanguageCode
+    const translation = translations[langCode]
+    
+    if (translation && translation.weekdays) {
+      // Use our translation files for proper abbreviations
+      const weekdayNames = translation.weekdays[formatStyle]
+      const days: string[] = []
+      
+      for (let i = 0; i < 7; i++) {
+        const dayIndex = (startDay + i) % 7
+        const dayName = weekdayNames[dayIndex]
+        if (dayName) {
+          days.push(dayName)
+        }
+      }
+      
+      if (days.length === 7) {
+        return days
+      }
+    }
+    
+    // Fallback to browser locale if translation not available
     const locale = LOCALE_MAP[language] || `${language}-${language.toUpperCase()}`
-    // Use a known Sunday as base (Jan 7, 2024 is a Sunday)
     const baseSunday = new Date(2024, 0, 7)
     const days: string[] = []
 
     for (let i = 0; i < 7; i++) {
-      // Calculate the day of week starting from startDay
       const date = new Date(baseSunday)
       date.setDate(baseSunday.getDate() + ((startDay + i) % 7))
 
@@ -148,7 +172,6 @@ class CalendarGeneratorService {
           date.toLocaleDateString(locale, { weekday: formatStyle })
         )
       } catch (e) {
-        // Fallback to English if locale not supported
         days.push(
           date.toLocaleDateString('en-US', { weekday: formatStyle })
         )
