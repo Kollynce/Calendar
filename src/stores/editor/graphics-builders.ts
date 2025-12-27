@@ -498,23 +498,36 @@ export function buildWeekStripGraphics(
   const computeHeaderHeight = (targetHeight: number): number =>
     Math.min(Math.max(40, Math.round(labelFontSize + 24)), Math.max(44, Math.round(targetHeight * 0.45)))
   const startDate = new Date(metadata.startDate)
+  const isBlank = metadata.mode === 'blank'
   const holidaysForYear = getHolidaysForCalendarYear
     ? getHolidaysForCalendarYear(startDate.getFullYear(), metadata.country, metadata.language)
     : []
-  const days = calendarGeneratorService.generateWeek(startDate, holidaysForYear, metadata.startDay) as WeekStripDay[]
+  const days = isBlank
+    ? (Array.from({ length: 7 }, () => ({
+        date: new Date(startDate),
+        dayOfMonth: 0,
+        isCurrentMonth: false,
+        isToday: false,
+        isWeekend: false,
+        weekNumber: 0,
+        holidays: [],
+      })) as WeekStripDay[])
+    : (calendarGeneratorService.generateWeek(startDate, holidaysForYear, metadata.startDay) as WeekStripDay[])
 
-  const holidayEntries = days
-    .filter((day) => (day.holidays?.length ?? 0) > 0)
-    .map((day) => {
-      const names =
-        day.holidays
-          ?.map((holiday) => (holiday.localName || holiday.name || '').replace(/\s*\([^)]*\)/g, '').trim())
-          .filter(Boolean) ?? []
-      return {
-        day,
-        names,
-      }
-    })
+  const holidayEntries = isBlank
+    ? []
+    : days
+        .filter((day) => (day.holidays?.length ?? 0) > 0)
+        .map((day) => {
+          const names =
+            day.holidays
+              ?.map((holiday) => (holiday.localName || holiday.name || '').replace(/\s*\([^)]*\)/g, '').trim())
+              .filter(Boolean) ?? []
+          return {
+            day,
+            names,
+          }
+        })
 
   const maxListItems = Math.max(1, metadata.holidayListMaxItems ?? 4)
   const listEntries = holidayEntries.slice(0, maxListItems)
@@ -522,7 +535,7 @@ export function buildWeekStripGraphics(
   const configuredListHeight = metadata.holidayListHeight ?? 96
 
   const holidayDataAvailable = (holidaysForYear?.length ?? 0) > 0
-  const reserveSpaceForList = holidayDataAvailable ? showHolidayList : metadata.showHolidayList !== false
+  const reserveSpaceForList = !isBlank && (holidayDataAvailable ? showHolidayList : metadata.showHolidayList !== false)
 
   if (!reserveSpaceForList) {
     const estimatedListSpace = Math.max(48, Math.min(height * 0.6, configuredListHeight))
@@ -612,14 +625,14 @@ export function buildWeekStripGraphics(
   const dayNumberFontSizeEff = Math.min(dayNumberFontSize, Math.max(10, Math.floor(cellHeight * 0.42)))
   const dayNumberBoxWidth = Math.max(18, Math.min(40, dayNumberFontSizeEff * 2))
 
-  const showHolidayMarkers = metadata.showHolidayMarkers !== false
+  const showHolidayMarkers = !isBlank && metadata.showHolidayMarkers !== false
   const markerStyle = metadata.holidayMarkerStyle ?? 'text'
   const markerColor = metadata.holidayMarkerColor ?? '#ef4444'
   const markerHeight = Math.max(1, metadata.holidayMarkerHeight ?? 4)
 
   days.forEach((day: WeekStripDay, index: number) => {
     const left = index * cellWidth
-    const dayHasHoliday = (day.holidays?.length ?? 0) > 0
+    const dayHasHoliday = !isBlank && (day.holidays?.length ?? 0) > 0
 
     if (dayHasHoliday && showHolidayMarkers && markerStyle === 'background') {
       objects.push(
@@ -648,8 +661,10 @@ export function buildWeekStripGraphics(
         selectable: false,
       }),
     )
+    // Show numbers only when not in blank mode
+    const dayNumberText = isBlank ? '' : String(day.dayOfMonth ?? '')
     objects.push(
-      new Textbox(String(day.dayOfMonth), {
+      new Textbox(dayNumberText, {
         left: left + cellWidth - dayNumberInsetX - dayNumberBoxWidth,
         top: bodyTop + dayNumberInsetY,
         width: dayNumberBoxWidth,
@@ -662,7 +677,7 @@ export function buildWeekStripGraphics(
       }),
     )
 
-    if (!dayHasHoliday || !showHolidayMarkers || markerStyle === 'text' || markerStyle === 'background') {
+    if (isBlank || !dayHasHoliday || !showHolidayMarkers || markerStyle === 'text' || markerStyle === 'background') {
       return
     }
 

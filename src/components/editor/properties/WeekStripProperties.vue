@@ -51,7 +51,17 @@ const weekStripDateValue = computed(() =>
 
 <template>
   <div class="pt-4 border-t border-white/10 space-y-4">
-    <p class="text-xs font-semibold uppercase tracking-widest text-white/60">Week Strip</p>
+    <div class="flex items-center justify-between">
+      <p class="text-xs font-semibold uppercase tracking-widest text-white/60">Week Strip</p>
+      <select
+        class="control-glass-sm"
+        :value="weekStripMetadata.mode ?? 'month'"
+        @change="updateWeekStripMetadata((draft) => { draft.mode = ($event.target as HTMLSelectElement).value as WeekStripMetadata['mode'] })"
+      >
+        <option value="month">Actual Week</option>
+        <option value="blank">Blank Grid</option>
+      </select>
+    </div>
 
     <div>
       <label class="text-xs font-medium text-white/60 mb-1.5 block">Label</label>

@@ -81,6 +81,7 @@ export function getDefaultWeekStripMetadata(
   const size = overrides.size ? { ...defaultSize, ...overrides.size } : defaultSize
   return {
     kind: 'week-strip',
+    mode: overrides.mode ?? 'month',
     startDate: overrides.startDate ?? getISODateString(),
     startDay: overrides.startDay ?? 0,
     label: overrides.label ?? 'Week Plan',

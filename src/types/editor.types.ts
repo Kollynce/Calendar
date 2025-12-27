@@ -181,6 +181,12 @@ export interface CalendarGridMetadata {
 
 export interface WeekStripMetadata {
   kind: 'week-strip'
+  /**
+   * mode:
+   * - 'month' renders the actual week range for the startDate/month
+   * - 'blank' renders an empty grid without dates
+   */
+  mode?: 'month' | 'blank'
   startDate: string
   startDay: WeekDay
   label?: string
