@@ -1,6 +1,6 @@
 import type { Ref } from 'vue'
-import { Canvas, type Object as FabricObject } from 'fabric'
-import type { CanvasElementMetadata, CanvasState, Project } from '@/types'
+import { Canvas, FabricImage, type Object as FabricObject } from 'fabric'
+import type { CanvasElementMetadata, CanvasPatternConfig, CanvasState, Project } from '@/types'
 
 type NormalizeCanvasSize = (input: { width?: number; height?: number } | null | undefined) => {
   width: number
@@ -321,6 +321,114 @@ export function createCanvasModule(params: {
     isDirty.value = true
   }
 
+  function setBackgroundPattern(patternConfig: CanvasPatternConfig): void {
+    if (!canvas.value || !project.value) return
+
+    project.value.canvas.backgroundPattern = patternConfig
+    
+    // Apply pattern to canvas using afterRender event
+    applyBackgroundPattern()
+    
+    canvas.value.renderAll()
+    isDirty.value = true
+  }
+
+  function applyBackgroundPattern(): void {
+    if (!canvas.value || !project.value) return
+    
+    const patternConfig = project.value.canvas.backgroundPattern
+    
+    // Remove any existing pattern handler
+    if ((canvas.value as any)._patternRenderHandler) {
+      canvas.value.off('after:render', (canvas.value as any)._patternRenderHandler)
+    }
+    
+    if (!patternConfig || patternConfig.pattern === 'none') {
+      // Clear the background image pattern
+      canvas.value.backgroundImage = undefined
+      canvas.value.renderAll()
+      return
+    }
+    
+    const { color, spacing, opacity, pattern } = patternConfig
+    const canvasWidth = project.value.canvas.width
+    const canvasHeight = project.value.canvas.height
+    
+    // Create an offscreen canvas to draw the pattern
+    const offscreenCanvas = document.createElement('canvas')
+    offscreenCanvas.width = canvasWidth
+    offscreenCanvas.height = canvasHeight
+    const ctx = offscreenCanvas.getContext('2d')
+    
+    if (!ctx) return
+    
+    // Draw transparent background first
+    ctx.clearRect(0, 0, canvasWidth, canvasHeight)
+    
+    ctx.globalAlpha = opacity
+    ctx.strokeStyle = color
+    ctx.fillStyle = color
+    ctx.lineWidth = 1
+    
+    if (pattern === 'ruled') {
+      // Draw horizontal lines
+      for (let y = spacing; y < canvasHeight; y += spacing) {
+        ctx.beginPath()
+        ctx.moveTo(0, y)
+        ctx.lineTo(canvasWidth, y)
+        ctx.stroke()
+      }
+    } else if (pattern === 'grid') {
+      // Draw vertical lines
+      for (let x = spacing; x < canvasWidth; x += spacing) {
+        ctx.beginPath()
+        ctx.moveTo(x, 0)
+        ctx.lineTo(x, canvasHeight)
+        ctx.stroke()
+      }
+      // Draw horizontal lines
+      for (let y = spacing; y < canvasHeight; y += spacing) {
+        ctx.beginPath()
+        ctx.moveTo(0, y)
+        ctx.lineTo(canvasWidth, y)
+        ctx.stroke()
+      }
+    } else if (pattern === 'dot') {
+      // Draw dots
+      const dotRadius = 1.5
+      for (let x = spacing / 2; x < canvasWidth; x += spacing) {
+        for (let y = spacing / 2; y < canvasHeight; y += spacing) {
+          ctx.beginPath()
+          ctx.arc(x, y, dotRadius, 0, Math.PI * 2)
+          ctx.fill()
+        }
+      }
+    }
+    
+    // Convert to data URL and set as background image (renders behind objects)
+    const dataUrl = offscreenCanvas.toDataURL('image/png')
+    
+    // Use Fabric.js FabricImage to set as background
+    FabricImage.fromURL(dataUrl).then((img) => {
+      if (!canvas.value) return
+      
+      img.set({
+        left: 0,
+        top: 0,
+        selectable: false,
+        evented: false,
+      })
+      
+      // Set as backgroundImage so it renders behind all objects
+      canvas.value.backgroundImage = img
+      canvas.value.renderAll()
+    })
+  }
+
+  function getBackgroundPattern(): CanvasPatternConfig | undefined {
+    return project.value?.canvas.backgroundPattern
+  }
+
   return {
     initializeCanvas,
     destroyCanvas,
@@ -339,5 +447,7 @@ export function createCanvasModule(params: {
     getViewportTransform,
     setCanvasSize,
     setBackgroundColor,
+    setBackgroundPattern,
+    getBackgroundPattern,
   }
 }

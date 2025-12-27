@@ -19,8 +19,23 @@ import {
   type CanvasPreset,
 } from '@/config/canvas-presets'
 import { LockClosedIcon, LockOpenIcon } from '@heroicons/vue/24/outline'
+import type { CanvasBackgroundPattern, CanvasPatternConfig } from '@/types'
 
 type CanvasUnit = 'px' | 'mm' | 'cm' | 'in'
+
+const PATTERN_OPTIONS: { value: CanvasBackgroundPattern; label: string; icon: string }[] = [
+  { value: 'none', label: 'None', icon: '○' },
+  { value: 'ruled', label: 'Ruled', icon: '☰' },
+  { value: 'grid', label: 'Grid', icon: '▦' },
+  { value: 'dot', label: 'Dotted', icon: '⁙' },
+]
+
+const DEFAULT_PATTERN_CONFIG: CanvasPatternConfig = {
+  pattern: 'none',
+  color: '#e2e8f0',
+  spacing: 24,
+  opacity: 0.5,
+}
 
 const UNIT_OPTIONS: { value: CanvasUnit; label: string }[] = [
   { value: 'px', label: 'Pixels (px)' },
@@ -43,6 +58,10 @@ const height = ref(1052)
 const aspectLocked = ref(true)
 const aspectRatio = ref(744 / 1052)
 const selectedUnit = ref<CanvasUnit>('px')
+const selectedPattern = ref<CanvasBackgroundPattern>('none')
+const patternColor = ref('#e2e8f0')
+const patternSpacing = ref(24)
+const patternOpacity = ref(0.5)
 
 const orientation = computed<'portrait' | 'landscape'>(() =>
   width.value >= height.value ? 'landscape' : 'portrait',
@@ -149,6 +168,19 @@ function syncFromCanvas(): void {
   height.value = currentHeight
   aspectLocked.value = true
   setAspectRatioFromCurrent()
+
+  const existingPattern = editorStore.getBackgroundPattern()
+  if (existingPattern) {
+    selectedPattern.value = existingPattern.pattern
+    patternColor.value = existingPattern.color
+    patternSpacing.value = existingPattern.spacing
+    patternOpacity.value = existingPattern.opacity
+  } else {
+    selectedPattern.value = DEFAULT_PATTERN_CONFIG.pattern
+    patternColor.value = DEFAULT_PATTERN_CONFIG.color
+    patternSpacing.value = DEFAULT_PATTERN_CONFIG.spacing
+    patternOpacity.value = DEFAULT_PATTERN_CONFIG.opacity
+  }
 }
 
 watch(
@@ -260,6 +292,12 @@ function resetToCurrentCanvas(): void {
 function applyCanvasSettings(): void {
   if (!width.value || !height.value) return
   editorStore.setCanvasSize(width.value, height.value)
+  editorStore.setBackgroundPattern({
+    pattern: selectedPattern.value,
+    color: patternColor.value,
+    spacing: patternSpacing.value,
+    opacity: patternOpacity.value,
+  })
   emit('close')
 }
 
@@ -451,6 +489,71 @@ function closeModal(): void {
                         <component :is="aspectLocked ? LockClosedIcon : LockOpenIcon" class="w-4 h-4" />
                         {{ aspectLocked ? 'Locked' : 'Unlocked' }}
                       </button>
+                    </div>
+
+                    <div class="space-y-3">
+                      <div>
+                        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Background pattern</p>
+                        <p class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Add guidelines to your canvas</p>
+                      </div>
+                      <div class="grid grid-cols-4 gap-2">
+                        <button
+                          v-for="option in PATTERN_OPTIONS"
+                          :key="option.value"
+                          type="button"
+                          class="flex flex-col items-center justify-center gap-1 rounded-xl border p-3 transition-all"
+                          :class="selectedPattern === option.value
+                            ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300'
+                            : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600'"
+                          @click="selectedPattern = option.value"
+                        >
+                          <span class="text-lg">{{ option.icon }}</span>
+                          <span class="text-xs font-medium">{{ option.label }}</span>
+                        </button>
+                      </div>
+                      <div v-if="selectedPattern !== 'none'" class="space-y-3 pt-2">
+                        <div class="flex items-center gap-3">
+                          <label class="flex-1 space-y-1">
+                            <span class="text-xs text-gray-500">Color</span>
+                            <div class="flex items-center gap-2">
+                              <input
+                                v-model="patternColor"
+                                type="color"
+                                class="w-8 h-8 rounded border border-gray-300 dark:border-gray-600 cursor-pointer"
+                              />
+                              <input
+                                v-model="patternColor"
+                                type="text"
+                                class="flex-1 rounded-lg border border-gray-300 dark:border-gray-600 bg-white/80 dark:bg-white/5 px-2 py-1.5 text-xs text-gray-900 dark:text-white"
+                              />
+                            </div>
+                          </label>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                          <label class="space-y-1">
+                            <span class="text-xs text-gray-500">Spacing (px)</span>
+                            <input
+                              v-model.number="patternSpacing"
+                              type="number"
+                              min="8"
+                              max="100"
+                              step="4"
+                              class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white/80 dark:bg-white/5 px-2 py-1.5 text-xs text-gray-900 dark:text-white"
+                            />
+                          </label>
+                          <label class="space-y-1">
+                            <span class="text-xs text-gray-500">Opacity</span>
+                            <input
+                              v-model.number="patternOpacity"
+                              type="range"
+                              min="0.1"
+                              max="1"
+                              step="0.1"
+                              class="w-full h-8"
+                            />
+                          </label>
+                        </div>
+                      </div>
                     </div>
 
                     <div class="space-y-3">

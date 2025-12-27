@@ -22,6 +22,7 @@ export interface CanvasState {
   unit: 'px' | 'mm' | 'in'
   dpi: number
   backgroundColor: string
+  backgroundPattern?: CanvasPatternConfig
   objects: CanvasObject[]
   [key: string]: any
 }
@@ -110,6 +111,15 @@ export interface PlannerElementProperties {
 }
 
 export type PlannerPatternVariant = 'hero' | 'ruled' | 'grid' | 'dot'
+
+export type CanvasBackgroundPattern = 'none' | 'ruled' | 'grid' | 'dot'
+
+export interface CanvasPatternConfig {
+  pattern: CanvasBackgroundPattern
+  color: string
+  spacing: number
+  opacity: number
+}
 
 export type PlannerHeaderStyle = 'none' | 'minimal' | 'filled' | 'tint'
 

@@ -153,6 +153,8 @@ export const useEditorStore = defineStore('editor', () => {
     getViewportTransform,
     setCanvasSize,
     setBackgroundColor,
+    setBackgroundPattern,
+    getBackgroundPattern,
   } = canvasModule
 
   const objectsModule = createObjectsModule({
@@ -720,6 +722,8 @@ export const useEditorStore = defineStore('editor', () => {
     // Settings
     setCanvasSize,
     setBackgroundColor,
+    setBackgroundPattern,
+    getBackgroundPattern,
     updateTemplateOptions,
     getHolidaysForCalendarYear,
     // Metadata-aware helpers
