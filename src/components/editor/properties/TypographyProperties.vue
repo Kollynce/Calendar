@@ -71,12 +71,6 @@ const textAlign = computed({
   set: (value) => editorStore.updateObjectProperty('textAlign', value),
 })
 
-// Vertical Alignment (for textbox)
-const verticalAlign = computed({
-  get: () => (selectedObject.value as any)?.verticalAlign || 'top',
-  set: (value) => editorStore.updateObjectProperty('verticalAlign', value),
-})
-
 // Text Color
 const textColor = computed({
   get: () => (selectedObject.value as any)?.fill || '#000000',
@@ -108,8 +102,29 @@ const textTransform = computed({
     return 'none'
   },
   set: (value) => {
-    // Fabric doesn't have native textTransform, we'll handle it via custom property
+    // Apply transform to text content and persist the chosen transform flag.
+    // Preserve the original text so we can safely switch between transforms.
+    const obj = selectedObject.value as any
+    const currentText = (obj?.text as string) ?? ''
+    const baseText = (obj?.textOriginal as string) ?? currentText
+
+    // Store original once
+    if (!obj?.textOriginal) {
+      editorStore.updateObjectProperty('textOriginal', currentText)
+    }
+
+    let nextText = baseText
+    if (value === 'uppercase') {
+      nextText = baseText.toUpperCase()
+    } else if (value === 'capitalize') {
+      nextText = baseText.replace(/\b\p{L}/gu, (c) => c.toUpperCase())
+    } else {
+      // none → restore original casing
+      nextText = baseText
+    }
+
     editorStore.updateObjectProperty('textTransform', value)
+    editorStore.updateObjectProperty('text', nextText)
   },
 })
 </script>
@@ -184,116 +199,67 @@ const textTransform = computed({
     <!-- Text Alignment -->
     <div>
       <label class="text-xs font-medium text-white/60 mb-1.5 block">Alignment</label>
-      <div class="flex gap-1">
-        <!-- Horizontal Alignment -->
-        <div class="flex bg-white/5 rounded-lg p-0.5 flex-1">
-          <button
-            type="button"
-            @click="textAlign = 'left'"
-            :class="[
-              'flex-1 p-2 rounded-md transition-all',
-              textAlign === 'left' ? 'bg-primary-500/30 text-primary-300' : 'text-white/60 hover:text-white hover:bg-white/10'
-            ]"
-            title="Align Left"
-          >
-            <svg class="w-4 h-4 mx-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="3" y1="6" x2="21" y2="6" />
-              <line x1="3" y1="12" x2="15" y2="12" />
-              <line x1="3" y1="18" x2="18" y2="18" />
-            </svg>
-          </button>
-          <button
-            type="button"
-            @click="textAlign = 'center'"
-            :class="[
-              'flex-1 p-2 rounded-md transition-all',
-              textAlign === 'center' ? 'bg-primary-500/30 text-primary-300' : 'text-white/60 hover:text-white hover:bg-white/10'
-            ]"
-            title="Align Center"
-          >
-            <svg class="w-4 h-4 mx-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="3" y1="6" x2="21" y2="6" />
-              <line x1="6" y1="12" x2="18" y2="12" />
-              <line x1="4" y1="18" x2="20" y2="18" />
-            </svg>
-          </button>
-          <button
-            type="button"
-            @click="textAlign = 'right'"
-            :class="[
-              'flex-1 p-2 rounded-md transition-all',
-              textAlign === 'right' ? 'bg-primary-500/30 text-primary-300' : 'text-white/60 hover:text-white hover:bg-white/10'
-            ]"
-            title="Align Right"
-          >
-            <svg class="w-4 h-4 mx-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="3" y1="6" x2="21" y2="6" />
-              <line x1="9" y1="12" x2="21" y2="12" />
-              <line x1="6" y1="18" x2="21" y2="18" />
-            </svg>
-          </button>
-          <button
-            type="button"
-            @click="textAlign = 'justify'"
-            :class="[
-              'flex-1 p-2 rounded-md transition-all',
-              textAlign === 'justify' ? 'bg-primary-500/30 text-primary-300' : 'text-white/60 hover:text-white hover:bg-white/10'
-            ]"
-            title="Justify"
-          >
-            <svg class="w-4 h-4 mx-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="3" y1="6" x2="21" y2="6" />
-              <line x1="3" y1="12" x2="21" y2="12" />
-              <line x1="3" y1="18" x2="21" y2="18" />
-            </svg>
-          </button>
-        </div>
-
-        <!-- Vertical Alignment -->
-        <div class="flex bg-white/5 rounded-lg p-0.5">
-          <button
-            type="button"
-            @click="verticalAlign = 'top'"
-            :class="[
-              'p-2 rounded-md transition-all',
-              verticalAlign === 'top' ? 'bg-primary-500/30 text-primary-300' : 'text-white/60 hover:text-white hover:bg-white/10'
-            ]"
-            title="Align Top"
-          >
-            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="12" y1="3" x2="12" y2="21" />
-              <polyline points="6 9 12 3 18 9" />
-            </svg>
-          </button>
-          <button
-            type="button"
-            @click="verticalAlign = 'middle'"
-            :class="[
-              'p-2 rounded-md transition-all',
-              verticalAlign === 'middle' ? 'bg-primary-500/30 text-primary-300' : 'text-white/60 hover:text-white hover:bg-white/10'
-            ]"
-            title="Align Middle"
-          >
-            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="4" y1="12" x2="20" y2="12" />
-              <line x1="12" y1="6" x2="12" y2="18" />
-            </svg>
-          </button>
-          <button
-            type="button"
-            @click="verticalAlign = 'bottom'"
-            :class="[
-              'p-2 rounded-md transition-all',
-              verticalAlign === 'bottom' ? 'bg-primary-500/30 text-primary-300' : 'text-white/60 hover:text-white hover:bg-white/10'
-            ]"
-            title="Align Bottom"
-          >
-            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="12" y1="3" x2="12" y2="21" />
-              <polyline points="18 15 12 21 6 15" />
-            </svg>
-          </button>
-        </div>
+      <div class="flex bg-white/5 rounded-lg p-0.5">
+        <button
+          type="button"
+          @click="textAlign = 'left'"
+          :class="[
+            'flex-1 p-2 rounded-md transition-all',
+            textAlign === 'left' ? 'bg-primary-500/30 text-primary-300' : 'text-white/60 hover:text-white hover:bg-white/10'
+          ]"
+          title="Align Left"
+        >
+          <svg class="w-4 h-4 mx-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="6" x2="21" y2="6" />
+            <line x1="3" y1="12" x2="15" y2="12" />
+            <line x1="3" y1="18" x2="18" y2="18" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          @click="textAlign = 'center'"
+          :class="[
+            'flex-1 p-2 rounded-md transition-all',
+            textAlign === 'center' ? 'bg-primary-500/30 text-primary-300' : 'text-white/60 hover:text-white hover:bg-white/10'
+          ]"
+          title="Align Center"
+        >
+          <svg class="w-4 h-4 mx-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="6" x2="21" y2="6" />
+            <line x1="6" y1="12" x2="18" y2="12" />
+            <line x1="4" y1="18" x2="20" y2="18" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          @click="textAlign = 'right'"
+          :class="[
+            'flex-1 p-2 rounded-md transition-all',
+            textAlign === 'right' ? 'bg-primary-500/30 text-primary-300' : 'text-white/60 hover:text-white hover:bg-white/10'
+          ]"
+          title="Align Right"
+        >
+          <svg class="w-4 h-4 mx-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="6" x2="21" y2="6" />
+            <line x1="9" y1="12" x2="21" y2="12" />
+            <line x1="6" y1="18" x2="21" y2="18" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          @click="textAlign = 'justify'"
+          :class="[
+            'flex-1 p-2 rounded-md transition-all',
+            textAlign === 'justify' ? 'bg-primary-500/30 text-primary-300' : 'text-white/60 hover:text-white hover:bg-white/10'
+          ]"
+          title="Justify"
+        >
+          <svg class="w-4 h-4 mx-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="6" x2="21" y2="6" />
+            <line x1="3" y1="12" x2="21" y2="12" />
+            <line x1="3" y1="18" x2="21" y2="18" />
+          </svg>
+        </button>
       </div>
     </div>
 

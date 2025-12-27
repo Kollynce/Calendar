@@ -8,10 +8,14 @@ const props = withDefaults(defineProps<{
   rulerSize?: number
   viewportWidth?: number
   viewportHeight?: number
+  panOffsetX?: number
+  panOffsetY?: number
 }>(), {
   rulerSize: 32,
   viewportWidth: 0,
   viewportHeight: 0,
+  panOffsetX: 0,
+  panOffsetY: 0,
 })
 
 const stepValue = computed(() => {
@@ -24,19 +28,30 @@ const pixelStep = computed(() => Math.max(stepValue.value * props.zoom, 1))
 
 const horizontalMarkers = computed(() => {
   const step = pixelStep.value
-  const count = Math.max(Math.ceil(props.width / step) + 2, 2)
+  const viewport = Math.max(props.viewportWidth || 0, props.width)
+  const count = Math.max(Math.ceil(viewport / step) + 4, 4)
+
+  // Offset ticks so they follow canvas pan
+  const offsetPx = ((props.panOffsetX ?? 0) % step + step) % step
+  const startValue = Math.floor(-((props.panOffsetX ?? 0) / step)) * stepValue.value
+
   return Array.from({ length: count }, (_, index) => ({
-    value: index * stepValue.value,
-    pos: index * step,
+    value: startValue + index * stepValue.value,
+    pos: offsetPx + index * step,
   }))
 })
 
 const verticalMarkers = computed(() => {
   const step = pixelStep.value
-  const count = Math.max(Math.ceil(props.height / step) + 2, 2)
+  const viewport = Math.max(props.viewportHeight || 0, props.height)
+  const count = Math.max(Math.ceil(viewport / step) + 4, 4)
+
+  const offsetPx = ((props.panOffsetY ?? 0) % step + step) % step
+  const startValue = Math.floor(-((props.panOffsetY ?? 0) / step)) * stepValue.value
+
   return Array.from({ length: count }, (_, index) => ({
-    value: index * stepValue.value,
-    pos: index * step,
+    value: startValue + index * stepValue.value,
+    pos: offsetPx + index * step,
   }))
 })
 

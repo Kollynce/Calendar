@@ -1,7 +1,7 @@
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 
 export function useSidebarResize() {
-  const rightSidebarWidth = ref(256)
+  const rightSidebarWidth = ref(400)
   const isResizingRightSidebar = ref(false)
 
   function startResizingRightSidebar(e: MouseEvent) {
@@ -14,7 +14,7 @@ export function useSidebarResize() {
   function handleResizeRightSidebar(e: MouseEvent) {
     if (!isResizingRightSidebar.value) return
     const newWidth = window.innerWidth - e.clientX
-    rightSidebarWidth.value = Math.max(200, Math.min(600, newWidth))
+    rightSidebarWidth.value = Math.max(300, Math.min(750, newWidth))
   }
 
   function stopResizingRightSidebar() {

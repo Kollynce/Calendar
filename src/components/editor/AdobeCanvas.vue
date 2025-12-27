@@ -636,6 +636,8 @@ defineExpose({
           :ruler-size="RULER_SIZE"
           :viewport-width="viewportDimensions.width"
           :viewport-height="viewportDimensions.height"
+          :pan-offset-x="panOffset.x"
+          :pan-offset-y="panOffset.y"
         />
       </div>
       
