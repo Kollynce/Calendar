@@ -4,10 +4,10 @@ import { useEditorStore } from '@/stores/editor.store'
 import { storeToRefs } from 'pinia'
 import { TrashIcon } from '@heroicons/vue/24/outline'
 import ColorPicker from '@/components/editor/ColorPicker.vue'
-import FontPicker from '@/components/editor/FontPicker.vue'
 import MonthGridProperties from '@/components/editor/properties/MonthGridProperties.vue'
 import WeekStripProperties from '@/components/editor/properties/WeekStripProperties.vue'
 import DateCellProperties from '@/components/editor/properties/DateCellProperties.vue'
+import TypographyProperties from '@/components/editor/properties/TypographyProperties.vue'
 import type {
   CanvasElementMetadata,
   CalendarGridMetadata,
@@ -59,18 +59,6 @@ const objectType = computed(() => selectedObject.value?.type ?? null)
 const textContent = computed({
   get: () => (selectedObject.value as any)?.text || '',
   set: (value) => editorStore.updateObjectProperty('text', value),
-})
-const fontSize = computed({
-  get: () => (selectedObject.value as any)?.fontSize || 16,
-  set: (value) => editorStore.updateObjectProperty('fontSize', value),
-})
-const fontFamily = computed({
-  get: () => (selectedObject.value as any)?.fontFamily || 'Inter',
-  set: (value) => editorStore.updateObjectProperty('fontFamily', value),
-})
-const textColor = computed({
-  get: () => (selectedObject.value as any)?.fill || '#000000',
-  set: (value) => editorStore.updateObjectProperty('fill', value),
 })
 
 // Shape properties
@@ -596,23 +584,15 @@ const localAlignTarget = computed({
     <!-- Text Properties -->
     <template v-if="objectType === 'textbox'">
       <div class="space-y-4">
+        <!-- Content -->
         <div>
           <label class="text-xs font-medium text-white/60 mb-1.5 block">Content</label>
           <textarea v-model="textContent" rows="3" class="control-glass resize-none"></textarea>
         </div>
-        <div>
-          <label class="text-xs font-medium text-white/60 mb-1.5 block">Font Family</label>
-          <FontPicker v-model="fontFamily" class="control-glass" />
-        </div>
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="text-xs font-medium text-white/60 mb-1.5 block">Size</label>
-            <input v-model.number="fontSize" type="number" min="8" max="200" class="control-glass" />
-          </div>
-          <div>
-            <label class="text-xs font-medium text-white/60 mb-1.5 block">Color</label>
-            <ColorPicker v-model="textColor" />
-          </div>
+        
+        <!-- Typography Section -->
+        <div class="pt-4 border-t border-white/10">
+          <TypographyProperties />
         </div>
       </div>
     </template>

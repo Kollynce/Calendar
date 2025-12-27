@@ -28,7 +28,7 @@ import {
 import ExportModal from '@/components/export/ExportModal.vue'
 import CanvasSetupModal from '@/components/editor/CanvasSetupModal.vue'
 import ColorPicker from '@/components/editor/ColorPicker.vue'
-import FontPicker from '@/components/editor/FontPicker.vue'
+import TypographyProperties from '@/components/editor/properties/TypographyProperties.vue'
 import CalendarConfigPanel from '@/components/editor/CalendarConfigPanel.vue'
 import EditorLayers from '@/components/editor/EditorLayers.vue'
 import TemplatePanel from '@/components/editor/TemplatePanel.vue'
@@ -2559,6 +2559,7 @@ function handleDistribute(axis: 'horizontal' | 'vertical') {
               <!-- Text Properties -->
               <template v-if="objectType === 'textbox'">
                 <div class="space-y-4">
+                  <!-- Content -->
                   <div>
                     <label class="text-xs font-medium text-white/60 mb-1.5 block">Content</label>
                     <textarea 
@@ -2568,26 +2569,9 @@ function handleDistribute(axis: 'horizontal' | 'vertical') {
                     ></textarea>
                   </div>
                   
-                  <div>
-                    <label class="text-xs font-medium text-white/60 mb-1.5 block">Font Family</label>
-                    <FontPicker v-model="fontFamily" class="control-glass" />
-                  </div>
-                  
-                  <div class="grid grid-cols-2 gap-3">
-                    <div>
-                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Size</label>
-                      <input 
-                        v-model.number="fontSize" 
-                        type="number" 
-                        min="8" 
-                        max="200"
-                        class="control-glass"
-                      />
-                    </div>
-                    <div>
-                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Color</label>
-                      <ColorPicker v-model="textColor" />
-                    </div>
+                  <!-- Typography Section -->
+                  <div class="pt-4 border-t border-white/10">
+                    <TypographyProperties />
                   </div>
                 </div>
               </template>
