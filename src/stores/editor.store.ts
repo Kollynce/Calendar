@@ -494,7 +494,7 @@ export const useEditorStore = defineStore('editor', () => {
         rebuilt = buildWeekStripGraphics(metadata, getHolidaysForCalendarYear)
         break
       case 'date-cell':
-        rebuilt = buildDateCellGraphics(metadata)
+        rebuilt = buildDateCellGraphics(metadata, getHolidaysForCalendarYear)
         break
       case 'planner-note':
         rebuilt = buildPlannerNoteGraphics(metadata)

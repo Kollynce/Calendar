@@ -185,6 +185,11 @@ export function getDefaultDateCellMetadata(
     holidayListAccentColor: overrides.holidayListAccentColor ?? overrides.holidayMarkerColor ?? '#ef4444',
     country: overrides.country ?? 'KE',
     language: overrides.language ?? 'en',
+    showHolidayInfo: overrides.showHolidayInfo ?? true,
+    holidayInfoPosition: overrides.holidayInfoPosition ?? 'bottom',
+    holidayInfoTextColor: overrides.holidayInfoTextColor ?? '#4b5563',
+    holidayInfoAccentColor: overrides.holidayInfoAccentColor ?? overrides.holidayMarkerColor ?? '#ef4444',
+    holidayInfoFontSize: overrides.holidayInfoFontSize ?? 12,
     size,
   }
 }
