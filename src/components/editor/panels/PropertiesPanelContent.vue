@@ -8,6 +8,7 @@ import TypographyProperties from '../properties/TypographyProperties.vue'
 import MonthGridProperties from '../properties/MonthGridProperties.vue'
 import WeekStripProperties from '../properties/WeekStripProperties.vue'
 import DateCellProperties from '../properties/DateCellProperties.vue'
+import CanvasProperties from '../properties/CanvasProperties.vue'
 import type {
   CanvasElementMetadata,
   CalendarGridMetadata,
@@ -347,8 +348,11 @@ const patternVariantOptions = [
 </script>
 
 <template>
-  <section class="rounded-2xl border border-white/10 bg-white/5 backdrop-blur px-4 py-4 space-y-5">
-    <!-- Object Type Header -->
+  <!-- Canvas Properties (Visible when no selection) -->
+  <CanvasProperties v-if="!selectedObject" />
+
+  <section v-else class="rounded-2xl border border-white/10 bg-white/5 backdrop-blur px-4 py-4 space-y-5">
+      <!-- Object Type Header -->
     <div class="flex items-center justify-between">
       <span class="text-xs font-semibold uppercase tracking-widest text-white/60">{{ objectType }}</span>
       <button @click="editorStore.deleteSelected()" class="p-1.5 hover:bg-red-500/20 rounded-lg transition-colors group" title="Delete">

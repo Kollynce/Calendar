@@ -8,6 +8,7 @@ import TypographyProperties from './TypographyProperties.vue'
 import MonthGridProperties from './MonthGridProperties.vue'
 import WeekStripProperties from './WeekStripProperties.vue'
 import DateCellProperties from './DateCellProperties.vue'
+import CanvasProperties from './CanvasProperties.vue'
 import type { CanvasElementMetadata, CalendarGridMetadata, WeekStripMetadata, DateCellMetadata } from '@/types'
 
 const props = defineProps<{
@@ -265,13 +266,17 @@ const localAlignTarget = computed({
 
 <template>
   <div class="space-y-5">
-    <!-- Object Type Header -->
-    <div class="flex items-center justify-between">
-      <span class="text-xs font-semibold uppercase tracking-widest text-white/60">{{ objectType }}</span>
-      <button @click="editorStore.deleteSelected()" class="p-1.5 hover:bg-red-500/20 rounded-lg transition-colors group" title="Delete">
-        <TrashIcon class="w-4 h-4 text-white/50 group-hover:text-red-200" />
-      </button>
-    </div>
+    <!-- Canvas Properties (Visible when no selection) -->
+    <CanvasProperties v-if="!hasSelection" />
+
+    <template v-else>
+      <!-- Object Type Header -->
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-semibold uppercase tracking-widest text-white/60">{{ objectType }}</span>
+        <button @click="editorStore.deleteSelected()" class="p-1.5 hover:bg-red-500/20 rounded-lg transition-colors group" title="Delete">
+          <TrashIcon class="w-4 h-4 text-white/50 group-hover:text-red-200" />
+        </button>
+      </div>
 
     <!-- Layout (Position & Size) -->
     <div class="space-y-3">
@@ -477,6 +482,6 @@ const localAlignTarget = computed({
           <button @click="editorStore.sendToBack()" class="btn-glass-sm w-full">Send Back</button>
         </div>
       </div>
-    </div>
+    </template>
   </div>
 </template>

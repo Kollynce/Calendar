@@ -26,8 +26,6 @@ import {
   TrashIcon,
 } from '@heroicons/vue/24/outline'
 import ExportModal from '@/components/export/ExportModal.vue'
-import CanvasSetupModal from '@/components/editor/CanvasSetupModal.vue'
-import ColorPicker from '@/components/editor/ColorPicker.vue'
 import TypographyProperties from '@/components/editor/properties/TypographyProperties.vue'
 import CalendarConfigPanel from '@/components/editor/CalendarConfigPanel.vue'
 import EditorLayers from '@/components/editor/EditorLayers.vue'
@@ -69,7 +67,6 @@ const authStore = useAuthStore()
 
 // Store refs
 const { 
-  hasSelection, 
   selectedObjects, 
   isDirty, 
   saving,
@@ -84,7 +81,6 @@ const canvasElRef = ref<HTMLCanvasElement | null>(null)
 const canvasComponentRef = ref<InstanceType<typeof Canvas> | null>(null)
 const canvasKey = ref(0) // Key to force Canvas remount on project switch
 const isExportModalOpen = ref(false)
-const isCanvasSetupModalOpen = ref(false)
 const userUploads = ref<UserUploadAsset[]>([])
 const uploadsLoading = ref(false)
 const uploadError = ref<string | null>(null)
@@ -487,25 +483,6 @@ const objectType = computed(() => {
   if (!selectedObject.value) return null
   return selectedObject.value.type
 })
-
-// Canvas background color
-const canvasBackgroundColor = computed(() => {
-  return editorStore.project?.canvas?.backgroundColor || '#ffffff'
-})
-
-const canvasColorPresets = [
-  '#ffffff', '#f8fafc', '#f1f5f9', '#e2e8f0', '#cbd5e1', '#94a3b8',
-  '#fef3c7', '#fde68a', '#fcd34d', '#fbbf24', '#f59e0b', '#d97706',
-  '#dcfce7', '#bbf7d0', '#86efac', '#4ade80', '#22c55e', '#16a34a',
-  '#dbeafe', '#bfdbfe', '#93c5fd', '#60a5fa', '#3b82f6', '#2563eb',
-  '#f3e8ff', '#e9d5ff', '#d8b4fe', '#c084fc', '#a855f7', '#9333ea',
-  '#fce7f3', '#fbcfe8', '#f9a8d4', '#f472b6', '#ec4899', '#db2777',
-  '#1a1a1a', '#262626', '#404040', '#525252', '#737373', '#a3a3a3',
-]
-
-function updateCanvasBackgroundColor(color: string) {
-  editorStore.setBackgroundColor(color)
-}
 
 // Text properties (two-way binding with canvas)
 const textContent = computed({
@@ -1539,18 +1516,13 @@ function handleDistribute(axis: 'horizontal' | 'vertical') {
           </button>
         </div>
 
-        <button
-          type="button"
-          class="text-xs font-medium text-gray-600 dark:text-gray-200 hover:text-primary-500 flex items-center gap-1"
-          @click="isCanvasSetupModalOpen = true"
+        <div
+          class="text-xs font-medium text-gray-600 dark:text-gray-200 flex items-center gap-1"
         >
           <span class="inline-flex items-center gap-1">
             {{ canvasSizeLabel }}
-            <svg class="w-3 h-3" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M4 3l3 3-3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
           </span>
-        </button>
+        </div>
         <div class="h-6 w-px bg-gray-200 dark:bg-gray-700"></div>
         
         <AppButton variant="secondary-sm" class="flex items-center gap-1.5" type="button">
@@ -2021,59 +1993,8 @@ function handleDistribute(axis: 'horizontal' | 'vertical') {
               </div>
             </section>
 
-            <!-- Canvas Properties (No Selection State) -->
-            <section
-              v-if="!hasSelection"
-              class="rounded-2xl border border-white/10 bg-white/5 backdrop-blur px-4 py-4 space-y-5"
-            >
-              <div class="flex items-center justify-between">
-                <span class="text-xs font-semibold uppercase tracking-widest text-white/60">Canvas</span>
-              </div>
-              
-              <!-- Canvas Background Color -->
-              <div class="space-y-3">
-                <div>
-                  <label class="text-xs font-medium text-white/60 mb-1.5 block">Background Color</label>
-                  <ColorPicker 
-                    :model-value="canvasBackgroundColor" 
-                    @update:modelValue="updateCanvasBackgroundColor"
-                  />
-                </div>
-                
-                <!-- Quick Color Presets -->
-                <div>
-                  <label class="text-xs font-medium text-white/60 mb-2 block">Quick Presets</label>
-                  <div class="grid grid-cols-6 gap-1.5">
-                    <button
-                      v-for="color in canvasColorPresets"
-                      :key="color"
-                      @click="updateCanvasBackgroundColor(color)"
-                      class="w-8 h-8 rounded-lg border-2 transition-all hover:scale-110"
-                      :class="canvasBackgroundColor === color ? 'border-primary-400 ring-2 ring-primary-400/30' : 'border-white/20'"
-                      :style="{ backgroundColor: color }"
-                      :title="color"
-                    />
-                  </div>
-                </div>
-              </div>
-              
-              <!-- Canvas Size Info -->
-              <div class="pt-3 border-t border-white/10">
-                <div class="flex items-center justify-between text-xs">
-                  <span class="text-white/60">Size</span>
-                  <span class="text-white/80 font-medium">{{ canvasSize.width }} × {{ canvasSize.height }} px</span>
-                </div>
-              </div>
-              
-              <!-- Hint -->
-              <div class="pt-3 border-t border-white/10 text-center">
-                <p class="text-xs text-white/50">Click any object on the canvas to edit its properties</p>
-              </div>
-            </section>
-            
-            <!-- Properties Panel Content (extracted component) -->
+            <!-- Properties Panel Content -->
             <PropertiesPanelContent
-              v-else
               :align-target="alignTarget"
               @align="handleAlign"
               @distribute="handleDistribute"
@@ -2105,12 +2026,6 @@ function handleDistribute(axis: 'horizontal' | 'vertical') {
     <ExportModal 
       :is-open="isExportModalOpen" 
       @close="isExportModalOpen = false"
-    />
-
-    <!-- Canvas Setup Modal -->
-    <CanvasSetupModal
-      :is-open="isCanvasSetupModalOpen"
-      @close="isCanvasSetupModalOpen = false"
     />
   </div>
 </template>
