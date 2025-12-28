@@ -1,14 +1,17 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import ColorPicker from '../ColorPicker.vue'
-import type { CollageMetadata, CollageLayoutType, CollageSlot } from '@/types'
+import type { CollageMetadata, CollageLayoutType } from '@/types'
 
 interface Props {
   collageMetadata: CollageMetadata
   updateCollageMetadata: (updates: Partial<CollageMetadata>) => void
+  disabled?: boolean
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  disabled: false,
+})
 
 const layoutOptions: { value: CollageLayoutType; label: string }[] = [
   { value: 'grid-2x2', label: '2×2 Grid' },
@@ -63,18 +66,6 @@ function removeImage(slotIndex: number) {
     props.updateCollageMetadata({ slots: updatedSlots })
   }
 }
-
-function updateSlotFit(slotIndex: number, fit: 'cover' | 'contain' | 'fill') {
-  const updatedSlots = [...props.collageMetadata.slots]
-  const slot = updatedSlots[slotIndex]
-  if (slot) {
-    updatedSlots[slotIndex] = {
-      ...slot,
-      imageFit: fit,
-    }
-    props.updateCollageMetadata({ slots: updatedSlots })
-  }
-}
 </script>
 
 <template>
@@ -91,6 +82,7 @@ function updateSlotFit(slotIndex: number, fit: 'cover' | 'contain' | 'fill') {
           <select
             class="control-glass-sm w-full"
             :value="collageMetadata.layout"
+            :disabled="disabled"
             @change="updateCollageMetadata({ layout: ($event.target as HTMLSelectElement).value as CollageLayoutType })"
           >
             <option v-for="opt in layoutOptions" :key="opt.value" :value="opt.value">
@@ -106,6 +98,7 @@ function updateSlotFit(slotIndex: number, fit: 'cover' | 'contain' | 'fill') {
             class="control-glass-sm w-full"
             placeholder="Add a title..."
             :value="collageMetadata.title ?? ''"
+            :disabled="disabled"
             @input="updateCollageMetadata({ title: ($event.target as HTMLInputElement).value || undefined })"
           />
         </div>
@@ -120,8 +113,9 @@ function updateSlotFit(slotIndex: number, fit: 'cover' | 'contain' | 'fill') {
               min="0"
               max="40"
               step="2"
-              class="flex-1 accent-primary-500 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer"
+              class="flex-1 accent-primary-500 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
               :value="collageMetadata.gap ?? 8"
+              :disabled="disabled"
               @input="updateCollageMetadata({ gap: Number(($event.target as HTMLInputElement).value) })"
             />
             <span class="text-[10px] font-mono text-white/60 w-7 text-right">{{ collageMetadata.gap ?? 8 }}</span>
@@ -135,8 +129,9 @@ function updateSlotFit(slotIndex: number, fit: 'cover' | 'contain' | 'fill') {
               min="0"
               max="60"
               step="2"
-              class="flex-1 accent-primary-500 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer"
+              class="flex-1 accent-primary-500 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
               :value="collageMetadata.padding ?? 12"
+              :disabled="disabled"
               @input="updateCollageMetadata({ padding: Number(($event.target as HTMLInputElement).value) })"
             />
             <span class="text-[10px] font-mono text-white/60 w-7 text-right">{{ collageMetadata.padding ?? 12 }}</span>
@@ -150,8 +145,9 @@ function updateSlotFit(slotIndex: number, fit: 'cover' | 'contain' | 'fill') {
       <div class="flex items-center justify-between">
         <p class="text-[11px] font-bold uppercase tracking-wider text-white/40">Frame Style</p>
         <button
-          class="text-[10px] font-medium px-2 py-0.5 rounded transition-colors"
+          class="text-[10px] font-medium px-2 py-0.5 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           :class="collageMetadata.showFrame !== false ? 'bg-primary-500/20 text-primary-400 hover:bg-primary-500/30' : 'bg-white/5 text-white/40 hover:bg-white/10'"
+          :disabled="disabled"
           @click="updateCollageMetadata({ showFrame: collageMetadata.showFrame === false })"
         >
           {{ collageMetadata.showFrame !== false ? 'Hide Frame' : 'Show Frame' }}
@@ -164,6 +160,7 @@ function updateSlotFit(slotIndex: number, fit: 'cover' | 'contain' | 'fill') {
             <label class="text-[11px] font-medium text-white/50 block">Background</label>
             <ColorPicker
               :model-value="collageMetadata.backgroundColor ?? '#ffffff'"
+              :disabled="disabled"
               @update:modelValue="(c) => updateCollageMetadata({ backgroundColor: c })"
             />
           </div>
@@ -171,6 +168,7 @@ function updateSlotFit(slotIndex: number, fit: 'cover' | 'contain' | 'fill') {
             <label class="text-[11px] font-medium text-white/50 block">Border</label>
             <ColorPicker
               :model-value="collageMetadata.borderColor ?? '#e2e8f0'"
+              :disabled="disabled"
               @update:modelValue="(c) => updateCollageMetadata({ borderColor: c })"
             />
           </div>
@@ -185,8 +183,9 @@ function updateSlotFit(slotIndex: number, fit: 'cover' | 'contain' | 'fill') {
                 min="0"
                 max="20"
                 step="1"
-                class="flex-1 accent-primary-500 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer"
+                class="flex-1 accent-primary-500 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                 :value="collageMetadata.borderWidth ?? 1"
+                :disabled="disabled"
                 @input="updateCollageMetadata({ borderWidth: Number(($event.target as HTMLInputElement).value) })"
               />
               <span class="text-[10px] font-mono text-white/60 w-7 text-right">{{ collageMetadata.borderWidth ?? 1 }}</span>
@@ -200,8 +199,9 @@ function updateSlotFit(slotIndex: number, fit: 'cover' | 'contain' | 'fill') {
                 min="0"
                 max="100"
                 step="2"
-                class="flex-1 accent-primary-500 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer"
+                class="flex-1 accent-primary-500 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                 :value="collageMetadata.cornerRadius ?? 16"
+                :disabled="disabled"
                 @input="updateCollageMetadata({ cornerRadius: Number(($event.target as HTMLInputElement).value) })"
               />
               <span class="text-[10px] font-mono text-white/60 w-7 text-right">{{ collageMetadata.cornerRadius ?? 16 }}</span>
@@ -220,6 +220,7 @@ function updateSlotFit(slotIndex: number, fit: 'cover' | 'contain' | 'fill') {
           <label class="text-[11px] font-medium text-white/50 block">Slot BG</label>
           <ColorPicker
             :model-value="collageMetadata.slotBackgroundColor ?? '#f3f4f6'"
+            :disabled="disabled"
             @update:modelValue="(c) => updateCollageMetadata({ slotBackgroundColor: c })"
           />
         </div>
@@ -227,6 +228,7 @@ function updateSlotFit(slotIndex: number, fit: 'cover' | 'contain' | 'fill') {
           <label class="text-[11px] font-medium text-white/50 block">Slot Border</label>
           <ColorPicker
             :model-value="collageMetadata.slotBorderColor ?? '#e5e7eb'"
+            :disabled="disabled"
             @update:modelValue="(c) => updateCollageMetadata({ slotBorderColor: c })"
           />
         </div>
@@ -241,8 +243,9 @@ function updateSlotFit(slotIndex: number, fit: 'cover' | 'contain' | 'fill') {
               min="0"
               max="10"
               step="1"
-              class="flex-1 accent-primary-500 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer"
+              class="flex-1 accent-primary-500 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
               :value="collageMetadata.slotBorderWidth ?? 1"
+              :disabled="disabled"
               @input="updateCollageMetadata({ slotBorderWidth: Number(($event.target as HTMLInputElement).value) })"
             />
             <span class="text-[10px] font-mono text-white/60 w-7 text-right">{{ collageMetadata.slotBorderWidth ?? 1 }}</span>
@@ -256,8 +259,9 @@ function updateSlotFit(slotIndex: number, fit: 'cover' | 'contain' | 'fill') {
               min="0"
               max="60"
               step="2"
-              class="flex-1 accent-primary-500 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer"
+              class="flex-1 accent-primary-500 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
               :value="collageMetadata.slotCornerRadius ?? 8"
+              :disabled="disabled"
               @input="updateCollageMetadata({ slotCornerRadius: Number(($event.target as HTMLInputElement).value) })"
             />
             <span class="text-[10px] font-mono text-white/60 w-7 text-right">{{ collageMetadata.slotCornerRadius ?? 8 }}</span>
@@ -276,8 +280,9 @@ function updateSlotFit(slotIndex: number, fit: 'cover' | 'contain' | 'fill') {
         <div
           v-for="(slot, idx) in collageMetadata.slots"
           :key="idx"
-          class="relative aspect-square rounded-lg border-2 border-dashed border-white/10 hover:border-primary-500/50 hover:bg-white/5 group cursor-pointer transition-all overflow-hidden"
-          @click="triggerFileInput(Number(idx))"
+          class="relative aspect-square rounded-lg border-2 border-dashed border-white/10 transition-all overflow-hidden"
+          :class="disabled ? 'cursor-not-allowed opacity-50' : 'hover:border-primary-500/50 hover:bg-white/5 group cursor-pointer'"
+          @click="!disabled && triggerFileInput(Number(idx))"
         >
           <input
             :ref="(el) => { fileInputRefs[Number(idx)] = el as HTMLInputElement }"

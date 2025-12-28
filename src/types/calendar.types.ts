@@ -9,6 +9,7 @@ export interface CalendarConfig {
   showCustomHolidays: boolean
   showWeekNumbers: boolean
   currentMonth?: number // For monthly view navigation
+  showWatermark?: boolean
   templateOptions?: TemplateOptions
 }
 

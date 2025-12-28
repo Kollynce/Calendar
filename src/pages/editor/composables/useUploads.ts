@@ -316,7 +316,11 @@ export function useUploads() {
     }
 
     try {
-      await deleteUserAsset(userId, { id: asset.id, storagePath: asset.storagePath })
+      await deleteUserAsset(userId, { 
+        id: asset.id, 
+        storagePath: asset.storagePath,
+        size: asset.size
+      })
       userUploads.value = userUploads.value.filter((item) => item.storagePath !== asset.storagePath)
     } catch (error: any) {
       console.error('Failed to delete upload', error)

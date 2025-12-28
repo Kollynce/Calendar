@@ -13,6 +13,7 @@ export interface CalendarTemplate {
   presetId?: 'daily-pastel' | 'daily-minimal'
   rating?: number
   popular?: boolean
+  requiredTier?: 'pro' | 'business'
 }
 
 export type TemplateCategory = 
@@ -381,6 +382,7 @@ const templateDefinitions: TemplateDefinition[] = [
     category: 'planner',
     popular: true,
     rating: 4.9,
+    requiredTier: 'pro',
     preview: {
       hasPhotoArea: false,
       hasNotesArea: true,
@@ -411,6 +413,7 @@ const templateDefinitions: TemplateDefinition[] = [
     description: 'Calendar with notes area for habit tracking',
     category: 'planner',
     rating: 4.8,
+    requiredTier: 'pro',
     preview: {
       hasPhotoArea: false,
       hasNotesArea: true,

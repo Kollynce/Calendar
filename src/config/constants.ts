@@ -7,6 +7,15 @@ export const TIER_LIMITS: Record<SubscriptionTier, {
   exportDpi: number
   brandKits: number
   watermark: boolean
+  storageLimit: number // in bytes
+  canUsePremiumTemplates: boolean
+  canExportPDF: boolean
+  canExportSVG: boolean
+  canExportTIFF: boolean
+  canUseTeamCollaboration: boolean
+  canUseAPI: boolean
+  canUseWhiteLabel: boolean
+  canUseAnalytics: boolean
 }> = {
   free: {
     projects: 3,
@@ -14,6 +23,15 @@ export const TIER_LIMITS: Record<SubscriptionTier, {
     exportDpi: 72,
     brandKits: 0,
     watermark: true,
+    storageLimit: 50 * 1024 * 1024, // 50MB
+    canUsePremiumTemplates: false,
+    canExportPDF: false,
+    canExportSVG: false,
+    canExportTIFF: false,
+    canUseTeamCollaboration: false,
+    canUseAPI: false,
+    canUseWhiteLabel: false,
+    canUseAnalytics: false,
   },
   pro: {
     projects: Infinity,
@@ -21,13 +39,31 @@ export const TIER_LIMITS: Record<SubscriptionTier, {
     exportDpi: 300,
     brandKits: 1,
     watermark: false,
+    storageLimit: 1024 * 1024 * 1024, // 1GB
+    canUsePremiumTemplates: true,
+    canExportPDF: true,
+    canExportSVG: true,
+    canExportTIFF: false,
+    canUseTeamCollaboration: false,
+    canUseAPI: false,
+    canUseWhiteLabel: false,
+    canUseAnalytics: false,
   },
   business: {
     projects: Infinity,
     customHolidays: Infinity,
     exportDpi: 300,
-    brandKits: 5,
+    brandKits: Infinity,
     watermark: false,
+    storageLimit: 5 * 1024 * 1024 * 1024, // 5GB
+    canUsePremiumTemplates: true,
+    canExportPDF: true,
+    canExportSVG: true,
+    canExportTIFF: true,
+    canUseTeamCollaboration: true,
+    canUseAPI: true,
+    canUseWhiteLabel: true,
+    canUseAnalytics: true,
   },
   enterprise: {
     projects: Infinity,
@@ -35,6 +71,15 @@ export const TIER_LIMITS: Record<SubscriptionTier, {
     exportDpi: 300,
     brandKits: Infinity,
     watermark: false,
+    storageLimit: 5 * 1024 * 1024 * 1024, // 5GB
+    canUsePremiumTemplates: true,
+    canExportPDF: true,
+    canExportSVG: true,
+    canExportTIFF: true,
+    canUseTeamCollaboration: true,
+    canUseAPI: true,
+    canUseWhiteLabel: true,
+    canUseAnalytics: true,
   },
 }
 

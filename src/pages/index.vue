@@ -2,6 +2,7 @@
 import { RouterLink } from 'vue-router'
 import { useAuthStore } from '@/stores'
 import AppNavbar from '@/components/layout/AppNavbar.vue'
+import PricingSection from '@/components/marketing/PricingSection.vue'
 import { 
   CalendarDaysIcon, 
   SwatchIcon, 
@@ -15,40 +16,58 @@ const authStore = useAuthStore()
 
 const features = [
   {
-    name: 'African Holidays',
-    description: 'Built-in holiday data for all 54 African countries with local language support.',
+    name: 'Regional Calendars',
+    description: 'Precision engineered holiday data for all 54 African countries with local language support.',
     icon: GlobeAltIcon,
-    color: 'bg-blue-100 text-blue-600'
+    color: 'text-blue-600',
+    glowColor: 'bg-blue-500',
+    bgColor: 'bg-blue-500/10',
+    visual: 'grid'
   },
   {
-    name: 'Design Studio',
-    description: 'Powerful canvas editor with drag-and-drop, layers, and professional design tools.',
+    name: 'Advanced Studio',
+    description: 'A professional-grade canvas environment with drag-and-drop, layers, and refined design tools.',
     icon: SwatchIcon,
-    color: 'bg-purple-100 text-purple-600'
+    color: 'text-purple-600',
+    glowColor: 'bg-purple-500',
+    bgColor: 'bg-purple-500/10',
+    visual: 'canvas'
   },
   {
-    name: 'Print-Ready Export',
-    description: 'Export in PDF, PNG, or SVG with bleed marks and crop marks (CMYK available).',
+    name: 'Enterprise Export',
+    description: 'Lossless export in PDF, PNG, or SVG with bleed marks, crop marks, and CMYK profiles.',
     icon: ArrowDownTrayIcon,
-    color: 'bg-green-100 text-green-600'
+    color: 'text-green-600',
+    glowColor: 'bg-green-500',
+    bgColor: 'bg-green-500/10',
+    visual: 'export'
   },
   {
     name: 'Smart Templates',
-    description: 'Start with professionally designed templates for Business, Family, or Schools.',
+    description: 'Start with 200+ professionally designed templates for Business, Education, or Artistic projects.',
     icon: SparklesIcon,
-    color: 'bg-pink-100 text-pink-600'
+    color: 'text-pink-600',
+    glowColor: 'bg-pink-500',
+    bgColor: 'bg-pink-500/10',
+    visual: 'templates'
   },
   {
-    name: 'Device Friendly',
-    description: 'Design on the go with our fully responsive interface for tablets and desktops.',
+    name: 'Cross-Device UX',
+    description: 'A fully responsive interface that adapts flawlessly to high-res tablets and desktops.',
     icon: DevicePhoneMobileIcon,
-    color: 'bg-orange-100 text-orange-600'
+    color: 'text-orange-600',
+    glowColor: 'bg-orange-500',
+    bgColor: 'bg-orange-500/10',
+    visual: 'responsive'
   },
   {
-    name: 'Batch Processing',
-    description: 'Generate hundreds of personalized calendars in seconds (Business Plan).',
+    name: 'High-Volume Batch',
+    description: 'Automate the generation of hundreds of personalized calendars in seconds.',
     icon: CalendarDaysIcon,
-    color: 'bg-indigo-100 text-indigo-600'
+    color: 'text-indigo-600',
+    glowColor: 'bg-indigo-500',
+    bgColor: 'bg-indigo-500/10',
+    visual: 'batch'
   }
 ]
 </script>
@@ -58,44 +77,49 @@ const features = [
     <AppNavbar />
 
     <!-- Hero Section -->
-    <div class="relative pt-32 pb-20 sm:pt-40 sm:pb-24 overflow-hidden">
-      <!-- Background Mesh -->
-      <div class="absolute inset-0 -z-10 bg-[radial-gradient(45rem_50rem_at_top,theme(colors.indigo.100),white)] dark:bg-[radial-gradient(45rem_50rem_at_top,theme(colors.indigo.900),theme(colors.gray.950))] opacity-50"></div>
+    <div class="relative pt-32 pb-20 sm:pt-40 sm:pb-32 overflow-hidden">
+      <!-- High-End Background Architecture -->
+      <div class="absolute inset-0 pointer-events-none overflow-hidden">
+        <div class="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 dark:opacity-40 mix-blend-overlay"></div>
+        <div class="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-size-[40px_40px] mask-[radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] opacity-20"></div>
+        <div class="absolute inset-0 -z-10 bg-[radial-gradient(45rem_50rem_at_top,var(--color-indigo-100),white)] dark:bg-[radial-gradient(45rem_50rem_at_top,var(--color-indigo-900),var(--color-gray-950))] opacity-50"></div>
+      </div>
       
-      <div class="mx-auto max-w-7xl px-6 lg:px-8 relative">
-        <div class="mx-auto max-w-2xl text-center">
-          <div class="mb-8 flex justify-center animate-fade-in-up" style="animation-delay: 0.1s">
-            <span class="rounded-full bg-primary-50 px-3 py-1 text-sm font-semibold text-primary-600 ring-1 ring-inset ring-primary-500/20 dark:bg-primary-900/10 dark:text-primary-400">
-              New: 2025 Templates Available
-            </span>
+      <div class="mx-auto max-w-7xl px-6 lg:px-8 relative z-10">
+        <div class="mx-auto max-w-4xl text-center">
+          <div class="mb-12 flex justify-center animate-fade-in-up" style="animation-delay: 0.1s">
+            <div class="inline-flex items-center gap-2 rounded-full bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border border-gray-200 dark:border-gray-800 shadow-xl px-4 py-1.5 text-sm font-display font-black text-primary-600 dark:text-primary-400 uppercase tracking-[0.3em]">
+              <SparklesIcon class="w-4 h-4" />
+              Next-Gen Design Platform
+            </div>
           </div>
-          <h1 class="text-4xl font-display font-bold tracking-tight text-gray-900 dark:text-white sm:text-6xl animate-fade-in-up" style="animation-delay: 0.2s">
-            Create Beautiful
-            <span class="text-transparent bg-clip-text bg-linear-to-r from-primary-500 to-accent-500">Calendars</span>
-            in Minutes
+          <h1 class="text-7xl lg:text-9xl font-display font-black tracking-tighter text-gray-900 dark:text-white leading-[0.85] mb-12 animate-fade-in-up" style="animation-delay: 0.2s">
+            Design <span class="text-transparent bg-clip-text bg-linear-to-r from-primary-500 via-blue-500 to-indigo-600">Masterpieces</span> <br/>
+            In Minutes.
           </h1>
-          <p class="mt-6 text-lg leading-8 text-gray-600 dark:text-gray-300 animate-fade-in-up" style="animation-delay: 0.3s">
-            The professional design platform for creators and print shops. 
-            Customize layouts, manage holidays, and export print-ready files with ease.
+          <p class="mt-10 text-xl lg:text-3xl leading-relaxed text-gray-600 dark:text-gray-300 animate-fade-in-up max-w-3xl mx-auto font-medium" style="animation-delay: 0.3s">
+            Stop starting from zero. Access a professionally curated ecosystem engineered for absolute clarity and class.
           </p>
-          <div class="mt-10 flex items-center justify-center gap-x-6 animate-fade-in-up" style="animation-delay: 0.4s">
+          <div class="mt-16 flex flex-col sm:flex-row items-center justify-center gap-8 animate-fade-in-up" style="animation-delay: 0.4s">
             <RouterLink
               v-if="authStore.isAuthenticated"
               to="/dashboard"
-              class="btn-primary"
+              class="group relative inline-flex items-center justify-center px-10 py-5 font-black uppercase tracking-widest text-white bg-gray-900 dark:bg-white dark:text-gray-900 rounded-3xl overflow-hidden transition-all duration-500 shadow-2xl hover:scale-105"
             >
-              Go to Dashboard
+              <span class="relative z-10">Go to Dashboard</span>
+              <div class="absolute inset-0 bg-linear-to-r from-primary-600 to-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
             </RouterLink>
             <template v-else>
               <RouterLink
                 to="/auth/register"
-                class="btn-primary"
+                class="group relative inline-flex items-center justify-center px-10 py-5 font-black uppercase tracking-widest text-white bg-primary-600 rounded-3xl overflow-hidden transition-all duration-500 shadow-2xl shadow-primary-500/25 hover:scale-105"
               >
-                Get Started Free
+                <span class="relative z-10">Get Started Free</span>
+                <div class="absolute inset-0 bg-linear-to-r from-primary-500 to-blue-600 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
               </RouterLink>
               <RouterLink
                 to="/auth/login"
-                class="text-sm font-semibold leading-6 text-gray-900 dark:text-white hover:text-primary-500 transition-colors"
+                class="text-sm font-display font-black uppercase tracking-widest text-gray-900 dark:text-white hover:text-primary-500 transition-all border-b-2 border-transparent hover:border-primary-500 pb-1"
               >
                 Sign In <span aria-hidden="true">→</span>
               </RouterLink>
@@ -104,67 +128,281 @@ const features = [
         </div>
         
         <!-- Hero Image Mockup -->
-        <div class="mt-16 flow-root sm:mt-24 animate-fade-in-up" style="animation-delay: 0.6s">
-          <div class="-m-2 rounded-xl bg-gray-900/5 p-2 ring-1 ring-inset ring-gray-900/10 dark:bg-white/5 dark:ring-white/10 lg:-m-4 lg:rounded-2xl lg:p-4">
-            <div class="aspect-video rounded-md bg-gray-200 dark:bg-gray-800 shadow-2xl flex items-center justify-center text-gray-400">
-              <!-- Placeholder for App Screenshot -->
-              <span class="text-lg font-medium">App Screenshot Playground</span>
+        <div class="mt-24 flow-root sm:mt-32 animate-fade-in-up" style="animation-delay: 0.6s">
+          <div class="relative group">
+            <div class="absolute -inset-1 bg-linear-to-r from-primary-500 to-blue-600 rounded-[3rem] blur opacity-25 group-hover:opacity-40 transition duration-1000"></div>
+            <div class="relative -m-2 rounded-[3rem] bg-white/40 dark:bg-gray-900/40 backdrop-blur-2xl p-4 ring-1 ring-inset ring-gray-900/10 dark:ring-white/10 lg:-m-4 shadow-2xl overflow-hidden border border-white/20 dark:border-white/5">
+              <div class="aspect-video rounded-4xl bg-white dark:bg-gray-950 flex shadow-inner border border-gray-100 dark:border-gray-800 overflow-hidden relative">
+                <!-- Mini Editor Sidebar -->
+                <div class="w-16 h-full border-r border-gray-100 dark:border-gray-800 flex flex-col items-center py-4 gap-4 bg-gray-50/50 dark:bg-white/5">
+                  <div v-for="i in 4" :key="i" class="w-8 h-8 rounded-lg bg-gray-200 dark:bg-gray-800 animate-pulse" :style="{ animationDelay: `${i * 0.2}s` }"></div>
+                </div>
+                <!-- Mini Editor Canvas -->
+                <div class="flex-1 p-8 relative">
+                  <div class="w-full h-full border-2 border-dashed border-gray-200 dark:border-gray-800 rounded-2xl flex items-center justify-center relative">
+                    <!-- Floating Calendar Elements -->
+                    <div class="w-48 h-64 bg-white dark:bg-gray-900 rounded-xl shadow-2xl border border-gray-100 dark:border-gray-800 p-4 -rotate-6 group-hover:rotate-0 transition-transform duration-700 flex flex-col gap-2">
+                      <div class="h-4 w-2/3 bg-primary-500/20 rounded"></div>
+                      <div class="grid grid-cols-7 gap-1 mt-4">
+                        <div v-for="i in 28" :key="i" class="h-3 rounded-[2px] bg-gray-100 dark:bg-gray-800"></div>
+                      </div>
+                    </div>
+                    <!-- Interaction Overlays -->
+                    <div class="absolute top-10 right-10 w-32 h-12 bg-primary-600 rounded-full shadow-2xl flex items-center justify-center text-[10px] font-black text-white uppercase tracking-widest translate-x-4 translate-y-[-20px]">
+                      Editing Mode
+                    </div>
+                  </div>
+                </div>
+                <!-- Mini Layers Panel -->
+                <div class="hidden md:flex w-24 h-full border-l border-gray-100 dark:border-gray-800 flex-col p-4 gap-2 bg-gray-50/50 dark:bg-white/5">
+                  <div v-for="i in 3" :key="i" class="h-2 w-full bg-gray-200 dark:bg-gray-800 rounded-full"></div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Features Grid -->
-    <div class="py-24 sm:py-32 bg-white dark:bg-gray-900" id="features">
-      <div class="mx-auto max-w-7xl px-6 lg:px-8">
-        <div class="mx-auto max-w-2xl text-center">
-          <h2 class="text-base font-semibold leading-7 text-primary-600">Everything you need</h2>
-          <p class="mt-2 text-3xl font-display font-bold tracking-tight text-gray-900 dark:text-white sm:text-4xl">
-            Professional tools for everyone
-          </p>
-          <p class="mt-6 text-lg leading-8 text-gray-600 dark:text-gray-400">
-            Whether you're a hobbyist or a print shop owner, we have the features to streamline your workflow.
-          </p>
-        </div>
-        <div class="mx-auto mt-16 max-w-2xl sm:mt-20 lg:mt-24 lg:max-w-none">
-          <dl class="grid max-w-xl grid-cols-1 gap-x-8 gap-y-16 lg:max-w-none lg:grid-cols-3">
-            <div v-for="feature in features" :key="feature.name" class="flex flex-col">
-              <dt class="flex items-center gap-x-3 text-base font-semibold leading-7 text-gray-900 dark:text-white">
-                <div :class="['h-10 w-10 flex items-center justify-center rounded-lg', feature.color.replace('text-', 'bg-').replace('100', '500/10')]">
-                  <component :is="feature.icon" class="h-6 w-6" :class="feature.color" aria-hidden="true" />
-                </div>
-                {{ feature.name }}
-              </dt>
-              <dd class="mt-4 flex flex-auto flex-col text-base leading-7 text-gray-600 dark:text-gray-400">
-                <p class="flex-auto">{{ feature.description }}</p>
-              </dd>
-            </div>
-          </dl>
+    <!-- Social Proof Section -->
+    <div class="bg-white dark:bg-gray-950 py-12 border-y border-gray-100 dark:border-gray-900 relative overflow-hidden">
+      <div class="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10 mix-blend-overlay pointer-events-none"></div>
+      <div class="mx-auto max-w-7xl px-6 lg:px-8 relative z-10">
+        <p class="text-center text-xs font-display font-black uppercase tracking-[0.4em] text-gray-400 mb-10">Trusted by the next generation of creators</p>
+        <div class="flex flex-wrap justify-center items-center gap-x-16 gap-y-10 opacity-30 grayscale hover:opacity-60 transition-all duration-700">
+          <div class="flex items-center gap-2 font-display font-black text-2xl tracking-tighter italic">
+            <div class="w-8 h-8 bg-gray-400 rounded-lg shadow-sm"></div> GRAPHIX
+          </div>
+          <div class="flex items-center gap-2 font-display font-black text-2xl tracking-tighter">
+            <div class="w-8 h-8 bg-gray-400 rounded-full shadow-sm"></div> PRINTLY
+          </div>
+          <div class="flex items-center gap-2 font-display font-black text-2xl tracking-tighter">
+            <div class="w-8 h-8 bg-gray-400 rotate-45 shadow-sm"></div> STUDIO.
+          </div>
+          <div class="flex items-center gap-2 font-display font-black text-2xl tracking-tighter underline decoration-4 underline-offset-4 decoration-gray-400/30">
+            MEDIA.CO
+          </div>
+          <div class="flex items-center gap-2 font-display font-black text-2xl tracking-tighter">
+            <div class="w-8 h-8 bg-gray-400 rounded-tr-2xl rounded-bl-2xl shadow-sm"></div> CREATIVE
+          </div>
         </div>
       </div>
     </div>
 
+    <!-- Features Grid -->
+    <div class="py-24 sm:py-32 bg-white dark:bg-gray-950 relative overflow-hidden" id="features">
+      <!-- High-End Background Architecture -->
+      <div class="absolute inset-0 pointer-events-none overflow-hidden">
+        <!-- Modern Grid Pattern -->
+        <div class="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 dark:opacity-40 mix-blend-overlay"></div>
+        <div class="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-size-[40px_40px] mask-[radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] opacity-20"></div>
+        
+        <!-- Large Mesh Glows -->
+        <div class="absolute -top-[10%] left-1/2 -translate-x-1/2 w-[1200px] h-[800px] bg-linear-to-b from-primary-500/20 to-transparent blur-[140px] rounded-full opacity-40"></div>
+        <div class="absolute top-[40%] -left-[15%] w-[600px] h-[600px] bg-blue-500/10 blur-[120px] rounded-full animate-pulse"></div>
+        <div class="absolute bottom-[5%] -right-[15%] w-[700px] h-[700px] bg-primary-500/10 blur-[120px] rounded-full"></div>
+      </div>
+
+      <div class="mx-auto max-w-7xl px-6 lg:px-8 relative z-10">
+        <div class="mx-auto max-w-3xl text-center mb-20 lg:mb-32">
+          <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border border-gray-200 dark:border-gray-800 shadow-xl text-[10px] font-black uppercase tracking-[0.3em] text-primary-600 dark:text-primary-400 mb-10 animate-fade-in-up">
+            <SparklesIcon class="w-3.5 h-3.5" />
+            Product Ecosystem
+          </div>
+          <h2 class="text-7xl font-display font-black tracking-tighter text-gray-900 dark:text-white leading-[0.95] mb-10 animate-fade-in-up" style="animation-delay: 0.1s">
+            Precision tools for <br/>
+            <span class="text-transparent bg-clip-text bg-linear-to-r from-primary-500 via-blue-500 to-indigo-600">the modern creator.</span>
+          </h2>
+          <p class="text-xl lg:text-2xl leading-relaxed text-gray-500 dark:text-gray-400 max-w-2xl mx-auto animate-fade-in-up font-medium" style="animation-delay: 0.2s">
+            Engineered from the ground up to handle everything from individual projects to commercial print workflows.
+          </p>
+        </div>
+
+        <div class="mx-auto mt-16 lg:mt-24 lg:max-w-none">
+          <div class="grid grid-cols-1 gap-8 sm:gap-10 lg:grid-cols-3">
+            <div 
+              v-for="(feature, index) in features" 
+              :key="feature.name" 
+              class="group relative flex flex-col bg-white/40 dark:bg-gray-900/40 backdrop-blur-2xl p-12 rounded-[3.5rem] border border-white/20 dark:border-white/5 shadow-2xl hover:shadow-primary-500/20 transition-all duration-700 hover:-translate-y-3 animate-fade-in-up"
+              :style="{ animationDelay: `${0.3 + index * 0.1}s` }"
+            >
+              <!-- Interactive Border Glow -->
+              <div class="absolute inset-px rounded-[3.5rem] bg-linear-to-br from-primary-500/20 via-transparent to-blue-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none"></div>
+              
+              <div class="relative z-10 flex flex-col h-full">
+                <!-- Feature Visualization Area -->
+                <div class="relative mb-10 w-full aspect-video rounded-3xl bg-gray-50/50 dark:bg-gray-800/50 overflow-hidden border border-gray-100 dark:border-gray-800 transition-all duration-700 group-hover:scale-[1.02]">
+                  <!-- Visualization content based on feature.visual -->
+                  <div class="absolute inset-0 flex items-center justify-center pointer-events-none select-none">
+                    <div v-if="feature.visual === 'grid'" class="w-full h-full p-6 relative overflow-hidden flex items-center justify-center">
+                      <div class="grid grid-cols-7 gap-1.5 w-full opacity-20 group-hover:opacity-40 transition-opacity duration-700">
+                        <div v-for="i in 35" :key="i" class="aspect-square rounded-md border border-blue-500/30 flex items-center justify-center text-[7px] font-black text-blue-500/50">
+                          {{ i > 31 ? '' : i }}
+                        </div>
+                      </div>
+                      <!-- High-fidelity holiday pulse -->
+                      <div class="absolute top-1/3 left-1/4 w-12 h-12 bg-blue-500/20 rounded-full blur-xl animate-pulse"></div>
+                      <div class="absolute top-1/3 left-1/4 -translate-x-1/2 -translate-y-1/2 bg-blue-600 px-2 py-0.5 rounded shadow-2xl text-[8px] font-black text-white -rotate-6 group-hover:rotate-0 transition-transform duration-700">
+                        HOLIDAY
+                      </div>
+                    </div>
+
+                    <!-- Advanced Studio Visual -->
+                    <div v-if="feature.visual === 'canvas'" class="relative w-full h-full p-6 flex flex-col gap-3">
+                      <div class="flex items-center justify-between opacity-40">
+                        <div class="flex gap-1.5">
+                          <div class="w-2.5 h-2.5 rounded-full bg-purple-500"></div>
+                          <div class="w-2.5 h-2.5 rounded-full bg-amber-500"></div>
+                        </div>
+                        <div class="w-16 h-2 bg-gray-200 dark:bg-gray-700 rounded-full"></div>
+                      </div>
+                      <div class="flex-1 rounded-2xl border-2 border-dashed border-purple-500/20 flex items-center justify-center relative bg-white/5 dark:bg-black/20">
+                        <div class="w-16 h-16 rounded-2xl bg-linear-to-br from-purple-500/20 to-blue-500/20 border border-purple-500/30 animate-spin-slow shadow-2xl"></div>
+                        <!-- Mini Toolbar -->
+                        <div class="absolute bottom-2 left-2 right-2 h-6 flex gap-1 justify-center">
+                          <div v-for="i in 4" :key="i" class="w-4 h-full bg-gray-100 dark:bg-gray-800 rounded border border-gray-200/50 dark:border-gray-700/50"></div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Enterprise Export Visual -->
+                    <div v-if="feature.visual === 'export'" class="flex flex-col gap-6 items-center justify-center w-full h-full">
+                      <div class="relative w-20 h-24 bg-white dark:bg-gray-900 border-2 border-green-500/30 rounded-xl flex items-center justify-center shadow-2xl overflow-hidden group-hover:border-green-500/50 transition-colors">
+                        <div class="absolute inset-0 bg-linear-to-b from-green-500/[0.05] to-transparent"></div>
+                        <ArrowDownTrayIcon class="w-10 h-10 text-green-500/40 animate-bounce" />
+                        <!-- Crop/Bleed markers -->
+                        <div class="absolute top-2 left-2 w-3 h-3 border-t border-l border-green-500/40"></div>
+                        <div class="absolute top-2 right-2 w-3 h-3 border-t border-r border-green-500/40"></div>
+                        <div class="absolute bottom-2 left-2 w-3 h-3 border-b border-l border-green-500/40"></div>
+                        <div class="absolute bottom-2 right-2 w-3 h-3 border-b border-r border-green-500/40"></div>
+                      </div>
+                      <div class="flex gap-2">
+                        <div class="px-3 py-1 rounded-lg bg-green-500/10 border border-green-500/20 text-[10px] font-black text-green-600 tracking-tighter">PDF / X-1a</div>
+                      </div>
+                    </div>
+
+                    <!-- Smart Templates Visual -->
+                    <div v-if="feature.visual === 'templates'" class="flex gap-4 -rotate-12 scale-110 opacity-30">
+                      <div class="w-20 h-28 bg-pink-500/10 border border-pink-500/30 rounded-xl overflow-hidden flex flex-col">
+                        <div class="h-1/3 bg-pink-500/20"></div>
+                        <div class="p-2 space-y-1">
+                          <div class="h-1 w-full bg-pink-500/20 rounded"></div>
+                          <div class="h-1 w-[60%] bg-pink-500/20 rounded"></div>
+                        </div>
+                      </div>
+                      <div class="w-20 h-28 bg-pink-500/10 border border-pink-500/30 rounded-xl translate-y-6 overflow-hidden flex flex-col shadow-2xl">
+                        <div class="h-1/3 bg-pink-500/30"></div>
+                        <div class="p-2 space-y-1">
+                          <div class="h-1 w-full bg-pink-500/30 rounded"></div>
+                          <div class="h-1 w-full bg-pink-500/30 rounded"></div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Cross-Device UX Visual -->
+                    <div v-if="feature.visual === 'responsive'" class="relative w-full h-full flex items-center justify-center">
+                      <!-- Desktop Mockup -->
+                      <div class="w-40 h-24 bg-orange-500/5 border border-orange-500/20 rounded-xl relative shadow-2xl overflow-hidden flex flex-col p-2 group-hover:scale-105 transition-transform duration-700">
+                        <div class="flex items-center gap-1 mb-2 opacity-20">
+                          <div class="w-1 h-1 rounded-full bg-orange-500"></div>
+                          <div class="w-1 h-1 rounded-full bg-orange-500"></div>
+                        </div>
+                        <div class="h-1.5 w-full bg-orange-500/10 rounded mb-1.5"></div>
+                        <div class="grid grid-cols-3 gap-1 flex-1">
+                          <div v-for="i in 3" :key="i" class="bg-orange-500/10 rounded-sm"></div>
+                        </div>
+                      </div>
+                      <!-- Mobile Mockup -->
+                      <div class="absolute bottom-4 right-10 w-12 h-20 bg-white dark:bg-gray-900 border-2 border-orange-500/40 rounded-xl shadow-2xl p-1.5 flex flex-col gap-1 transition-all duration-700 group-hover:translate-x-2 group-hover:-rotate-3">
+                        <div class="w-4 h-0.5 bg-gray-200 dark:bg-gray-800 rounded-full mx-auto mb-1"></div>
+                        <div class="h-2 w-full bg-orange-500/20 rounded-sm"></div>
+                        <div class="flex-1 bg-orange-500/5 rounded-sm border border-orange-500/10"></div>
+                      </div>
+                    </div>
+
+                    <!-- High-Volume Batch Visual -->
+                    <div v-if="feature.visual === 'batch'" class="flex items-center justify-center w-full h-full relative">
+                      <div class="relative w-32 h-32 flex items-center justify-center">
+                        <div v-for="i in 4" :key="i" class="absolute w-24 h-24 bg-white dark:bg-gray-900 border border-indigo-500/20 rounded-2xl shadow-xl transition-all duration-700" 
+                          :style="{ 
+                            transform: `translate(${i*6}px, ${-i*6}px) rotate(${i*2}deg)`,
+                            opacity: 1 - (i*0.2),
+                            zIndex: 10 - i
+                          }">
+                          <div class="p-3 space-y-2">
+                            <div class="h-2 w-2/3 bg-indigo-500/10 rounded"></div>
+                            <div class="grid grid-cols-4 gap-1">
+                              <div v-for="j in 8" :key="j" class="h-1.5 rounded-[1px] bg-gray-100 dark:bg-gray-800"></div>
+                            </div>
+                          </div>
+                        </div>
+                        <!-- Top Processing Card -->
+                        <div class="absolute w-24 h-24 bg-indigo-600 rounded-2xl shadow-2xl flex items-center justify-center z-20 group-hover:scale-110 transition-transform duration-700">
+                          <SparklesIcon class="w-10 h-10 text-white animate-pulse" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <!-- Floating Icon Overlay -->
+                  <div class="absolute bottom-4 left-4">
+                    <div :class="['h-14 w-14 flex items-center justify-center rounded-2xl shadow-2xl transition-all duration-700 group-hover:scale-110 group-hover:rotate-6', feature.bgColor]">
+                      <component :is="feature.icon" class="h-7 w-7" :class="feature.color" aria-hidden="true" />
+                    </div>
+                  </div>
+                </div>
+                
+                <dt class="text-3xl font-display font-black text-gray-900 dark:text-white tracking-tight mb-4 group-hover:text-primary-600 transition-colors duration-500">
+                  {{ feature.name }}
+                </dt>
+                
+                <dd class="text-lg leading-relaxed text-gray-500 dark:text-gray-400 mb-12 flex-1 font-medium">
+                  {{ feature.description }}
+                </dd>
+
+                <!-- Premium Action Area -->
+                <div class="mt-auto group/action flex items-center justify-between">
+                  <span class="text-[11px] font-black uppercase tracking-[0.25em] text-primary-600 dark:text-primary-400">
+                    System Capability
+                  </span>
+                  <div class="w-12 h-12 rounded-full bg-gray-900 dark:bg-white flex items-center justify-center group-hover/action:scale-110 group-hover/action:bg-primary-500 transition-all duration-500">
+                    <svg class="w-5 h-5 text-white dark:text-gray-900 group-hover/action:translate-x-1 transition-transform duration-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pricing Section -->
+    <PricingSection />
+
     <!-- CTA Section -->
-    <div class="relative isolate mt-32 px-6 py-32 sm:mt-56 sm:py-40 lg:px-8 bg-gray-900 text-center overflow-hidden">
-      <!-- Gradient effects -->
-      <div class="absolute inset-0 -z-10 transform-gpu bg-[radial-gradient(45rem_50rem_at_top,theme(colors.indigo.800),theme(colors.gray.900))] opacity-20 filter blur-3xl"></div>
+    <div class="relative isolate mt-32 px-6 py-32 sm:mt-56 sm:py-40 lg:px-8 bg-gray-900 dark:bg-black text-center overflow-hidden">
+      <!-- Sophisticated Gradient effects -->
+      <div class="absolute inset-0 -z-10 transform-gpu bg-[radial-gradient(45rem_50rem_at_top,var(--color-indigo-800),var(--color-gray-900))] opacity-30 filter blur-3xl animate-pulse"></div>
+      <div class="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay"></div>
       
       <div class="mx-auto max-w-2xl text-center z-10 relative">
-        <h2 class="text-3xl font-display font-bold tracking-tight text-white sm:text-4xl">
-          Ready to start designing?
+        <h2 class="text-5xl lg:text-7xl font-display font-black tracking-tighter text-white leading-tight mb-8">
+          Ready to start <br/>
+          <span class="text-transparent bg-clip-text bg-linear-to-r from-primary-400 via-blue-400 to-indigo-400">designing?</span>
         </h2>
-        <p class="mx-auto mt-6 max-w-xl text-lg leading-8 text-gray-300">
-          Join thousands of creators and print shops using Calendar Creator today.
+        <p class="mx-auto mt-8 max-w-xl text-xl leading-relaxed text-gray-300 font-medium">
+          Join 10,000+ creators and print shops building their future with CalendarCreator today.
         </p>
-        <div class="mt-10 flex items-center justify-center gap-x-6">
+        <div class="mt-12 flex items-center justify-center gap-x-8">
           <RouterLink
             to="/auth/register"
-            class="rounded-md bg-white px-3.5 py-2.5 text-sm font-semibold text-gray-900 shadow-sm hover:bg-gray-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+            class="rounded-2xl bg-white px-8 py-4 text-base font-black uppercase tracking-widest text-gray-900 shadow-2xl hover:bg-gray-100 transition-all hover:scale-105"
           >
             Get started for free
           </RouterLink>
-          <RouterLink to="/features" class="text-sm font-semibold leading-6 text-white">
+          <RouterLink to="/#features" class="text-sm font-display font-black uppercase tracking-widest text-white hover:text-primary-400 transition-colors border-b-2 border-transparent hover:border-primary-400 pb-1">
             Learn more <span aria-hidden="true">→</span>
           </RouterLink>
         </div>
@@ -177,33 +415,39 @@ const features = [
       <div class="mx-auto max-w-7xl px-6 py-12 lg:px-8 lg:py-16">
         <div class="grid grid-cols-2 gap-8 md:grid-cols-4">
             <div>
-              <h3 class="text-sm font-semibold leading-6 text-gray-900 dark:text-white">Product</h3>
+              <h3 class="text-sm font-display font-black leading-6 text-gray-900 dark:text-white uppercase tracking-widest">Product</h3>
               <ul role="list" class="mt-6 space-y-4">
-                <li><a href="#" class="text-sm leading-6 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white">Features</a></li>
-                <li><a href="#" class="text-sm leading-6 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white">Templates</a></li>
-                <li><a href="#" class="text-sm leading-6 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white">Pricing</a></li>
+                <li><a href="#features" class="text-sm leading-6 text-gray-600 hover:text-primary-600 dark:text-gray-400 dark:hover:text-white transition-colors font-medium">Features</a></li>
+                <li><router-link to="/marketplace" class="text-sm leading-6 text-gray-600 hover:text-primary-600 dark:text-gray-400 dark:hover:text-white transition-colors font-medium">Marketplace</router-link></li>
+                <li><a href="#pricing" class="text-sm leading-6 text-gray-600 hover:text-primary-600 dark:text-gray-400 dark:hover:text-white transition-colors font-medium">Pricing</a></li>
               </ul>
             </div>
             <div>
-              <h3 class="text-sm font-semibold leading-6 text-gray-900 dark:text-white">Company</h3>
+              <h3 class="text-sm font-display font-black leading-6 text-gray-900 dark:text-white uppercase tracking-widest">Company</h3>
               <ul role="list" class="mt-6 space-y-4">
-                <li><a href="#" class="text-sm leading-6 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white">About</a></li>
-                <li><a href="#" class="text-sm leading-6 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white">Blog</a></li>
-                <li><a href="#" class="text-sm leading-6 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white">Careers</a></li>
+                <li><router-link to="/help" class="text-sm leading-6 text-gray-600 hover:text-primary-600 dark:text-gray-400 dark:hover:text-white transition-colors font-medium">About</router-link></li>
+                <li><router-link to="/help" class="text-sm leading-6 text-gray-600 hover:text-primary-600 dark:text-gray-400 dark:hover:text-white transition-colors font-medium">Blog</router-link></li>
+                <li><router-link to="/help" class="text-sm leading-6 text-gray-600 hover:text-primary-600 dark:text-gray-400 dark:hover:text-white transition-colors font-medium">Careers</router-link></li>
               </ul>
             </div>
              <div>
-              <h3 class="text-sm font-semibold leading-6 text-gray-900 dark:text-white">Legal</h3>
+              <h3 class="text-sm font-display font-black leading-6 text-gray-900 dark:text-white uppercase tracking-widest">Legal</h3>
               <ul role="list" class="mt-6 space-y-4">
-                <li><a href="#" class="text-sm leading-6 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white">Privacy</a></li>
-                <li><a href="#" class="text-sm leading-6 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white">Terms</a></li>
+                <li><router-link to="/privacy" class="text-sm leading-6 text-gray-600 hover:text-primary-600 dark:text-gray-400 dark:hover:text-white transition-colors font-medium">Privacy</router-link></li>
+                <li><router-link to="/terms" class="text-sm leading-6 text-gray-600 hover:text-primary-600 dark:text-gray-400 dark:hover:text-white transition-colors font-medium">Terms</router-link></li>
               </ul>
             </div>
         </div>
         <div class="mt-16 border-t border-gray-900/10 dark:border-gray-700 pt-8 sm:mt-20 lg:mt-24">
-          <p class="text-xs leading-5 text-gray-500 dark:text-gray-400">&copy; 2024 Calendar Creator. All rights reserved.</p>
+          <p class="text-xs leading-5 text-gray-500 dark:text-gray-400">&copy; 2025 CalendarCreator. All rights reserved.</p>
         </div>
       </div>
     </footer>
   </div>
 </template>
+
+<style scoped>
+.font-display {
+  font-family: 'Outfit', sans-serif;
+}
+</style>

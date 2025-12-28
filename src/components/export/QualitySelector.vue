@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import type { ExportQuality } from '@/types'
 
+import AppTierBadge from '@/components/ui/AppTierBadge.vue'
+
 const props = defineProps<{
   modelValue: ExportQuality
   canExportHighRes: boolean
@@ -10,10 +12,10 @@ const emit = defineEmits<{
   (e: 'update:modelValue', value: ExportQuality): void
 }>()
 
-const qualities: { value: ExportQuality; label: string; dpi: number; description: string }[] = [
+const qualities: { value: ExportQuality; label: string; dpi: number; description: string; requiredTier?: 'pro' | 'business' }[] = [
   { value: 'screen', label: 'Screen', dpi: 72, description: 'Web & social media' },
-  { value: 'print', label: 'Print', dpi: 300, description: 'Standard printing' },
-  { value: 'press', label: 'Press', dpi: 300, description: 'Professional printing' },
+  { value: 'print', label: 'Print', dpi: 300, description: 'Standard printing', requiredTier: 'pro' },
+  { value: 'press', label: 'Press', dpi: 300, description: 'Professional printing', requiredTier: 'pro' },
 ]
 
 function selectQuality(quality: ExportQuality): void {
@@ -37,9 +39,8 @@ function isLocked(quality: ExportQuality): boolean {
       :class="{
         'border-primary-500 bg-primary-50 dark:bg-primary-900/20': modelValue === quality.value,
         'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600': modelValue !== quality.value,
-        'opacity-60 cursor-not-allowed': isLocked(quality.value)
+        'opacity-60 grayscale-[0.5]': isLocked(quality.value)
       }"
-      :disabled="isLocked(quality.value)"
       @click="selectQuality(quality.value)"
     >
       <div class="w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0"
@@ -53,11 +54,8 @@ function isLocked(quality: ExportQuality): boolean {
         </div>
         <span class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{{ quality.description }}</span>
       </div>
-      <div v-if="isLocked(quality.value)" class="flex items-center gap-1 px-2 py-1 rounded bg-amber-100 dark:bg-amber-900/50 text-amber-600 dark:text-amber-400">
-        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-        </svg>
-        <span class="text-xs">Pro</span>
+      <div v-if="isLocked(quality.value)" class="">
+        <AppTierBadge :tier="quality.requiredTier" size="sm" />
       </div>
     </button>
   </div>

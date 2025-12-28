@@ -6,12 +6,33 @@ import { localizationService } from '@/services/calendar/localization.service'
 import { countries } from '@/data/countries'
 import type { DateCellMetadata } from '@/types'
 
+import AppTierBadge from '@/components/ui/AppTierBadge.vue'
+import { useAuthStore } from '@/stores'
+
 interface Props {
   dateCellMetadata: DateCellMetadata
   updateDateCellMetadata: (updater: (draft: DateCellMetadata) => void) => void
 }
 
 const props = defineProps<Props>()
+const authStore = useAuthStore()
+
+const holidayMarkerOptions: { value: string; label: string; requiredTier?: 'pro' | 'business' }[] = [
+  { value: 'bar', label: 'Bar (Bottom)' },
+  { value: 'dot', label: 'Dot (Circle)' },
+  { value: 'square', label: 'Square (Solid)' },
+  { value: 'border', label: 'Border (Ring)', requiredTier: 'pro' },
+  { value: 'triangle', label: 'Corner (Triangle)', requiredTier: 'pro' },
+  { value: 'background', label: 'Background (Fill)', requiredTier: 'pro' },
+  { value: 'text', label: 'Text (Highlight)', requiredTier: 'pro' },
+]
+
+function isMarkerLocked(option: any): boolean {
+  if (!option?.requiredTier) return false
+  if (option.requiredTier === 'pro') return !authStore.isPro
+  if (option.requiredTier === 'business') return !authStore.isBusiness
+  return false
+}
 
 const languageOptions = computed(() =>
   localizationService.getAvailableLanguages().map(l => ({
@@ -190,19 +211,31 @@ const dateCellDateValue = computed(() =>
 
       <div v-if="dateCellMetadata.showHolidayMarkers !== false" class="space-y-3">
         <div>
-          <label class="text-xs font-medium text-white/60 mb-1.5 block">Marker Style</label>
+          <div class="flex items-center justify-between mb-1.5">
+            <label class="text-xs font-medium text-white/60">Marker Style</label>
+            <div v-if="isMarkerLocked(holidayMarkerOptions.find(o => o.value === dateCellMetadata.holidayMarkerStyle))" class="flex items-center gap-1">
+              <AppTierBadge tier="pro" size="sm" />
+            </div>
+          </div>
           <select
             class="control-glass"
             :value="dateCellMetadata.holidayMarkerStyle ?? 'text'"
-            @change="updateDateCellMetadata((draft) => { draft.holidayMarkerStyle = ($event.target as HTMLSelectElement).value as any })"
+            @change="updateDateCellMetadata((draft) => { 
+              const val = ($event.target as HTMLSelectElement).value;
+              const option = holidayMarkerOptions.find(o => o.value === val);
+              if (option && !isMarkerLocked(option)) {
+                draft.holidayMarkerStyle = val as any;
+              }
+            })"
           >
-            <option value="bar">Bar (Bottom)</option>
-            <option value="dot">Dot (Circle)</option>
-            <option value="square">Square (Solid)</option>
-            <option value="border">Border (Ring)</option>
-            <option value="triangle">Corner (Triangle)</option>
-            <option value="background">Background (Fill)</option>
-            <option value="text">Text (Highlight)</option>
+            <option 
+              v-for="option in holidayMarkerOptions" 
+              :key="option.value" 
+              :value="option.value"
+              :disabled="isMarkerLocked(option)"
+            >
+              {{ option.label }}{{ isMarkerLocked(option) ? ' (Pro)' : '' }}
+            </option>
           </select>
         </div>
 

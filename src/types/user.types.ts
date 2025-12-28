@@ -9,9 +9,18 @@ export interface User {
   subscription: SubscriptionTier
   brandKit?: BrandKit
   preferences: UserPreferences
+  stats: UserStats
   createdAt: string
   updatedAt: string
   lastLoginAt?: string
+}
+
+export interface UserStats {
+  storageUsed: number // in bytes
+  activeDays: string[] // ISO dates YYYY-MM-DD
+  projectCount: number
+  templateCount: number
+  totalDownloads: number
 }
 
 export type UserRole = 'user' | 'creator' | 'admin'

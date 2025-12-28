@@ -14,19 +14,13 @@ export const routes: RouteRecordRaw[] = [
     path: '/marketplace',
     name: 'marketplace',
     component: () => import('@/pages/marketplace/index.vue'),
-    meta: { layout: 'default' },
+    meta: { layout: 'marketplace' },
   },
   {
     path: '/marketplace/:id',
     name: 'template-detail',
     component: () => import('@/pages/marketplace/[id].vue'),
-    meta: { layout: 'default' },
-  },
-  {
-    path: '/pricing',
-    name: 'pricing',
-    component: () => import('@/pages/pricing.vue'),
-    meta: { layout: 'default' },
+    meta: { layout: 'marketplace' },
   },
 
   // ═══════════════════════════════════════════════════════════════

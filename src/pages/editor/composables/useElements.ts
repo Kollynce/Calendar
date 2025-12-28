@@ -1,4 +1,5 @@
 import { useEditorStore } from '@/stores/editor.store'
+import type { SubscriptionTier } from '@/types'
 
 export type ElementType = 'shape' | 'calendar' | 'planner' | 'text' | 'collage'
 
@@ -13,6 +14,7 @@ export interface ElementItem {
   plannerType?: 'notes-panel' | 'schedule' | 'checklist'
   collageLayout?: 'grid-2x2' | 'grid-3x3' | 'grid-2x3' | 'masonry' | 'polaroid' | 'filmstrip' | 'scrapbook' | 'mood-board'
   options?: Record<string, any>
+  requiredTier?: SubscriptionTier
 }
 
 export interface ElementCategory {
@@ -140,6 +142,7 @@ export const decorativeElements: ElementItem[] = [
     type: 'shape',
     shapeType: 'rect',
     description: 'Rounded photo frame',
+    requiredTier: 'pro',
     options: { width: 240, height: 180, cornerRadius: 32, fill: '#ffffff', stroke: '#e2e8f0', strokeWidth: 2 },
   },
   {
@@ -149,6 +152,7 @@ export const decorativeElements: ElementItem[] = [
     type: 'shape',
     shapeType: 'rect',
     description: 'Modern gradient card',
+    requiredTier: 'pro',
     options: { width: 280, height: 160, cornerRadius: 20, fill: '#f0f9ff', stroke: '#bae6fd', strokeWidth: 1 },
   },
   {
@@ -158,6 +162,7 @@ export const decorativeElements: ElementItem[] = [
     type: 'shape',
     shapeType: 'rect',
     description: 'Rounded pill shape',
+    requiredTier: 'pro',
     options: { width: 120, height: 40, cornerRadius: 20, fill: '#fef3c7', stroke: '#fcd34d', strokeWidth: 1 },
   },
   {
@@ -167,6 +172,7 @@ export const decorativeElements: ElementItem[] = [
     type: 'shape',
     shapeType: 'circle',
     description: 'Circular photo frame',
+    requiredTier: 'pro',
     options: { radius: 80, fill: '#ffffff', stroke: '#e2e8f0', strokeWidth: 3 },
   },
   // Accent shapes
@@ -342,6 +348,7 @@ export const elementCategories: ElementCategory[] = [
         type: 'planner',
         plannerType: 'notes-panel',
         description: 'Patterned notes panel',
+        requiredTier: 'pro',
         options: { pattern: 'ruled', title: 'Notes', accentColor: '#2563eb', width: 320, height: 320 },
       },
       {
@@ -351,6 +358,7 @@ export const elementCategories: ElementCategory[] = [
         type: 'planner',
         plannerType: 'schedule',
         description: 'Timeline schedule',
+        requiredTier: 'pro',
         options: { title: 'Schedule', accentColor: '#a855f7', startHour: 6, endHour: 20, intervalMinutes: 60, width: 320, height: 640 },
       },
       {
@@ -360,6 +368,7 @@ export const elementCategories: ElementCategory[] = [
         type: 'planner',
         plannerType: 'checklist',
         description: 'To-do list',
+        requiredTier: 'pro',
         options: { title: 'To Do', accentColor: '#ec4899', rows: 8, showCheckboxes: true, width: 320, height: 420 },
       },
     ],
@@ -374,6 +383,7 @@ export const elementCategories: ElementCategory[] = [
         type: 'collage',
         collageLayout: 'grid-2x2',
         description: 'Simple 4-photo grid layout',
+        requiredTier: 'pro',
         options: { width: 400, height: 400 },
       },
       {
@@ -383,6 +393,7 @@ export const elementCategories: ElementCategory[] = [
         type: 'collage',
         collageLayout: 'grid-3x3',
         description: '9-photo grid layout',
+        requiredTier: 'pro',
         options: { width: 450, height: 450 },
       },
       {
@@ -392,6 +403,7 @@ export const elementCategories: ElementCategory[] = [
         type: 'collage',
         collageLayout: 'grid-2x3',
         description: '6-photo vertical grid',
+        requiredTier: 'pro',
         options: { width: 360, height: 480 },
       },
       {
@@ -401,6 +413,7 @@ export const elementCategories: ElementCategory[] = [
         type: 'collage',
         collageLayout: 'masonry',
         description: 'Pinterest-style layout',
+        requiredTier: 'pro',
         options: { width: 420, height: 400 },
       },
       {
@@ -410,6 +423,7 @@ export const elementCategories: ElementCategory[] = [
         type: 'collage',
         collageLayout: 'polaroid',
         description: 'Stacked polaroid photos',
+        requiredTier: 'pro',
         options: { width: 400, height: 380 },
       },
       {
@@ -419,6 +433,7 @@ export const elementCategories: ElementCategory[] = [
         type: 'collage',
         collageLayout: 'filmstrip',
         description: 'Horizontal film strip',
+        requiredTier: 'pro',
         options: { width: 520, height: 200 },
       },
       {
@@ -428,6 +443,7 @@ export const elementCategories: ElementCategory[] = [
         type: 'collage',
         collageLayout: 'scrapbook',
         description: 'Overlapping creative layout',
+        requiredTier: 'pro',
         options: { width: 440, height: 400 },
       },
       {
@@ -437,6 +453,7 @@ export const elementCategories: ElementCategory[] = [
         type: 'collage',
         collageLayout: 'mood-board',
         description: 'Marketing mood board',
+        requiredTier: 'pro',
         options: { width: 480, height: 420 },
       },
     ],

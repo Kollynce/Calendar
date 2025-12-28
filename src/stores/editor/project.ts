@@ -9,6 +9,10 @@ type ProjectsService = {
   save: (project: Project) => Promise<void>
 }
 
+type StorageUsageService = {
+  updateProjectCount: (userId: string, delta: number) => Promise<void>
+}
+
 type AuthStore = {
   user?: { id?: string | null } | null
 }
@@ -32,6 +36,7 @@ export function createProjectModule(params: {
   authStore: AuthStore
   calendarStore: CalendarStore
   projectsService: ProjectsService
+  storageUsageService: StorageUsageService
   mergeTemplateOptions: MergeTemplateOptions
   normalizeCanvasSize: (input: { width?: number; height?: number } | null | undefined) => {
     width: number
@@ -52,6 +57,7 @@ export function createProjectModule(params: {
     authStore,
     calendarStore,
     projectsService,
+    storageUsageService,
     mergeTemplateOptions,
     normalizeCanvasSize,
     generateObjectId,
@@ -252,6 +258,7 @@ export function createProjectModule(params: {
       return
     }
 
+    const isNewProject = !project.value.updatedAt || project.value.createdAt === project.value.updatedAt
     saving.value = true
 
     try {
@@ -276,6 +283,11 @@ export function createProjectModule(params: {
       }
 
       await projectsService.save(project.value)
+      
+      // If it's a new project, increment project count
+      if (isNewProject && authStore.user?.id) {
+        await storageUsageService.updateProjectCount(authStore.user.id, 1).catch(console.error)
+      }
 
       isDirty.value = false
     } finally {

@@ -63,12 +63,27 @@ async function persistMetadata(userId: string, asset: UserUploadAsset): Promise<
   await setDoc(doc(uploadsCollection, asset.id), asset)
 }
 
+import { checkStorageLimit, updateStorageUsage, trackActiveDay } from './storage-usage.service'
+import { useAuthStore } from '@/stores/auth.store'
+
 export async function uploadUserAsset(
   userId: string,
   file: File,
   options: UploadUserAssetOptions = {},
 ): Promise<UserUploadAsset> {
   if (!userId) throw new Error('User ID is required to upload assets')
+
+  // Track active day on upload
+  await trackActiveDay(userId).catch(console.error)
+
+  // Check storage limit
+  const authStore = useAuthStore()
+  const limit = authStore.tierLimits?.storageLimit || 0
+  const canUpload = await checkStorageLimit(userId, file.size, limit)
+  
+  if (!canUpload) {
+    throw new Error(`Storage limit reached. Your limit is ${Math.round(limit / (1024 * 1024))}MB.`)
+  }
 
   const assetId = generateAssetId()
   const storagePath = buildUserAssetPath(userId, assetId, file.name, options.folder)
@@ -116,6 +131,7 @@ export async function uploadUserAsset(
           }
 
           await persistMetadata(userId, asset)
+          await updateStorageUsage(userId, file.size)
           resolve(asset)
         } catch (error) {
           reject(error)
@@ -155,7 +171,7 @@ export async function listUserAssets(userId: string): Promise<UserUploadAsset[]>
   }
 }
 
-export async function deleteUserAsset(userId: string, asset: Pick<UserUploadAsset, 'id' | 'storagePath'>): Promise<void> {
+export async function deleteUserAsset(userId: string, asset: Pick<UserUploadAsset, 'id' | 'storagePath' | 'size'>): Promise<void> {
   if (!userId || !asset.storagePath) return
 
   const uploadsCollection = collection(db, 'users', userId, 'uploads')
@@ -170,5 +186,8 @@ export async function deleteUserAsset(userId: string, asset: Pick<UserUploadAsse
       console.error('Failed to delete metadata document', error)
       throw error
     }),
+    updateStorageUsage(userId, -(asset.size || 0)).catch(err => {
+      console.error('Failed to update storage usage on delete', err)
+    })
   ])
 }

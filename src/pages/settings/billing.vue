@@ -8,6 +8,40 @@ import { paypalSubscriptionsService } from '@/services/billing/paypal-subscripti
 
 const authStore = useAuthStore()
 
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB']
+  const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
+  const value = bytes / Math.pow(1024, exponent)
+  return `${value.toFixed(value >= 10 || exponent === 0 ? 0 : 1)} ${units[exponent]}`
+}
+
+const projectStats = computed(() => {
+  const used = authStore.user?.stats?.projectCount || 0
+  const limit = authStore.tierLimits?.projects || 0
+  const percentage = limit > 0 && Number.isFinite(limit) 
+    ? Math.min(Math.round((used / limit) * 100), 100) 
+    : used > 0 ? 100 : 0
+  
+  return {
+    used,
+    limit: Number.isFinite(limit) ? limit : '∞',
+    percentage
+  }
+})
+
+const storageStats = computed(() => {
+  const used = authStore.user?.stats?.storageUsed || 0
+  const limit = authStore.tierLimits?.storageLimit || 0
+  const percentage = limit > 0 ? Math.min(Math.round((used / limit) * 100), 100) : 0
+  
+  return {
+    usedFormatted: formatBytes(used),
+    limitFormatted: formatBytes(limit),
+    percentage
+  }
+})
+
 const isDemoMode = import.meta.env.VITE_DEMO_MODE === 'true'
 
 const proContainer = ref<HTMLDivElement | null>(null)
@@ -109,7 +143,7 @@ onBeforeUnmount(() => {
                 {{ authStore.isPro ? 'You have access to premium features.' : 'Upgrade to unlock premium features.' }}
               </div>
             </div>
-            <AppButton to="/pricing" variant="primary" class="shrink-0">View plans</AppButton>
+            <AppButton to="/#pricing" variant="primary" class="shrink-0">View plans</AppButton>
           </div>
 
           <div v-if="canShowPayPal" class="mt-6 grid sm:grid-cols-2 gap-4">
@@ -144,19 +178,25 @@ onBeforeUnmount(() => {
             <div>
               <div class="flex items-center justify-between text-sm text-gray-600 dark:text-gray-300">
                 <span>Projects</span>
-                <span>—</span>
+                <span>{{ projectStats.used }} / {{ projectStats.limit }}</span>
               </div>
               <div class="mt-2 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                <div class="h-2 bg-primary-500 rounded-full" style="width: 30%"></div>
+                <div 
+                  class="h-2 bg-primary-500 rounded-full transition-all duration-500" 
+                  :style="{ width: `${projectStats.percentage}%` }"
+                ></div>
               </div>
             </div>
             <div>
               <div class="flex items-center justify-between text-sm text-gray-600 dark:text-gray-300">
                 <span>Storage</span>
-                <span>—</span>
+                <span>{{ storageStats.usedFormatted }} / {{ storageStats.limitFormatted }}</span>
               </div>
               <div class="mt-2 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                <div class="h-2 bg-primary-500 rounded-full" style="width: 15%"></div>
+                <div 
+                  class="h-2 bg-primary-500 rounded-full transition-all duration-500" 
+                  :style="{ width: `${storageStats.percentage}%` }"
+                ></div>
               </div>
             </div>
           </div>

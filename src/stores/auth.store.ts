@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, shallowRef, markRaw } from 'vue'
 import { 
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -18,7 +18,7 @@ import { TIER_LIMITS } from '@/config/constants'
 export const useAuthStore = defineStore('auth', () => {
   // State
   const user = ref<User | null>(null)
-  const firebaseUser = ref<FirebaseUser | null>(null)
+  const firebaseUser = shallowRef<FirebaseUser | null>(null)
   const customClaims = ref<Record<string, any> | null>(null)
   const loading = ref(true)
   const error = ref<string | null>(null)
@@ -33,7 +33,28 @@ export const useAuthStore = defineStore('auth', () => {
     return tokenSubscription || user.value?.subscription || 'free'
   })
   const isPro = computed(() => ['pro', 'business', 'enterprise'].includes(subscriptionTier.value))
+  const isBusiness = computed(() => ['business', 'enterprise'].includes(subscriptionTier.value))
   const tierLimits = computed(() => TIER_LIMITS[subscriptionTier.value as SubscriptionTier])
+
+  // Feature specific access
+  const canUsePremiumTemplates = computed(() => tierLimits.value.canUsePremiumTemplates)
+  const canExportPDF = computed(() => tierLimits.value.canExportPDF)
+  const canExportSVG = computed(() => tierLimits.value.canExportSVG)
+  const canExportTIFF = computed(() => tierLimits.value.canExportTIFF)
+  const canUseTeamCollaboration = computed(() => tierLimits.value.canUseTeamCollaboration)
+  const canUseAPI = computed(() => tierLimits.value.canUseAPI)
+  const canUseWhiteLabel = computed(() => tierLimits.value.canUseWhiteLabel)
+  const canUseAnalytics = computed(() => tierLimits.value.canUseAnalytics)
+  const canCreateMoreProjects = computed(() => {
+    const projectCount = user.value?.stats?.projectCount ?? 0
+    const limit = tierLimits.value?.projects ?? 0
+    return projectCount < limit
+  })
+  const canCreateMoreBrandKits = computed(() => {
+    const currentKits = user.value?.brandKit ? 1 : 0
+    const limit = tierLimits.value?.brandKits ?? 0
+    return currentKits < limit
+  })
 
   // Demo mode users for testing
   const DEMO_USERS: Record<string, User> = {
@@ -43,6 +64,13 @@ export const useAuthStore = defineStore('auth', () => {
       displayName: 'Demo Free User',
       role: 'user',
       subscription: 'free',
+      stats: {
+        storageUsed: 0,
+        activeDays: [],
+        projectCount: 0,
+        templateCount: 0,
+        totalDownloads: 0,
+      },
       preferences: {
         theme: 'system',
         language: 'en',
@@ -59,6 +87,13 @@ export const useAuthStore = defineStore('auth', () => {
       displayName: 'Demo Pro User',
       role: 'user',
       subscription: 'pro',
+      stats: {
+        storageUsed: 0,
+        activeDays: [],
+        projectCount: 0,
+        templateCount: 0,
+        totalDownloads: 0,
+      },
       preferences: {
         theme: 'system',
         language: 'en',
@@ -75,6 +110,13 @@ export const useAuthStore = defineStore('auth', () => {
       displayName: 'Demo Business User',
       role: 'creator',
       subscription: 'business',
+      stats: {
+        storageUsed: 0,
+        activeDays: [],
+        projectCount: 0,
+        templateCount: 0,
+        totalDownloads: 0,
+      },
       preferences: {
         theme: 'system',
         language: 'en',
@@ -102,7 +144,7 @@ export const useAuthStore = defineStore('auth', () => {
 
     return new Promise((resolve) => {
       onAuthStateChanged(auth, async (fbUser) => {
-        firebaseUser.value = fbUser
+        firebaseUser.value = fbUser ? markRaw(fbUser) : null
 
         if (unsubscribeUserDoc) {
           unsubscribeUserDoc()
@@ -119,7 +161,19 @@ export const useAuthStore = defineStore('auth', () => {
 
           unsubscribeUserDoc = onSnapshot(doc(db, 'users', fbUser.uid), (snap) => {
             if (!snap.exists()) return
-            user.value = { id: fbUser.uid, ...(snap.data() as Omit<User, 'id'>) } as User
+            const data = snap.data()
+            user.value = { 
+              id: fbUser.uid, 
+              ...data,
+              stats: {
+                storageUsed: 0,
+                activeDays: [],
+                projectCount: 0,
+                templateCount: 0,
+                totalDownloads: 0,
+                ...(data.stats || {})
+              }
+            } as User
           })
         } else {
           user.value = null
@@ -139,7 +193,19 @@ export const useAuthStore = defineStore('auth', () => {
   async function getUserProfile(uid: string): Promise<User | null> {
     const userDoc = await getDoc(doc(db, 'users', uid))
     if (!userDoc.exists()) return null
-    return { id: uid, ...userDoc.data() } as User
+    const data = userDoc.data()
+    return { 
+      id: uid, 
+      ...data,
+      stats: {
+        storageUsed: 0,
+        activeDays: [],
+        projectCount: 0,
+        templateCount: 0,
+        totalDownloads: 0,
+        ...(data.stats || {})
+      }
+    } as User
   }
 
   async function waitForUserProfile(uid: string): Promise<User | null> {
@@ -207,6 +273,13 @@ export const useAuthStore = defineStore('auth', () => {
       displayName: data?.displayName || fbUser.displayName || 'User',
       role: 'user',
       subscription: 'free',
+      stats: {
+        storageUsed: 0,
+        activeDays: [],
+        projectCount: 0,
+        templateCount: 0,
+        totalDownloads: 0,
+      },
       preferences: {
         theme: 'system',
         language: 'en',
@@ -271,6 +344,13 @@ export const useAuthStore = defineStore('auth', () => {
           displayName: emailInput.split('@')[0] ?? emailInput,
           role: 'user',
           subscription: 'pro', // Give pro access in demo
+          stats: {
+            storageUsed: 0,
+            activeDays: [],
+            projectCount: 0,
+            templateCount: 0,
+            totalDownloads: 0,
+          },
           preferences: {
             theme: 'system',
             language: 'en',
@@ -433,6 +513,17 @@ export const useAuthStore = defineStore('auth', () => {
     subscriptionTier,
     tierLimits,
     isPro,
+    isBusiness,
+    canUsePremiumTemplates,
+    canExportPDF,
+    canExportSVG,
+    canExportTIFF,
+    canUseTeamCollaboration,
+    canUseAPI,
+    canUseWhiteLabel,
+    canUseAnalytics,
+    canCreateMoreProjects,
+    canCreateMoreBrandKits,
     // Actions
     initialize,
     signIn,

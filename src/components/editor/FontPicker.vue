@@ -1,22 +1,28 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+import { useAuthStore } from '@/stores'
+
 defineProps<{
   modelValue: string
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   (e: 'update:modelValue', value: string): void
 }>()
+
+const authStore = useAuthStore()
+const isPro = computed(() => authStore.isPro)
 
 const fonts = [
   { label: 'Inter', value: 'Inter' },
   { label: 'Roboto', value: 'Roboto' },
   { label: 'Open Sans', value: 'Open Sans' },
   { label: 'Lato', value: 'Lato' },
-  { label: 'Montserrat', value: 'Montserrat' },
-  { label: 'Playfair Display', value: 'Playfair Display' },
-  { label: 'Merriweather', value: 'Merriweather' },
-  { label: 'Oswald', value: 'Oswald' },
-  { label: 'Poppins', value: 'Poppins' },
+  { label: 'Montserrat', value: 'Montserrat', premium: true },
+  { label: 'Playfair Display', value: 'Playfair Display', premium: true },
+  { label: 'Merriweather', value: 'Merriweather', premium: true },
+  { label: 'Oswald', value: 'Oswald', premium: true },
+  { label: 'Poppins', value: 'Poppins', premium: true },
 ]
 </script>
 
@@ -31,8 +37,9 @@ const fonts = [
       :key="font.value" 
       :value="font.value"
       :style="{ fontFamily: font.value }"
+      :disabled="font.premium && !isPro"
     >
-      {{ font.label }}
+      {{ font.label }}{{ font.premium && !isPro ? ' (Pro)' : '' }}
     </option>
   </select>
 </template>

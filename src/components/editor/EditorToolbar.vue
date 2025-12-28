@@ -88,7 +88,7 @@ function openExportModal(): void {
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
         </svg>
       </router-link>
-      <span class="font-semibold text-gray-900 dark:text-white">Calendar Creator</span>
+      <span class="font-semibold text-gray-900 dark:text-white">CalendarCreator</span>
     </div>
 
     <!-- Undo / Redo -->

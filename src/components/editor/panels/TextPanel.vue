@@ -1,9 +1,14 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useEditorStore } from '@/stores/editor.store'
+import { useAuthStore } from '@/stores'
+import AppTierBadge from '@/components/ui/AppTierBadge.vue'
 import { SparklesIcon, StarIcon } from '@heroicons/vue/24/solid'
 
 const editorStore = useEditorStore()
+const authStore = useAuthStore()
+
+const isPro = computed(() => authStore.isPro)
 
 // Premium Typography Presets - organized by use case
 interface TypographyPreset {
@@ -460,8 +465,9 @@ function applyFontPairing(pairing: FontPairing) {
         <button 
           v-for="preset in displayPresets" 
           :key="preset.id"
-          @click="addTextPreset(preset)"
-          class="w-full text-left p-3 hover:bg-white/5 rounded-lg group transition-colors relative"
+          @click="(!preset.premium || isPro) && addTextPreset(preset)"
+          class="w-full text-left p-3 hover:bg-white/5 rounded-lg group transition-colors relative disabled:opacity-60 disabled:cursor-not-allowed"
+          :disabled="preset.premium && !isPro"
         >
           <div class="flex items-start justify-between gap-2">
             <div class="flex-1 min-w-0">
@@ -479,7 +485,10 @@ function applyFontPairing(pairing: FontPairing) {
               </p>
               <p class="text-[10px] text-white/40 mt-1">{{ preset.description }} · {{ preset.fontFamily }}</p>
             </div>
-            <StarIcon v-if="preset.premium" class="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-1" />
+            <div v-if="preset.premium && !isPro" class="shrink-0 mt-1">
+              <AppTierBadge tier="pro" size="sm" />
+            </div>
+            <StarIcon v-else-if="preset.premium" class="w-3.5 h-3.5 text-amber-400 shrink-0 mt-1" />
           </div>
         </button>
       </div>
@@ -585,8 +594,9 @@ function applyFontPairing(pairing: FontPairing) {
         <button 
           v-for="preset in decorativePresets" 
           :key="preset.id"
-          @click="addTextPreset(preset)"
-          class="w-full text-left p-3 hover:bg-white/5 rounded-lg group transition-colors relative"
+          @click="(!preset.premium || isPro) && addTextPreset(preset)"
+          class="w-full text-left p-3 hover:bg-white/5 rounded-lg group transition-colors relative disabled:opacity-60 disabled:cursor-not-allowed"
+          :disabled="preset.premium && !isPro"
         >
           <div class="flex items-start justify-between gap-2">
             <div class="flex-1 min-w-0">
@@ -605,7 +615,10 @@ function applyFontPairing(pairing: FontPairing) {
               </p>
               <p class="text-[10px] text-white/40 mt-1">{{ preset.description }}</p>
             </div>
-            <StarIcon v-if="preset.premium" class="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-1" />
+            <div v-if="preset.premium && !isPro" class="shrink-0 mt-1">
+              <AppTierBadge tier="pro" size="sm" />
+            </div>
+            <StarIcon v-else-if="preset.premium" class="w-3.5 h-3.5 text-amber-400 shrink-0 mt-1" />
           </div>
         </button>
       </div>
@@ -674,8 +687,9 @@ function applyFontPairing(pairing: FontPairing) {
           <button
             v-for="pairing in fontPairings"
             :key="pairing.id"
-            @click="applyFontPairing(pairing)"
-            class="p-3 hover:bg-white/5 rounded-lg text-center group transition-colors relative border border-white/5 hover:border-primary-500/30"
+            @click="(!pairing.premium || isPro) && applyFontPairing(pairing)"
+            class="p-3 hover:bg-white/5 rounded-lg text-center group transition-colors relative border border-white/5 hover:border-primary-500/30 disabled:opacity-60 disabled:cursor-not-allowed"
+            :disabled="pairing.premium && !isPro"
           >
             <div class="flex flex-col items-center">
               <p :style="{ fontFamily: pairing.headingFont, fontWeight: pairing.headingWeight }" class="text-2xl text-white group-hover:text-primary-300 transition-colors">
@@ -684,7 +698,10 @@ function applyFontPairing(pairing: FontPairing) {
               <p class="text-[10px] text-white/60 mt-1 font-medium">{{ pairing.name }}</p>
               <p class="text-[9px] text-white/30">{{ pairing.description }}</p>
             </div>
-            <StarIcon v-if="pairing.premium" class="absolute top-2 right-2 w-3 h-3 text-amber-400" />
+            <div v-if="pairing.premium && !isPro" class="absolute top-2 right-2">
+              <AppTierBadge tier="pro" size="sm" />
+            </div>
+            <StarIcon v-else-if="pairing.premium" class="absolute top-2 right-2 w-3 h-3 text-amber-400" />
           </button>
         </div>
       </div>

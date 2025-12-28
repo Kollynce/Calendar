@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { useEditorStore } from '@/stores/editor.store'
+import { useEditorStore, useAuthStore } from '@/stores'
 import { storeToRefs } from 'pinia'
 import { 
   ArrowLeftIcon, 
@@ -11,6 +11,8 @@ import {
 import AppButton from '@/components/ui/AppButton.vue'
 import { getPresetByCanvasSize } from '@/config/canvas-presets'
 
+import AppTierBadge from '@/components/ui/AppTierBadge.vue'
+
 const emit = defineEmits<{
   (e: 'open-export'): void
   (e: 'open-canvas-setup'): void
@@ -19,8 +21,11 @@ const emit = defineEmits<{
 
 const router = useRouter()
 const editorStore = useEditorStore()
+const authStore = useAuthStore()
 
 const { isDirty, saving, canUndo, canRedo, canvasSize } = storeToRefs(editorStore)
+
+const canShare = computed(() => authStore.isBusiness)
 
 const projectName = computed({
   get: () => editorStore.project?.name || 'Untitled Calendar',
@@ -105,9 +110,19 @@ const canvasSizeLabel = computed(() => {
       </button>
       <div class="h-6 w-px bg-gray-200 dark:bg-gray-700"></div>
       
-      <AppButton variant="secondary-sm" class="flex items-center gap-1.5" type="button">
-        <ShareIcon class="w-4 h-4" /> Share
-      </AppButton>
+      <div class="flex items-center gap-1.5">
+        <AppButton 
+          variant="secondary-sm" 
+          class="flex items-center gap-1.5" 
+          type="button"
+          :disabled="!canShare"
+          :title="!canShare ? 'Share is a Business feature' : 'Share project'"
+        >
+          <ShareIcon class="w-4 h-4" /> Share
+        </AppButton>
+        <AppTierBadge v-if="!canShare" tier="business" size="sm" />
+      </div>
+
       <AppButton
         variant="secondary-sm"
         class="flex items-center gap-1.5"

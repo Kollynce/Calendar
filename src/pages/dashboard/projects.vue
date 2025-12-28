@@ -1,16 +1,21 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useAuthStore } from '@/stores'
 import AppLayout from '@/layouts/AppLayout.vue'
 import { projectsService } from '@/services/projects/projects.service'
 import AppButton from '@/components/ui/AppButton.vue'
+import AppTierBadge from '@/components/ui/AppTierBadge.vue'
 import type { Project } from '@/types'
-import { CalendarDaysIcon } from '@heroicons/vue/24/outline'
+import { CalendarDaysIcon, PlusIcon } from '@heroicons/vue/24/outline'
 
 const authStore = useAuthStore()
 const loading = ref(false)
 const projects = ref<Project[]>([])
+
+const canCreateMore = computed(() => authStore.canCreateMoreProjects)
+const projectLimit = computed(() => authStore.tierLimits.projects)
+const currentCount = computed(() => authStore.user?.stats?.projectCount || 0)
 
 function formatUpdatedAt(value: string): string {
   const date = new Date(value)
@@ -41,7 +46,23 @@ watch(
           <h1 class="text-2xl sm:text-3xl font-display font-bold text-gray-900 dark:text-white">My Projects</h1>
           <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Manage and continue your recent designs.</p>
         </div>
-        <AppButton to="/editor" variant="primary" class="shrink-0">New Project</AppButton>
+        <div class="flex flex-col items-end gap-2">
+          <AppButton 
+            to="/editor" 
+            variant="primary" 
+            class="shrink-0"
+            :disabled="!canCreateMore"
+          >
+            <template #icon>
+              <PlusIcon class="w-4 h-4" />
+            </template>
+            New Project
+          </AppButton>
+          <div v-if="!canCreateMore" class="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400 font-medium">
+            <span>Project limit reached ({{ currentCount }}/{{ projectLimit }})</span>
+            <AppTierBadge tier="pro" size="sm" />
+          </div>
+        </div>
       </div>
 
       <div v-if="loading" class="text-sm text-gray-500 dark:text-gray-400">Loading projects...</div>

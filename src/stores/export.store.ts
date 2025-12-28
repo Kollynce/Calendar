@@ -87,7 +87,11 @@ export const useExportStore = defineStore('export', () => {
   })
 
   const needsWatermark = computed(() => {
-    return authStore.tierLimits.watermark
+    // If the tier forces a watermark, we must show it
+    if (authStore.tierLimits.watermark) return true
+    
+    // Otherwise, respect the project configuration (defaults to true if not set)
+    return editorStore.project?.config?.showWatermark !== false
   })
 
   const availableFormats = computed<ExportFormat[]>(() => {
@@ -555,7 +559,7 @@ export const useExportStore = defineStore('export', () => {
         ctx.save()
         ctx.translate(img.width / 2, img.height / 2)
         ctx.rotate(-Math.PI / 4)
-        ctx.fillText('CALENDAR CREATOR', 0, 0)
+        ctx.fillText('CALENDARCREATOR', 0, 0)
         ctx.restore()
 
         // Convert back to blob

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { ExportFormat } from '@/types'
+import AppTierBadge from '@/components/ui/AppTierBadge.vue'
 import {
   DocumentIcon,
   PhotoIcon,
@@ -15,18 +16,19 @@ const emit = defineEmits<{
   (e: 'update:modelValue', value: ExportFormat): void
 }>()
 
-const formats: { value: ExportFormat; label: string; description: string; icon: string }[] = [
-  { value: 'pdf', label: 'PDF', description: 'Best for printing', icon: 'document' },
+const formats: { value: ExportFormat; label: string; description: string; icon: string; requiredTier?: 'pro' | 'business' }[] = [
+  { value: 'pdf', label: 'PDF', description: 'Best for printing', icon: 'document', requiredTier: 'pro' },
   { value: 'png', label: 'PNG', description: 'Lossless with transparency', icon: 'photo' },
   { value: 'jpg', label: 'JPG', description: 'Smaller file size', icon: 'photo' },
-  { value: 'svg', label: 'SVG', description: 'Vector graphics', icon: 'code' },
-  { value: 'tiff', label: 'TIFF', description: 'Print production', icon: 'document' },
+  { value: 'svg', label: 'SVG', description: 'Vector graphics', icon: 'code', requiredTier: 'pro' },
+  { value: 'tiff', label: 'TIFF', description: 'Print production', icon: 'document', requiredTier: 'business' },
 ]
 
 // Filter available formats based on subscription tier
 const isAvailable = (format: ExportFormat): boolean => props.availableFormats.includes(format)
 
 function selectFormat(format: ExportFormat): void {
+  if (isLocked(format)) return
   emit('update:modelValue', format)
 }
 
@@ -45,9 +47,8 @@ function isLocked(format: ExportFormat): boolean {
       :class="{
         'border-primary-500 bg-primary-50 dark:bg-primary-900/20': modelValue === format.value,
         'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600': modelValue !== format.value,
-        'opacity-60 cursor-not-allowed': isLocked(format.value)
+        'opacity-60 grayscale-[0.5]': isLocked(format.value)
       }"
-      :disabled="isLocked(format.value)"
       @click="selectFormat(format.value)"
     >
       <div class="shrink-0 w-10 h-10 rounded-lg flex items-center justify-center transition-colors"
@@ -62,11 +63,8 @@ function isLocked(format: ExportFormat): boolean {
         <span class="font-semibold text-gray-900 dark:text-white text-sm">{{ format.label }}</span>
         <span class="text-xs text-gray-500 dark:text-gray-400">{{ format.description }}</span>
       </div>
-      <div v-if="isLocked(format.value)" class="absolute top-1 right-1 flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/50 text-amber-600 dark:text-amber-400">
-        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-        </svg>
-        <span class="text-[0.625rem]">Pro</span>
+      <div v-if="isLocked(format.value)" class="absolute top-2 right-2">
+        <AppTierBadge :tier="format.requiredTier" size="sm" />
       </div>
     </button>
   </div>

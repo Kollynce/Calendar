@@ -2,7 +2,15 @@
 import { computed } from 'vue'
 import AppLayout from '@/layouts/AppLayout.vue'
 import AppButton from '@/components/ui/AppButton.vue'
+import AppTierBadge from '@/components/ui/AppTierBadge.vue'
 import { useAuthStore, useThemeStore } from '@/stores'
+import { 
+  ArrowLeftOnRectangleIcon,
+  CommandLineIcon,
+  ShieldCheckIcon,
+  UsersIcon,
+  LockClosedIcon
+} from '@heroicons/vue/24/outline'
 
 const authStore = useAuthStore()
 const themeStore = useThemeStore()
@@ -86,8 +94,87 @@ const currentThemeName = computed(() => {
           <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Sign out</h2>
           <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">End your current session.</p>
           <div class="mt-6">
-            <AppButton variant="secondary" class="w-full" @click="authStore.logout()">Sign out</AppButton>
+            <AppButton variant="secondary" class="w-full" @click="authStore.logout()">
+              <template #icon>
+                <ArrowLeftOnRectangleIcon class="w-4 h-4" />
+              </template>
+              Sign out
+            </AppButton>
           </div>
+        </div>
+      </div>
+
+      <!-- Business Features Section -->
+      <div class="space-y-6 pt-8 border-t border-gray-200 dark:border-gray-700">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white">Business Features</h2>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Scale your productivity with advanced tools.</p>
+          </div>
+          <AppTierBadge v-if="!authStore.isBusiness" tier="business" />
+        </div>
+
+        <div class="grid lg:grid-cols-3 gap-6">
+          <!-- API Access -->
+          <div class="glass-card p-6 relative" :class="{ 'opacity-75 grayscale-[0.5]': !authStore.canUseAPI }">
+            <div class="flex items-center justify-between mb-4">
+              <div class="p-2 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400">
+                <CommandLineIcon class="w-6 h-6" />
+              </div>
+              <LockClosedIcon v-if="!authStore.canUseAPI" class="w-5 h-5 text-gray-400" />
+            </div>
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">API Access</h3>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mt-2">
+              Automate your calendar generation and integrate with your existing workflow via our REST API.
+            </p>
+            <div class="mt-6">
+              <AppButton :disabled="!authStore.canUseAPI" variant="secondary" class="w-full">Manage API Keys</AppButton>
+            </div>
+          </div>
+
+          <!-- White Label -->
+          <div class="glass-card p-6 relative" :class="{ 'opacity-75 grayscale-[0.5]': !authStore.canUseWhiteLabel }">
+            <div class="flex items-center justify-between mb-4">
+              <div class="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400">
+                <ShieldCheckIcon class="w-6 h-6" />
+              </div>
+              <LockClosedIcon v-if="!authStore.canUseWhiteLabel" class="w-5 h-5 text-gray-400" />
+            </div>
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">White Labeling</h3>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mt-2">
+              Remove all branding and use your own custom domain and assets for a seamless brand experience.
+            </p>
+            <div class="mt-6">
+              <AppButton :disabled="!authStore.canUseWhiteLabel" variant="secondary" class="w-full">Configure Branding</AppButton>
+            </div>
+          </div>
+
+          <!-- Team Collaboration -->
+          <div class="glass-card p-6 relative" :class="{ 'opacity-75 grayscale-[0.5]': !authStore.canUseTeamCollaboration }">
+            <div class="flex items-center justify-between mb-4">
+              <div class="p-2 rounded-lg bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400">
+                <UsersIcon class="w-6 h-6" />
+              </div>
+              <LockClosedIcon v-if="!authStore.canUseTeamCollaboration" class="w-5 h-5 text-gray-400" />
+            </div>
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Team Management</h3>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mt-2">
+              Invite team members, share projects, and manage roles and permissions across your organization.
+            </p>
+            <div class="mt-6">
+              <AppButton :disabled="!authStore.canUseTeamCollaboration" variant="secondary" class="w-full">Manage Team</AppButton>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="!authStore.isBusiness" class="p-6 bg-primary-50 dark:bg-primary-900/10 rounded-2xl border border-primary-100 dark:border-primary-900/20 flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
+          <div>
+            <h4 class="font-bold text-gray-900 dark:text-white">Need Business Features?</h4>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1 text-balance">
+              Unlock API access, white-labeling, and team collaboration by upgrading to our Business plan.
+            </p>
+          </div>
+          <AppButton to="/settings/billing" variant="primary" class="shrink-0">Upgrade Now</AppButton>
         </div>
       </div>
     </div>

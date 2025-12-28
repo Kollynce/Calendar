@@ -11,6 +11,7 @@ import type {
 import { mergeTemplateOptions } from '@/config/editor-defaults'
 import { holidayService } from '@/services/calendar/holiday.service'
 import { projectsService } from '@/services/projects/projects.service'
+import * as storageUsageService from '@/services/storage/storage-usage.service'
 import { useAuthStore } from '@/stores/auth.store'
 import { useCalendarStore } from '@/stores/calendar.store'
 import {
@@ -106,6 +107,7 @@ export const useEditorStore = defineStore('editor', () => {
     authStore,
     calendarStore,
     projectsService,
+    storageUsageService,
     mergeTemplateOptions,
     normalizeCanvasSize,
     generateObjectId,

@@ -2,6 +2,8 @@
 import type { CalendarTemplate } from '@/data/templates/calendar-templates'
 import { PhotoIcon, DocumentTextIcon } from '@heroicons/vue/24/outline'
 import { StarIcon as StarSolidIcon } from '@heroicons/vue/24/solid'
+import AppTierBadge from '@/components/ui/AppTierBadge.vue'
+import { useAuthStore } from '@/stores'
 
 const props = defineProps<{
   categories: { id: string; name: string; icon: string }[]
@@ -10,6 +12,8 @@ const props = defineProps<{
   thumbnails: Record<string, string>
   loading: boolean
 }>()
+
+const authStore = useAuthStore()
 
 const emit = defineEmits<{
   (e: 'update:selectedCategory', value: string): void
@@ -20,7 +24,15 @@ function selectCategory(id: string) {
   emit('update:selectedCategory', id)
 }
 
+function isLocked(template: CalendarTemplate): boolean {
+  if (!template.requiredTier) return false
+  if (template.requiredTier === 'pro') return !authStore.isPro
+  if (template.requiredTier === 'business') return !authStore.isBusiness
+  return false
+}
+
 function apply(template: CalendarTemplate) {
+  if (isLocked(template)) return
   emit('apply', template)
 }
 
@@ -53,7 +65,7 @@ function renderStars(rating: number) {
       <div
         v-for="n in 4"
         :key="n"
-        class="rounded-lg border border-dashed border-gray-200 dark:border-gray-700 aspect-[3/4] bg-gray-100 dark:bg-gray-700 animate-pulse"
+        class="rounded-lg border border-dashed border-gray-200 dark:border-gray-700 aspect-3/4 bg-gray-100 dark:bg-gray-700 animate-pulse"
       ></div>
     </div>
 
@@ -63,9 +75,10 @@ function renderStars(rating: number) {
         :key="template.id"
         @click="apply(template)"
         class="group relative rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 hover:border-primary-500 hover:shadow-md focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:outline-none transition-all duration-150 text-left bg-white dark:bg-gray-800"
+        :class="{ 'opacity-80 grayscale-[0.3]': isLocked(template) }"
       >
         <!-- Template Preview -->
-        <div class="relative aspect-[3/4] bg-gray-50 dark:bg-gray-900">
+        <div class="relative aspect-3/4 bg-gray-50 dark:bg-gray-900">
           <img
             v-if="thumbnails[template.id]"
             :src="thumbnails[template.id]"
@@ -98,9 +111,14 @@ function renderStars(rating: number) {
             </span>
           </div>
 
+          <!-- Tier Badge -->
+          <div v-if="isLocked(template)" class="absolute top-1 right-1">
+            <AppTierBadge :tier="template.requiredTier" size="sm" />
+          </div>
+
           <!-- Hover overlay -->
           <div
-            class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2"
+            class="absolute inset-0 bg-linear-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2"
           >
             <div class="flex-1 min-w-0">
               <p class="text-[10px] font-semibold text-white truncate">{{ template.name }}</p>

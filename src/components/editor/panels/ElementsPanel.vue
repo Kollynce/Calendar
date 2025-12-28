@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useEditorStore } from '@/stores/editor.store'
+import { useAuthStore } from '@/stores'
+import AppTierBadge from '@/components/ui/AppTierBadge.vue'
 import {
   elementCategories,
   emojiCategories,
@@ -9,6 +11,14 @@ import {
 } from '@/pages/editor/composables/useElements'
 
 const editorStore = useEditorStore()
+const authStore = useAuthStore()
+
+function isLocked(element: ElementItem): boolean {
+  if (!element.requiredTier) return false
+  if (element.requiredTier === 'pro') return !authStore.isPro
+  if (element.requiredTier === 'business') return !authStore.isBusiness
+  return false
+}
 
 // Emoji picker state
 const showEmojiPicker = ref(false)
@@ -130,9 +140,15 @@ function closeEmojiPicker() {
           v-for="element in category.items"
           :key="element.id"
           @click="addElement(element)"
-          class="aspect-square surface-hover rounded-xl flex flex-col items-center justify-center transition-all group border border-gray-200 dark:border-gray-600"
+          class="relative aspect-square surface-hover rounded-xl flex flex-col items-center justify-center transition-all group border border-gray-200 dark:border-gray-600 disabled:opacity-60 disabled:grayscale-[0.5] disabled:cursor-not-allowed"
+          :disabled="isLocked(element)"
           :title="element.description || element.name"
         >
+          <!-- Locked Badge -->
+          <div v-if="isLocked(element)" class="absolute top-1 right-1 z-10">
+            <AppTierBadge :tier="(element.requiredTier as 'pro' | 'business')" size="sm" />
+          </div>
+
           <span class="h-8 w-8 flex items-center justify-center text-2xl leading-none mb-1 transition-transform group-hover:scale-110">{{ element.icon }}</span>
           <span class="text-[10px] text-gray-500 dark:text-gray-400 font-medium text-center leading-tight px-1">{{ element.name }}</span>
         </button>
@@ -207,7 +223,7 @@ function closeEmojiPicker() {
                 </button>
               </div>
               <!-- Scroll indicators -->
-              <div class="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-white dark:from-gray-800 to-transparent pointer-events-none"></div>
+              <div class="absolute right-0 top-0 bottom-0 w-8 bg-linear-to-l from-white dark:from-gray-800 to-transparent pointer-events-none"></div>
             </div>
 
             <!-- Category Name -->

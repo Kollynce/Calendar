@@ -1375,7 +1375,11 @@ async function handleDeleteAsset(asset: UserUploadAsset): Promise<void> {
   }
 
   try {
-    await deleteUserAsset(userId, { id: asset.id, storagePath: asset.storagePath })
+    await deleteUserAsset(userId, { 
+      id: asset.id, 
+      storagePath: asset.storagePath,
+      size: asset.size
+    })
     userUploads.value = userUploads.value.filter((item) => item.storagePath !== asset.storagePath)
   } catch (error: any) {
     console.error('Failed to delete upload', error)
@@ -1531,9 +1535,19 @@ function handleDistribute(axis: 'horizontal' | 'vertical') {
         </div>
         <div class="h-6 w-px bg-gray-200 dark:bg-gray-700"></div>
         
-        <AppButton variant="secondary-sm" class="flex items-center gap-1.5" type="button">
-          <ShareIcon class="w-4 h-4" /> Share
-        </AppButton>
+        <div class="flex items-center gap-1.5">
+          <AppButton 
+            variant="secondary-sm" 
+            class="flex items-center gap-1.5" 
+            type="button"
+            :disabled="!authStore.isBusiness"
+            :title="!authStore.isBusiness ? 'Share is a Business feature' : 'Share project'"
+          >
+            <ShareIcon class="w-4 h-4" /> Share
+          </AppButton>
+          <AppTierBadge v-if="!authStore.isBusiness" tier="business" size="sm" />
+        </div>
+
         <AppButton
           variant="secondary-sm"
           class="flex items-center gap-1.5"

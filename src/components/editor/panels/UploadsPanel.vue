@@ -124,6 +124,14 @@ const curatedFilterOptions: { value: 'all' | 'background' | 'pattern'; label: st
 const authStore = useAuthStore()
 const editorStore = useEditorStore()
 
+const storageLimit = computed(() => authStore.tierLimits?.storageLimit || 0)
+const storageUsed = computed(() => authStore.user?.stats?.storageUsed || 0)
+const isOverStorageLimit = computed(() => storageUsed.value >= storageLimit.value)
+const storageUsagePercent = computed(() => {
+  if (storageLimit.value === 0) return 0
+  return Math.min(100, Math.round((storageUsed.value / storageLimit.value) * 100))
+})
+
 const userUploads = ref<UserUploadAsset[]>([])
 const uploadsLoading = ref(false)
 const uploadError = ref<string | null>(null)
@@ -289,7 +297,11 @@ async function handleDeleteAsset(asset: UserUploadAsset): Promise<void> {
   if (deletingUploads.value[asset.storagePath]) return
   deletingUploads.value = { ...deletingUploads.value, [asset.storagePath]: true }
   try {
-    await deleteUserAsset(userId, { id: asset.id, storagePath: asset.storagePath })
+    await deleteUserAsset(userId, { 
+      id: asset.id, 
+      storagePath: asset.storagePath,
+      size: asset.size
+    })
     userUploads.value = userUploads.value.filter((item) => item.storagePath !== asset.storagePath)
   } catch (error: any) {
     console.error('Failed to delete upload', error)
@@ -362,6 +374,25 @@ function downloadCuratedAsset(url: string, filename: string): void {
     </div>
 
     <template v-if="uploadsPanelTab === 'my_uploads'">
+      <!-- Storage Usage Info -->
+      <div v-if="isAuthenticated" class="space-y-2 mb-4">
+        <div class="flex justify-between text-[10px] font-semibold uppercase tracking-wider text-gray-500">
+          <span>Storage Usage</span>
+          <span>{{ formatBytes(storageUsed) }} / {{ formatBytes(storageLimit) }}</span>
+        </div>
+        <div class="h-1.5 w-full bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+          <div 
+            class="h-full transition-all duration-500" 
+            :class="storageUsagePercent > 90 ? 'bg-red-500' : 'bg-primary-500'"
+            :style="{ width: `${storageUsagePercent}%` }"
+          ></div>
+        </div>
+        <div v-if="isOverStorageLimit" class="flex items-center justify-between gap-2 p-2 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-100 dark:border-red-900/30">
+          <span class="text-[10px] text-red-600 dark:text-red-400 font-medium">Storage limit reached.</span>
+          <router-link to="/settings/billing" class="text-[10px] text-red-700 dark:text-red-300 underline font-bold uppercase tracking-tight">Upgrade</router-link>
+        </div>
+      </div>
+
       <div class="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
         <span class="font-semibold uppercase tracking-wide">Upload as</span>
         <span>{{ uploadCategoryOptions.find((o) => o.id === uploadCategory)?.label }}</span>
@@ -388,13 +419,15 @@ function downloadCuratedAsset(url: string, filename: string): void {
         @dragleave="handleUploadDragLeave"
         @drop="handleUploadDrop"
         :class="[
-          'dropzone relative overflow-hidden',
+          'dropzone relative overflow-hidden transition-opacity',
+          isOverStorageLimit ? 'opacity-50 cursor-not-allowed' : '',
           isDragging 
             ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20' 
             : 'border-gray-300 dark:border-gray-600 hover:border-gray-400'
         ]"
       >
         <input 
+          v-if="!isOverStorageLimit"
           type="file" 
           :accept="ACCEPTED_FILE_EXTENSIONS"
           multiple 
@@ -415,6 +448,12 @@ function downloadCuratedAsset(url: string, filename: string): void {
           class="absolute inset-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm flex flex-col items-center justify-center text-sm font-medium text-gray-600 dark:text-gray-300"
         >
           Sign in to upload images
+        </div>
+        <div
+          v-else-if="isOverStorageLimit"
+          class="absolute inset-0 bg-white/40 dark:bg-gray-900/40 backdrop-blur-[1px] flex flex-col items-center justify-center p-4"
+        >
+          <p class="text-xs font-bold text-red-600 dark:text-red-400 uppercase tracking-widest">Limit Reached</p>
         </div>
       </div>
 

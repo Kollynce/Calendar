@@ -15,12 +15,22 @@ import { localizationService } from '@/services/calendar/localization.service'
 import { calendarGeneratorService } from '@/services/calendar/generator.service'
 import { useCalendarStore } from '@/stores/calendar.store'
 
+import AppTierBadge from '@/components/ui/AppTierBadge.vue'
+import { useAuthStore } from '@/stores'
+
 const emit = defineEmits<{
   (e: 'generate'): void
 }>()
 
 const editorStore = useEditorStore()
 const calendarStore = useCalendarStore()
+const authStore = useAuthStore()
+
+const canAddMoreEvents = computed(() => {
+  return customEvents.value.length < authStore.tierLimits.customHolidays
+})
+
+const holidayLimit = computed(() => authStore.tierLimits.customHolidays)
 
 // Options for searchables
 const countryOptions = computed(() => 
@@ -656,14 +666,24 @@ function renderCalendarGridBlock({
     <!-- Custom Events -->
     <div class="space-y-3">
       <div class="flex items-center justify-between">
-        <p class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Custom Events</p>
+        <div class="flex items-center gap-2">
+          <p class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Custom Events</p>
+          <span v-if="!canAddMoreEvents" class="flex items-center gap-1">
+            <AppTierBadge :tier="holidayLimit > 10 ? 'business' : 'pro'" size="sm" />
+          </span>
+        </div>
         <button
           @click="showAddEvent = !showAddEvent"
-          class="text-xs text-primary-600 dark:text-primary-400 font-medium hover:underline flex items-center gap-1"
+          :disabled="!canAddMoreEvents && !showAddEvent"
+          class="text-xs text-primary-600 dark:text-primary-400 font-medium hover:underline flex items-center gap-1 disabled:opacity-50 disabled:no-underline"
         >
           <PlusIcon class="w-3.5 h-3.5" />
           Add Event
         </button>
+      </div>
+      
+      <div v-if="!canAddMoreEvents && !showAddEvent" class="text-[10px] text-amber-600 dark:text-amber-400">
+        Event limit reached ({{ customEvents.length }}/{{ holidayLimit }}). Upgrade to add more.
       </div>
       
       <!-- Add Event Form -->
@@ -726,7 +746,7 @@ function renderCalendarGridBlock({
     <!-- Generate Button -->
     <button
       @click="generateCalendar"
-      class="w-full py-3 bg-gradient-to-r from-primary-500 to-primary-600 text-white font-semibold rounded-xl hover:from-primary-600 hover:to-primary-700 transition-all shadow-lg shadow-primary-500/25 flex items-center justify-center gap-2"
+      class="w-full py-3 bg-linear-to-r from-primary-500 to-primary-600 text-white font-semibold rounded-xl hover:from-primary-600 hover:to-primary-700 transition-all shadow-lg shadow-primary-500/25 flex items-center justify-center gap-2"
     >
       <SparklesIcon class="w-5 h-5" />
       Generate Calendar

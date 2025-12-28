@@ -4,6 +4,7 @@ import { RouterLink } from 'vue-router'
 import { useAuthStore } from '@/stores'
 import { MenuItem } from '@headlessui/vue'
 import AppDropdownMenu from '@/components/ui/AppDropdownMenu.vue'
+import AppTierBadge from '@/components/ui/AppTierBadge.vue'
 import { 
   Bars3Icon, 
   XMarkIcon, 
@@ -15,11 +16,18 @@ import {
 const authStore = useAuthStore()
 const isMobileMenuOpen = ref(false)
 
-const navigation = [
+interface NavItem {
+  name: string
+  href: string
+  tier?: 'pro' | 'business'
+}
+
+const navigation: NavItem[] = [
   { name: 'Features', href: '/#features' },
-  { name: 'Marketplace', href: '/marketplace' },
-  { name: 'Pricing', href: '/pricing' },
+  { name: 'Pricing', href: '/#pricing' },
 ]
+
+const marketplaceLink = { name: 'Marketplace', href: '/marketplace' }
 
 const userNavigation = [
   { name: 'Your Profile', href: '/settings' },
@@ -33,10 +41,10 @@ const userNavigation = [
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
       <div class="flex h-16 justify-between">
         <!-- Logo & Desktop Nav -->
-        <div class="flex">
-          <div class="flex flex-shrink-0 items-center">
+        <div class="flex items-center">
+          <div class="shrink-0 flex items-center">
             <RouterLink to="/" class="flex items-center gap-2">
-              <div class="h-8 w-8 rounded-lg bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white font-bold text-lg">
+              <div class="h-8 w-8 rounded-lg bg-linear-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white font-bold text-lg">
                 C
               </div>
               <span class="font-display font-bold text-xl tracking-tight text-gray-900 dark:text-white">
@@ -44,14 +52,31 @@ const userNavigation = [
               </span>
             </RouterLink>
           </div>
-          <div class="hidden sm:ml-10 sm:flex sm:space-x-8">
+          <div class="hidden sm:ml-10 sm:flex sm:items-center sm:space-x-8">
             <RouterLink
               v-for="item in navigation"
               :key="item.name"
               :to="item.href"
-              class="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors border-b-2 border-transparent hover:border-primary-500"
+              class="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-all border-b-2 border-transparent hover:border-primary-500 gap-2 h-16"
             >
               {{ item.name }}
+              <AppTierBadge v-if="item.tier" :tier="item.tier" size="sm" />
+            </RouterLink>
+
+            <!-- Enhanced Marketplace Link -->
+            <RouterLink
+              :to="marketplaceLink.href"
+              class="relative group px-4 py-1.5 rounded-full overflow-hidden transition-all duration-500 hover:scale-105"
+            >
+              <div class="absolute inset-0 bg-linear-to-r from-primary-500/10 via-accent-500/10 to-primary-500/10 group-hover:from-primary-500/20 group-hover:to-accent-500/20 transition-all duration-500"></div>
+              <div class="absolute inset-0 border border-primary-500/20 group-hover:border-primary-500/40 rounded-full transition-colors"></div>
+              <div class="relative flex items-center gap-2">
+                <div class="w-1.5 h-1.5 rounded-full bg-primary-500 animate-pulse"></div>
+                <span class="text-sm font-black uppercase tracking-widest text-primary-600 dark:text-primary-400">
+                  Marketplace
+                </span>
+                <SparklesIcon class="w-3.5 h-3.5 text-accent-500 animate-bounce" />
+              </div>
             </RouterLink>
           </div>
         </div>
@@ -133,14 +158,29 @@ const userNavigation = [
           v-for="item in navigation"
           :key="item.name"
           :to="item.href"
-          class="block border-l-4 border-transparent py-2 pl-3 pr-4 text-base font-medium text-gray-500 hover:border-primary-500 hover:bg-gray-50 hover:text-primary-700 dark:text-gray-400 dark:hover:bg-gray-800"
+          @click="isMobileMenuOpen = false"
+          class="flex items-center justify-between border-l-4 border-transparent py-3 pl-3 pr-4 text-base font-medium text-gray-500 hover:border-primary-500 hover:bg-gray-50 hover:text-primary-700 dark:text-gray-400 dark:hover:bg-gray-800 transition-all"
         >
           {{ item.name }}
+          <AppTierBadge v-if="item.tier" :tier="item.tier" size="sm" />
+        </RouterLink>
+
+        <!-- Mobile Marketplace Link -->
+        <RouterLink
+          :to="marketplaceLink.href"
+          @click="isMobileMenuOpen = false"
+          class="mx-3 mt-2 flex items-center justify-between rounded-2xl bg-linear-to-r from-primary-500/10 to-accent-500/10 p-4 border border-primary-500/20"
+        >
+          <div class="flex items-center gap-3">
+            <div class="w-2 h-2 rounded-full bg-primary-500 animate-pulse"></div>
+            <span class="text-sm font-black uppercase tracking-widest text-primary-600 dark:text-primary-400">Marketplace</span>
+          </div>
+          <SparklesIcon class="w-5 h-5 text-accent-500" />
         </RouterLink>
       </div>
       <div class="border-t border-gray-200 dark:border-gray-700 pb-3 pt-4" v-if="authStore.isAuthenticated">
         <div class="flex items-center px-4">
-          <div class="flex-shrink-0">
+          <div class="shrink-0">
             <img v-if="authStore.user?.photoURL" :src="authStore.user.photoURL" class="h-10 w-10 rounded-full" alt="" />
             <UserCircleIcon v-else class="h-10 w-10 text-gray-400" />
           </div>

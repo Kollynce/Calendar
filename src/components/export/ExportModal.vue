@@ -10,6 +10,8 @@ import {
   TransitionChild, 
   TransitionRoot 
 } from '@headlessui/vue'
+import { useAuthStore } from '@/stores'
+import AppTierBadge from '@/components/ui/AppTierBadge.vue'
 import { 
   XMarkIcon, 
   DocumentArrowDownIcon, 
@@ -17,6 +19,7 @@ import {
   PrinterIcon,
   ArrowPathIcon,
   CodeBracketIcon,
+  LockClosedIcon,
 } from '@heroicons/vue/24/outline'
 
 const props = defineProps<{
@@ -27,6 +30,7 @@ const emit = defineEmits(['close'])
 
 const exportStore = useExportStore()
 const editorStore = useEditorStore()
+const authStore = useAuthStore()
 const { config, exporting, progress, statusText, error, availableFormats, maxDPI, canRetryLastServerExport } = storeToRefs(exportStore)
 
 const previewUrl = ref<string | null>(null)
@@ -84,10 +88,8 @@ const isMultiPagePdf = computed(() => {
   return config.value.pages === 'all' || Array.isArray(config.value.pages)
 })
 
-const canExportPdf = computed(() => availableFormats.value.includes('pdf'))
 const canExportPng = computed(() => availableFormats.value.includes('png'))
 const canExportSvg = computed(() => availableFormats.value.includes('svg'))
-const canExportTiff = computed(() => availableFormats.value.includes('tiff'))
 
 const quality = computed({
   get: () => config.value.quality,
@@ -299,81 +301,89 @@ watch(
 
                       <!-- SVG Option -->
                       <div 
-                        v-if="canExportSvg"
-                        @click="selectedFormat = 'svg'"
+                        v-if="canExportSvg || !authStore.isPro"
+                        @click="authStore.isPro && (selectedFormat = 'svg')"
                         :class="[
-                          selectedFormat === 'svg'
-                            ? 'ring-2 ring-primary-500 bg-primary-50 dark:bg-primary-900/20'
-                            : 'ring-1 ring-gray-200 dark:ring-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50',
-                          'relative flex cursor-pointer rounded-lg px-4 py-3 shadow-sm focus:outline-none'
+                          !authStore.isPro
+                            ? 'opacity-60 cursor-not-allowed ring-1 ring-gray-200 dark:ring-gray-700 bg-gray-50/50 dark:bg-gray-900/10'
+                            : selectedFormat === 'svg'
+                              ? 'ring-2 ring-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                              : 'ring-1 ring-gray-200 dark:ring-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50',
+                          'relative flex rounded-lg px-4 py-3 shadow-sm focus:outline-none transition-all'
                         ]"
                       >
                          <div class="flex w-full items-center justify-between">
                           <div class="flex items-center">
                             <div class="text-sm">
-                              <p class="font-medium text-gray-900 dark:text-white flex items-center gap-2">
+                              <div class="font-medium text-gray-900 dark:text-white flex items-center gap-2">
                                 <CodeBracketIcon class="w-4 h-4" /> SVG Vector
-                              </p>
+                                <AppTierBadge v-if="!authStore.isPro" tier="pro" size="sm" />
+                              </div>
                               <p class="text-gray-500 dark:text-gray-400">Scalable vector graphics</p>
                             </div>
                           </div>
-                          <div v-if="selectedFormat === 'svg'" class="h-4 w-4 rounded-full border-[5px] border-primary-500"></div>
-                           <div v-else class="h-4 w-4 rounded-full border border-gray-300"></div>
+                          <div v-if="selectedFormat === 'svg' && authStore.isPro" class="h-4 w-4 rounded-full border-[5px] border-primary-500"></div>
+                          <div v-else-if="!authStore.isPro" class="text-gray-400"><LockClosedIcon class="w-4 h-4" /></div>
+                          <div v-else class="h-4 w-4 rounded-full border border-gray-300"></div>
                         </div>
                       </div>
                     </div>
 
-                    <div class="space-y-2" v-if="canExportPdf || canExportTiff">
+                    <div class="space-y-2">
                       <label class="text-sm font-medium text-gray-900 dark:text-white">Print Formats</label>
                       <!-- PDF Option -->
                       <div 
-                        v-if="canExportPdf"
-                        @click="canExportPdf && (selectedFormat = 'pdf')"
+                        @click="authStore.isPro && (selectedFormat = 'pdf')"
                         :class="[
-                          !canExportPdf
-                            ? 'opacity-50 cursor-not-allowed ring-1 ring-gray-200 dark:ring-gray-700'
+                          !authStore.isPro
+                            ? 'opacity-60 cursor-not-allowed ring-1 ring-gray-200 dark:ring-gray-700 bg-gray-50/50 dark:bg-gray-900/10'
                             : selectedFormat === 'pdf'
                               ? 'ring-2 ring-primary-500 bg-primary-50 dark:bg-primary-900/20'
                               : 'ring-1 ring-gray-200 dark:ring-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50',
-                          'relative flex cursor-pointer rounded-lg px-4 py-3 shadow-sm focus:outline-none'
+                          'relative flex rounded-lg px-4 py-3 shadow-sm focus:outline-none transition-all'
                         ]"
                       >
                         <div class="flex w-full items-center justify-between">
                           <div class="flex items-center">
                             <div class="text-sm">
-                              <p class="font-medium text-gray-900 dark:text-white flex items-center gap-2">
+                              <div class="font-medium text-gray-900 dark:text-white flex items-center gap-2">
                                 <PrinterIcon class="w-4 h-4" /> PDF Print
-                              </p>
+                                <AppTierBadge v-if="!authStore.isPro" tier="pro" size="sm" />
+                              </div>
                               <p class="text-gray-500 dark:text-gray-400">Best for professional printing (CMYK)</p>
                             </div>
                           </div>
-                          <div v-if="selectedFormat === 'pdf'" class="h-4 w-4 rounded-full border-[5px] border-primary-500"></div>
+                          <div v-if="selectedFormat === 'pdf' && authStore.isPro" class="h-4 w-4 rounded-full border-[5px] border-primary-500"></div>
+                          <div v-else-if="!authStore.isPro" class="text-gray-400"><LockClosedIcon class="w-4 h-4" /></div>
                           <div v-else class="h-4 w-4 rounded-full border border-gray-300"></div>
                         </div>
                       </div>
 
                       <!-- TIFF Option -->
                       <div 
-                        v-if="canExportTiff"
-                        @click="selectedFormat = 'tiff'"
+                        @click="authStore.isBusiness && (selectedFormat = 'tiff')"
                         :class="[
-                          selectedFormat === 'tiff'
-                            ? 'ring-2 ring-primary-500 bg-primary-50 dark:bg-primary-900/20'
-                            : 'ring-1 ring-gray-200 dark:ring-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50',
-                          'relative flex cursor-pointer rounded-lg px-4 py-3 shadow-sm focus:outline-none'
+                          !authStore.isBusiness
+                            ? 'opacity-60 cursor-not-allowed ring-1 ring-gray-200 dark:ring-gray-700 bg-gray-50/50 dark:bg-gray-900/10'
+                            : selectedFormat === 'tiff'
+                              ? 'ring-2 ring-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                              : 'ring-1 ring-gray-200 dark:ring-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50',
+                          'relative flex rounded-lg px-4 py-3 shadow-sm focus:outline-none transition-all'
                         ]"
                       >
                          <div class="flex w-full items-center justify-between">
                           <div class="flex items-center">
                             <div class="text-sm">
-                              <p class="font-medium text-gray-900 dark:text-white flex items-center gap-2">
+                              <div class="font-medium text-gray-900 dark:text-white flex items-center gap-2">
                                 <PrinterIcon class="w-4 h-4" /> TIFF Print
-                              </p>
+                                <AppTierBadge v-if="!authStore.isBusiness" tier="business" size="sm" />
+                              </div>
                               <p class="text-gray-500 dark:text-gray-400">Professional print production</p>
                             </div>
                           </div>
-                          <div v-if="selectedFormat === 'tiff'" class="h-4 w-4 rounded-full border-[5px] border-primary-500"></div>
-                           <div v-else class="h-4 w-4 rounded-full border border-gray-300"></div>
+                          <div v-if="selectedFormat === 'tiff' && authStore.isBusiness" class="h-4 w-4 rounded-full border-[5px] border-primary-500"></div>
+                          <div v-else-if="!authStore.isBusiness" class="text-gray-400"><LockClosedIcon class="w-4 h-4" /></div>
+                          <div v-else class="h-4 w-4 rounded-full border border-gray-300"></div>
                         </div>
                       </div>
                     </div>
@@ -452,17 +462,20 @@ watch(
                     </p>
 
                     <div>
-                      <label class="text-sm font-medium text-gray-900 dark:text-white">Quality</label>
+                      <div class="flex items-center justify-between mb-2">
+                        <label class="text-sm font-medium text-gray-900 dark:text-white">Quality</label>
+                        <AppTierBadge v-if="!authStore.isPro" tier="pro" size="sm" />
+                      </div>
                       <select
                         v-model="quality"
-                        class="mt-2 select"
+                        class="select"
                       >
                         <option value="screen">Screen (72 DPI)</option>
-                        <option value="print" :disabled="!canExportPrintQuality">Print (300 DPI)</option>
-                        <option value="press" :disabled="!canExportPrintQuality">Press (300 DPI)</option>
+                        <option value="print" :disabled="!authStore.isPro">Print (300 DPI) {{ !authStore.isPro ? '— Pro' : '' }}</option>
+                        <option value="press" :disabled="!authStore.isPro">Press (300 DPI) {{ !authStore.isPro ? '— Pro' : '' }}</option>
                       </select>
-                      <p v-if="!canExportPrintQuality" class="mt-1 text-xs text-gray-500">
-                        Upgrade your plan to export at print quality.
+                      <p v-if="!authStore.isPro" class="mt-2 text-xs text-amber-600 dark:text-amber-400 font-medium">
+                        Upgrade to Pro to export high-resolution designs.
                       </p>
                     </div>
 

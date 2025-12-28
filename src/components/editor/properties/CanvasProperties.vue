@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, watch } from 'vue'
 import { storeToRefs } from 'pinia'
-import { useEditorStore } from '@/stores/editor.store'
+import { useEditorStore, useAuthStore, useCalendarStore } from '@/stores'
 import AppSelect from '@/components/ui/AppSelect.vue'
 import ColorPicker from '../ColorPicker.vue'
 import {
@@ -13,6 +13,8 @@ import {
 } from '@/config/canvas-presets'
 import { LockClosedIcon, LockOpenIcon } from '@heroicons/vue/24/outline'
 import type { CanvasBackgroundPattern, CanvasPatternConfig } from '@/types'
+
+import AppTierBadge from '@/components/ui/AppTierBadge.vue'
 
 type CanvasUnit = 'px' | 'mm' | 'cm' | 'in'
 
@@ -48,7 +50,18 @@ const CANVAS_COLOR_PRESETS = [
 ]
 
 const editorStore = useEditorStore()
+const calendarStore = useCalendarStore()
+const authStore = useAuthStore()
 const { canvasSize } = storeToRefs(editorStore)
+
+const hideWatermark = computed({
+  get: () => editorStore.project?.config?.showWatermark === false,
+  set: (val) => {
+    if (authStore.isPro) {
+      calendarStore.updateConfig({ showWatermark: !val })
+    }
+  }
+})
 
 const width = ref(744)
 const height = ref(1052)
@@ -517,6 +530,44 @@ watch([selectedPattern, patternColor, patternSpacing, patternOpacity], () => {
             />
           </label>
         </div>
+      </div>
+    </section>
+
+    <!-- Branding Section -->
+    <section class="pt-4 border-t border-white/10 space-y-3">
+      <div class="flex items-center justify-between">
+        <p class="text-[11px] font-semibold text-white/40 uppercase tracking-widest">Branding</p>
+        <AppTierBadge v-if="!authStore.isPro" tier="pro" size="sm" />
+      </div>
+      
+      <div 
+        class="flex items-center justify-between rounded-lg border border-white/10 px-3 py-2 bg-white/5 transition-opacity"
+        :class="{ 'opacity-60 cursor-not-allowed': !authStore.isPro }"
+      >
+        <div>
+          <p class="text-xs font-medium text-white flex items-center gap-1.5">
+            Hide Watermark
+            <LockClosedIcon v-if="!authStore.isPro" class="w-3 h-3 text-white/40" />
+          </p>
+          <p class="text-[10px] text-white/40">Remove "Created with CalendarCreator"</p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          :aria-checked="hideWatermark"
+          :disabled="!authStore.isPro"
+          class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none"
+          :class="[
+            hideWatermark ? 'bg-primary-600' : 'bg-white/10',
+            !authStore.isPro ? 'cursor-not-allowed' : 'cursor-pointer'
+          ]"
+          @click="hideWatermark = !hideWatermark"
+        >
+          <span 
+            class="inline-block h-3 w-3 transform rounded-full bg-white transition-transform"
+            :class="hideWatermark ? 'translate-x-5' : 'translate-x-1'"
+          />
+        </button>
       </div>
     </section>
   </div>

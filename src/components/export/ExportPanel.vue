@@ -2,9 +2,12 @@
 import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useExportStore } from '@/stores/export.store'
+import { useAuthStore } from '@/stores'
 import FormatSelector from './FormatSelector.vue'
 import QualitySelector from './QualitySelector.vue'
 import PrintSettings from './PrintSettings.vue'
+import AppTierBadge from '@/components/ui/AppTierBadge.vue'
+import AppButton from '@/components/ui/AppButton.vue'
 import { 
   DocumentArrowDownIcon,
   LockClosedIcon,
@@ -12,7 +15,7 @@ import {
 } from '@heroicons/vue/24/outline'
 
 const exportStore = useExportStore()
-// authStore imported for type access but used via exportStore computed properties
+const authStore = useAuthStore()
 
 const { 
   config, 
@@ -37,7 +40,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div class="export-panel p-6 space-y-6">
+  <div class="export-panel p-6 space-y-6 overflow-y-auto max-h-full">
     <header class="flex items-center justify-between">
       <div>
         <h2 class="text-xl font-semibold text-gray-900 dark:text-white">
@@ -59,19 +62,22 @@ const emit = defineEmits<{
 
     <!-- Upgrade Banner (for free users) -->
     <div 
-      v-if="needsWatermark"
-      class="bg-linear-to-r from-primary-500 to-accent-500 rounded-xl p-4 text-white"
+      v-if="!authStore.isPro"
+      class="bg-linear-to-r from-primary-500 to-indigo-600 rounded-xl p-4 text-white shadow-lg shadow-primary-500/20"
     >
       <div class="flex items-start gap-3">
         <SparklesIcon class="w-6 h-6 shrink-0" />
         <div>
-          <h3 class="font-semibold">Upgrade to Pro</h3>
+          <div class="flex items-center gap-2">
+            <h3 class="font-semibold">Upgrade to Pro</h3>
+            <AppTierBadge tier="pro" size="sm" class="bg-white/20" />
+          </div>
           <p class="text-sm opacity-90 mt-1">
-            Remove watermarks, export in high resolution, and unlock PDF exports.
+            Remove watermarks, export in high resolution, and unlock PDF/SVG exports.
           </p>
           <router-link 
             to="/settings/billing"
-            class="inline-block mt-2 px-4 py-1.5 bg-white text-primary-600 rounded-lg text-sm font-medium hover:bg-gray-100 transition-colors"
+            class="inline-block mt-3 px-4 py-1.5 bg-white text-primary-600 rounded-lg text-sm font-medium hover:bg-gray-100 transition-colors"
           >
             Upgrade Now
           </router-link>
@@ -81,9 +87,11 @@ const emit = defineEmits<{
 
     <!-- Format Selection -->
     <div class="space-y-3">
-      <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-        Format
-      </label>
+      <div class="flex items-center justify-between">
+        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+          Format
+        </label>
+      </div>
       <FormatSelector
         v-model="config.format"
         :available-formats="availableFormats"
@@ -92,9 +100,12 @@ const emit = defineEmits<{
 
     <!-- Quality Selection -->
     <div class="space-y-3">
-      <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-        Quality
-      </label>
+      <div class="flex items-center justify-between">
+        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+          Quality
+        </label>
+        <AppTierBadge v-if="!canExportHighRes" tier="pro" size="sm" />
+      </div>
       <QualitySelector
         v-model="config.quality"
         :can-export-high-res="canExportHighRes"
@@ -145,12 +156,12 @@ const emit = defineEmits<{
     <!-- Watermark Warning -->
     <div 
       v-if="needsWatermark"
-      class="flex items-center gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg text-amber-700 dark:text-amber-400"
+      class="flex items-center gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg text-amber-700 dark:text-amber-400 border border-amber-100 dark:border-amber-900/30"
     >
       <LockClosedIcon class="w-5 h-5 shrink-0" />
       <span class="text-sm">
         Free exports include a watermark. 
-        <router-link to="/settings/billing" class="underline">Upgrade</router-link> 
+        <router-link to="/settings/billing" class="underline font-medium">Upgrade</router-link> 
         to remove.
       </span>
     </div>
@@ -158,29 +169,30 @@ const emit = defineEmits<{
     <!-- Error Message -->
     <div 
       v-if="error"
-      class="p-3 bg-red-50 dark:bg-red-900/20 rounded-lg text-red-700 dark:text-red-400 text-sm"
+      class="p-3 bg-red-50 dark:bg-red-900/20 rounded-lg text-red-700 dark:text-red-400 text-sm border border-red-100 dark:border-red-900/30"
     >
       {{ error }}
     </div>
 
     <!-- Export Button -->
-    <button
-      class="w-full px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-primary-600 text-white hover:bg-primary-700 px-6 py-3 text-base flex items-center justify-center gap-2"
+    <AppButton
+      variant="primary"
+      class="w-full text-base shadow-lg shadow-primary-500/25"
       :disabled="exporting"
       @click="handleExport"
     >
       <template v-if="exporting">
-        <svg class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">
+        <svg class="animate-spin w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24">
           <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
           <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
         </svg>
         <span>Exporting... {{ progress }}%</span>
       </template>
       <template v-else>
-        <DocumentArrowDownIcon class="w-5 h-5" />
+        <DocumentArrowDownIcon class="w-5 h-5 mr-2" />
         <span>Export {{ config.format.toUpperCase() }}</span>
       </template>
-    </button>
+    </AppButton>
 
     <!-- Progress Bar -->
     <div 

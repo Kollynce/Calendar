@@ -10,6 +10,8 @@ import WeekStripProperties from '../properties/WeekStripProperties.vue'
 import DateCellProperties from '../properties/DateCellProperties.vue'
 import CollageProperties from '../properties/CollageProperties.vue'
 import CanvasProperties from '../properties/CanvasProperties.vue'
+import AppTierBadge from '@/components/ui/AppTierBadge.vue'
+import { useAuthStore } from '@/stores'
 import type {
   CanvasElementMetadata,
   CalendarGridMetadata,
@@ -33,7 +35,10 @@ const emit = defineEmits<{
 }>()
 
 const editorStore = useEditorStore()
+const authStore = useAuthStore()
 const { selectedObjects } = storeToRefs(editorStore)
+
+const isPro = computed(() => authStore.isPro)
 
 const selectedObject = computed(() => selectedObjects.value[0])
 
@@ -439,7 +444,22 @@ const patternVariantOptions = [
     <DateCellProperties v-if="dateCellMetadata" :date-cell-metadata="dateCellMetadata" :update-date-cell-metadata="updateDateCellMetadata" />
 
     <!-- Collage Properties -->
-    <CollageProperties v-if="collageMetadata" :collage-metadata="collageMetadata" :update-collage-metadata="updateCollageMetadata" />
+    <template v-if="collageMetadata">
+      <div 
+        class="pt-4 border-t border-white/10 mb-4 transition-opacity"
+        :class="{ 'opacity-60 pointer-events-none': !isPro }"
+      >
+        <div class="flex items-center gap-2 mb-2">
+          <p class="text-xs font-semibold uppercase tracking-widest text-white/60">Photo Collage</p>
+          <AppTierBadge v-if="!isPro" tier="pro" size="sm" />
+        </div>
+        <CollageProperties 
+          :collage-metadata="collageMetadata" 
+          :update-collage-metadata="updateCollageMetadata" 
+          :disabled="!isPro"
+        />
+      </div>
+    </template>
 
     <!-- Lines & Arrows -->
     <template v-if="isLineOrArrow">
@@ -563,108 +583,228 @@ const patternVariantOptions = [
 
     <!-- Schedule Block -->
     <template v-if="scheduleMetadata">
-      <div class="pt-4 border-t border-white/10 space-y-4">
+      <div 
+        class="pt-4 border-t border-white/10 space-y-4 transition-opacity"
+        :class="{ 'opacity-60 pointer-events-none': !isPro }"
+      >
         <div class="flex items-center justify-between">
-          <p class="text-xs font-semibold uppercase tracking-widest text-white/60">Schedule</p>
-          <select class="control-glass-sm" :value="scheduleMetadata.intervalMinutes" @change="updateScheduleMetadata((draft) => { draft.intervalMinutes = Number(($event.target as HTMLSelectElement).value) as ScheduleMetadata['intervalMinutes'] })">
+          <div class="flex items-center gap-2">
+            <p class="text-xs font-semibold uppercase tracking-widest text-white/60">Schedule</p>
+            <AppTierBadge v-if="!isPro" tier="pro" size="sm" />
+          </div>
+          <select 
+            class="control-glass-sm" 
+            :value="scheduleMetadata.intervalMinutes" 
+            :disabled="!isPro"
+            @change="updateScheduleMetadata((draft) => { draft.intervalMinutes = Number(($event.target as HTMLSelectElement).value) as ScheduleMetadata['intervalMinutes'] })"
+          >
             <option v-for="opt in scheduleIntervalOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
           </select>
         </div>
         <div>
           <label class="text-xs font-medium text-white/60 mb-1.5 block">Title</label>
-          <input type="text" class="control-glass" :value="scheduleMetadata.title" @input="updateScheduleMetadata((draft) => { draft.title = ($event.target as HTMLInputElement).value })" />
+          <input 
+            type="text" 
+            class="control-glass" 
+            :value="scheduleMetadata.title" 
+            :disabled="!isPro"
+            @input="updateScheduleMetadata((draft) => { draft.title = ($event.target as HTMLInputElement).value })" 
+          />
         </div>
         <div>
           <label class="text-xs font-medium text-white/60 mb-1.5 block">Header Style</label>
-          <select class="control-glass" :value="scheduleMetadata.headerStyle ?? 'minimal'" @change="updateScheduleMetadata((draft) => { draft.headerStyle = ($event.target as HTMLSelectElement).value as PlannerHeaderStyle })">
+          <select 
+            class="control-glass" 
+            :value="scheduleMetadata.headerStyle ?? 'minimal'" 
+            :disabled="!isPro"
+            @change="updateScheduleMetadata((draft) => { draft.headerStyle = ($event.target as HTMLSelectElement).value as PlannerHeaderStyle })"
+          >
             <option v-for="opt in headerStyleOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
           </select>
         </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="text-xs font-medium text-white/60 mb-1.5 block">Accent</label>
-            <ColorPicker :model-value="scheduleMetadata.accentColor" @update:modelValue="(c) => updateScheduleMetadata((draft) => { draft.accentColor = c })" />
+            <ColorPicker 
+              :model-value="scheduleMetadata.accentColor" 
+              :disabled="!isPro"
+              @update:modelValue="(c) => updateScheduleMetadata((draft) => { draft.accentColor = c })" 
+            />
           </div>
           <div>
             <label class="text-xs font-medium text-white/60 mb-1.5 block">Lines</label>
-            <ColorPicker :model-value="scheduleMetadata.lineColor ?? '#e2e8f0'" @update:modelValue="(c) => updateScheduleMetadata((draft) => { draft.lineColor = c })" />
+            <ColorPicker 
+              :model-value="scheduleMetadata.lineColor ?? '#e2e8f0'" 
+              :disabled="!isPro"
+              @update:modelValue="(c) => updateScheduleMetadata((draft) => { draft.lineColor = c })" 
+            />
           </div>
         </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="text-xs font-medium text-white/60 mb-1.5 block">Background</label>
-            <ColorPicker :model-value="scheduleMetadata.backgroundColor ?? '#ffffff'" @update:modelValue="(c) => updateScheduleMetadata((draft) => { draft.backgroundColor = c })" />
+            <ColorPicker 
+              :model-value="scheduleMetadata.backgroundColor ?? '#ffffff'" 
+              :disabled="!isPro"
+              @update:modelValue="(c) => updateScheduleMetadata((draft) => { draft.backgroundColor = c })" 
+            />
           </div>
           <div>
             <label class="text-xs font-medium text-white/60 mb-1.5 block">Border</label>
-            <ColorPicker :model-value="scheduleMetadata.borderColor ?? '#e2e8f0'" @update:modelValue="(c) => updateScheduleMetadata((draft) => { draft.borderColor = c })" />
+            <ColorPicker 
+              :model-value="scheduleMetadata.borderColor ?? '#e2e8f0'" 
+              :disabled="!isPro"
+              @update:modelValue="(c) => updateScheduleMetadata((draft) => { draft.borderColor = c })" 
+            />
           </div>
         </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="text-xs font-medium text-white/60 mb-1.5 block">Radius</label>
-            <input type="number" min="0" max="80" class="control-glass" :value="scheduleMetadata.cornerRadius ?? 22" @change="updateScheduleMetadata((draft) => { draft.cornerRadius = Math.max(0, Math.min(80, Number(($event.target as HTMLInputElement).value) || 0)) })" />
+            <input 
+              type="number" 
+              min="0" 
+              max="80" 
+              class="control-glass" 
+              :value="scheduleMetadata.cornerRadius ?? 22" 
+              :disabled="!isPro"
+              @change="updateScheduleMetadata((draft) => { draft.cornerRadius = Math.max(0, Math.min(80, Number(($event.target as HTMLInputElement).value) || 0)) })" 
+            />
           </div>
           <div>
             <label class="text-xs font-medium text-white/60 mb-1.5 block">Border Width</label>
-            <input type="number" min="0" max="10" class="control-glass" :value="scheduleMetadata.borderWidth ?? 1" @change="updateScheduleMetadata((draft) => { draft.borderWidth = Math.max(0, Math.min(10, Number(($event.target as HTMLInputElement).value) || 0)) })" />
+            <input 
+              type="number" 
+              min="0" 
+              max="10" 
+              class="control-glass" 
+              :value="scheduleMetadata.borderWidth ?? 1" 
+              :disabled="!isPro"
+              @change="updateScheduleMetadata((draft) => { draft.borderWidth = Math.max(0, Math.min(10, Number(($event.target as HTMLInputElement).value) || 0)) })" 
+            />
           </div>
         </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="text-xs font-medium text-white/60 mb-1.5 block">Start Hour</label>
-            <input type="number" min="0" max="23" class="control-glass" :value="scheduleMetadata.startHour" @change="updateScheduleMetadata((draft) => { draft.startHour = Math.max(0, Math.min(23, Number(($event.target as HTMLInputElement).value) || draft.startHour)) })" />
+            <input 
+              type="number" 
+              min="0" 
+              max="23" 
+              class="control-glass" 
+              :value="scheduleMetadata.startHour" 
+              :disabled="!isPro"
+              @change="updateScheduleMetadata((draft) => { draft.startHour = Math.max(0, Math.min(23, Number(($event.target as HTMLInputElement).value) || draft.startHour)) })" 
+            />
           </div>
           <div>
             <label class="text-xs font-medium text-white/60 mb-1.5 block">End Hour</label>
-            <input type="number" min="0" max="23" class="control-glass" :value="scheduleMetadata.endHour" @change="updateScheduleMetadata((draft) => { draft.endHour = Math.max(0, Math.min(23, Number(($event.target as HTMLInputElement).value) || draft.endHour)) })" />
+            <input 
+              type="number" 
+              min="0" 
+              max="23" 
+              class="control-glass" 
+              :value="scheduleMetadata.endHour" 
+              :disabled="!isPro"
+              @change="updateScheduleMetadata((draft) => { draft.endHour = Math.max(0, Math.min(23, Number(($event.target as HTMLInputElement).value) || draft.endHour)) })" 
+            />
           </div>
         </div>
       </div>
     </template>
 
+
     <!-- Checklist Block -->
     <template v-if="checklistMetadata">
-      <div class="pt-4 border-t border-white/10 space-y-4">
-        <p class="text-xs font-semibold uppercase tracking-widest text-white/60">Checklist</p>
+      <div 
+        class="pt-4 border-t border-white/10 space-y-4 transition-opacity"
+        :class="{ 'opacity-60 pointer-events-none': !isPro }"
+      >
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <p class="text-xs font-semibold uppercase tracking-widest text-white/60">Checklist</p>
+            <AppTierBadge v-if="!isPro" tier="pro" size="sm" />
+          </div>
+        </div>
         <div>
           <label class="text-xs font-medium text-white/60 mb-1.5 block">Title</label>
-          <input type="text" class="control-glass" :value="checklistMetadata.title" @input="updateChecklistMetadata((draft) => { draft.title = ($event.target as HTMLInputElement).value })" />
+          <input 
+            type="text" 
+            class="control-glass" 
+            :value="checklistMetadata.title" 
+            :disabled="!isPro"
+            @input="updateChecklistMetadata((draft) => { draft.title = ($event.target as HTMLInputElement).value })" 
+          />
         </div>
         <div>
           <label class="text-xs font-medium text-white/60 mb-1.5 block">Header Style</label>
-          <select class="control-glass" :value="checklistMetadata.headerStyle ?? 'tint'" @change="updateChecklistMetadata((draft) => { draft.headerStyle = ($event.target as HTMLSelectElement).value as PlannerHeaderStyle })">
+          <select 
+            class="control-glass" 
+            :value="checklistMetadata.headerStyle ?? 'tint'" 
+            :disabled="!isPro"
+            @change="updateChecklistMetadata((draft) => { draft.headerStyle = ($event.target as HTMLSelectElement).value as PlannerHeaderStyle })"
+          >
             <option v-for="opt in headerStyleOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
           </select>
         </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="text-xs font-medium text-white/60 mb-1.5 block">Accent</label>
-            <ColorPicker :model-value="checklistMetadata.accentColor" @update:modelValue="(c) => updateChecklistMetadata((draft) => { draft.accentColor = c })" />
+            <ColorPicker 
+              :model-value="checklistMetadata.accentColor" 
+              :disabled="!isPro"
+              @update:modelValue="(c) => updateChecklistMetadata((draft) => { draft.accentColor = c })" 
+            />
           </div>
           <div>
             <label class="text-xs font-medium text-white/60 mb-1.5 block">Checkbox</label>
-            <ColorPicker :model-value="checklistMetadata.checkboxColor ?? checklistMetadata.accentColor" @update:modelValue="(c) => updateChecklistMetadata((draft) => { draft.checkboxColor = c })" />
+            <ColorPicker 
+              :model-value="checklistMetadata.checkboxColor ?? checklistMetadata.accentColor" 
+              :disabled="!isPro"
+              @update:modelValue="(c) => updateChecklistMetadata((draft) => { draft.checkboxColor = c })" 
+            />
           </div>
         </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="text-xs font-medium text-white/60 mb-1.5 block">Background</label>
-            <ColorPicker :model-value="checklistMetadata.backgroundColor ?? '#ffffff'" @update:modelValue="(c) => updateChecklistMetadata((draft) => { draft.backgroundColor = c })" />
+            <ColorPicker 
+              :model-value="checklistMetadata.backgroundColor ?? '#ffffff'" 
+              :disabled="!isPro"
+              @update:modelValue="(c) => updateChecklistMetadata((draft) => { draft.backgroundColor = c })" 
+            />
           </div>
           <div>
             <label class="text-xs font-medium text-white/60 mb-1.5 block">Border</label>
-            <ColorPicker :model-value="checklistMetadata.borderColor ?? '#e2e8f0'" @update:modelValue="(c) => updateChecklistMetadata((draft) => { draft.borderColor = c })" />
+            <ColorPicker 
+              :model-value="checklistMetadata.borderColor ?? '#e2e8f0'" 
+              :disabled="!isPro"
+              @update:modelValue="(c) => updateChecklistMetadata((draft) => { draft.borderColor = c })" 
+            />
           </div>
         </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="text-xs font-medium text-white/60 mb-1.5 block">Rows</label>
-            <input type="number" min="1" max="30" class="control-glass" :value="checklistMetadata.rows" @change="updateChecklistMetadata((draft) => { draft.rows = Math.max(1, Math.min(30, Number(($event.target as HTMLInputElement).value) || draft.rows)) })" />
+            <input 
+              type="number" 
+              min="1" 
+              max="30" 
+              class="control-glass" 
+              :value="checklistMetadata.rows" 
+              :disabled="!isPro"
+              @change="updateChecklistMetadata((draft) => { draft.rows = Math.max(1, Math.min(30, Number(($event.target as HTMLInputElement).value) || draft.rows)) })" 
+            />
           </div>
           <div class="flex items-end">
             <label class="flex items-center gap-2 text-sm text-white/80">
-              <input type="checkbox" class="accent-primary-400" :checked="checklistMetadata.showCheckboxes" @change="updateChecklistMetadata((draft) => { draft.showCheckboxes = ($event.target as HTMLInputElement).checked })" />
+              <input 
+                type="checkbox" 
+                class="accent-primary-400" 
+                :checked="checklistMetadata.showCheckboxes" 
+                :disabled="!isPro"
+                @change="updateChecklistMetadata((draft) => { draft.showCheckboxes = ($event.target as HTMLInputElement).checked })" 
+              />
               <span>Checkboxes</span>
             </label>
           </div>
@@ -672,41 +812,77 @@ const patternVariantOptions = [
       </div>
     </template>
 
+
     <!-- Notes Block -->
     <template v-if="notesPanelMetadata">
-      <div class="pt-4 border-t border-white/10 space-y-4">
+      <div 
+        class="pt-4 border-t border-white/10 space-y-4 transition-opacity"
+        :class="{ 'opacity-60 pointer-events-none': !isPro }"
+      >
         <div class="flex items-center justify-between">
-          <p class="text-xs font-semibold uppercase tracking-widest text-white/60">Notes</p>
-          <select class="control-glass-sm" :value="notesPanelMetadata.pattern" @change="updateNotesPanelMetadata((draft) => { draft.pattern = ($event.target as HTMLSelectElement).value as any })">
+          <div class="flex items-center gap-2">
+            <p class="text-xs font-semibold uppercase tracking-widest text-white/60">Notes</p>
+            <AppTierBadge v-if="!isPro" tier="pro" size="sm" />
+          </div>
+          <select 
+            class="control-glass-sm" 
+            :value="notesPanelMetadata.pattern" 
+            :disabled="!isPro"
+            @change="updateNotesPanelMetadata((draft) => { draft.pattern = ($event.target as HTMLSelectElement).value as any })"
+          >
             <option v-for="opt in patternVariantOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
           </select>
         </div>
         <div>
           <label class="text-xs font-medium text-white/60 mb-1.5 block">Title</label>
-          <input type="text" class="control-glass" :value="notesPanelMetadata.title" @input="updateNotesPanelMetadata((draft) => { draft.title = ($event.target as HTMLInputElement).value })" />
+          <input 
+            type="text" 
+            class="control-glass" 
+            :value="notesPanelMetadata.title" 
+            :disabled="!isPro"
+            @input="updateNotesPanelMetadata((draft) => { draft.title = ($event.target as HTMLInputElement).value })" 
+          />
         </div>
         <div>
           <label class="text-xs font-medium text-white/60 mb-1.5 block">Header Style</label>
-          <select class="control-glass" :value="notesPanelMetadata.headerStyle ?? (notesPanelMetadata.pattern === 'hero' ? 'filled' : 'minimal')" @change="updateNotesPanelMetadata((draft) => { draft.headerStyle = ($event.target as HTMLSelectElement).value as PlannerHeaderStyle })">
+          <select 
+            class="control-glass" 
+            :value="notesPanelMetadata.headerStyle ?? (notesPanelMetadata.pattern === 'hero' ? 'filled' : 'minimal')" 
+            :disabled="!isPro"
+            @change="updateNotesPanelMetadata((draft) => { draft.headerStyle = ($event.target as HTMLSelectElement).value as PlannerHeaderStyle })"
+          >
             <option v-for="opt in headerStyleOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
           </select>
         </div>
         <div>
           <label class="text-xs font-medium text-white/60 mb-1.5 block">Accent</label>
-          <ColorPicker :model-value="notesPanelMetadata.accentColor" @update:modelValue="(c) => updateNotesPanelMetadata((draft) => { draft.accentColor = c })" />
+          <ColorPicker 
+            :model-value="notesPanelMetadata.accentColor" 
+            :disabled="!isPro"
+            @update:modelValue="(c) => updateNotesPanelMetadata((draft) => { draft.accentColor = c })" 
+          />
         </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="text-xs font-medium text-white/60 mb-1.5 block">Background</label>
-            <ColorPicker :model-value="notesPanelMetadata.backgroundColor ?? '#ffffff'" @update:modelValue="(c) => updateNotesPanelMetadata((draft) => { draft.backgroundColor = c })" />
+            <ColorPicker 
+              :model-value="notesPanelMetadata.backgroundColor ?? '#ffffff'" 
+              :disabled="!isPro"
+              @update:modelValue="(c) => updateNotesPanelMetadata((draft) => { draft.backgroundColor = c })" 
+            />
           </div>
           <div>
             <label class="text-xs font-medium text-white/60 mb-1.5 block">Border</label>
-            <ColorPicker :model-value="notesPanelMetadata.borderColor ?? '#e2e8f0'" @update:modelValue="(c) => updateNotesPanelMetadata((draft) => { draft.borderColor = c })" />
+            <ColorPicker 
+              :model-value="notesPanelMetadata.borderColor ?? '#e2e8f0'" 
+              :disabled="!isPro"
+              @update:modelValue="(c) => updateNotesPanelMetadata((draft) => { draft.borderColor = c })" 
+            />
           </div>
         </div>
       </div>
     </template>
+
 
     <!-- Common Properties (Opacity & Layer Order) -->
     <div class="pt-4 border-t border-white/10 space-y-4">
