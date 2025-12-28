@@ -17,6 +17,7 @@ import type { CanvasElementMetadata, CanvasObject, ObjectType } from '@/types'
 import {
   buildCalendarGridGraphics,
   buildChecklistGraphics,
+  buildCollageGraphics,
   buildDateCellGraphics,
   buildPlannerNoteGraphics,
   buildScheduleGraphics,
@@ -25,6 +26,7 @@ import {
 import {
   getDefaultCalendarMetadata,
   getDefaultChecklistMetadata,
+  getDefaultCollageMetadata,
   getDefaultDateCellMetadata,
   getDefaultPlannerNoteMetadata,
   getDefaultScheduleMetadata,
@@ -59,6 +61,7 @@ export function createObjectIdentityHelper(params: {
     if (metadata?.kind === 'planner-note') return 'Notes Panel'
     if (metadata?.kind === 'schedule') return 'Schedule'
     if (metadata?.kind === 'checklist') return 'Checklist'
+    if (metadata?.kind === 'collage') return 'Photo Collage'
     
     // Check for arrow (group with shapeKind)
     if (obj?.data?.shapeKind === 'arrow') return 'Arrow'
@@ -74,6 +77,7 @@ export function createObjectIdentityHelper(params: {
     if (metadata.kind === 'schedule') return `Schedule: ${metadata.title}`
     if (metadata.kind === 'checklist') return `Checklist: ${metadata.title}`
     if (metadata.kind === 'week-strip') return `Week Strip: ${metadata.label ?? 'Week Plan'}`
+    if (metadata.kind === 'collage') return `Collage: ${metadata.title ?? metadata.layout}`
     return getFriendlyObjectName({ data: { elementMetadata: metadata } })
   }
 
@@ -281,6 +285,9 @@ export function createObjectsModule(params: {
         break
       case 'checklist':
         fabricObject = createChecklistObject(id, options)
+        break
+      case 'collage':
+        fabricObject = createCollageObject(id, options)
         break
     }
 
@@ -717,6 +724,25 @@ export function createObjectsModule(params: {
       top: options.y ?? options.top ?? 160,
       id,
       name: options.name ?? getLayerNameForMetadata(metadata),
+      subTargetCheck: false,
+      hoverCursor: 'move',
+    })
+    attachElementMetadata(group, metadata)
+    return group
+  }
+
+  function createCollageObject(id: string, options: any): FabricObject {
+    const layout = options.collageLayout ?? options.layout ?? 'grid-2x2'
+    const metadata = getDefaultCollageMetadata(layout, {
+      ...options,
+      size: options.width && options.height ? { width: options.width, height: options.height } : options.size,
+    })
+    const group = buildCollageGraphics(metadata)
+    group.set({
+      left: options.x ?? options.left ?? 100,
+      top: options.y ?? options.top ?? 100,
+      id,
+      name: options.name ?? 'Photo Collage',
       subTargetCheck: false,
       hoverCursor: 'move',
     })

@@ -8,6 +8,7 @@ import TypographyProperties from '../properties/TypographyProperties.vue'
 import MonthGridProperties from '../properties/MonthGridProperties.vue'
 import WeekStripProperties from '../properties/WeekStripProperties.vue'
 import DateCellProperties from '../properties/DateCellProperties.vue'
+import CollageProperties from '../properties/CollageProperties.vue'
 import CanvasProperties from '../properties/CanvasProperties.vue'
 import type {
   CanvasElementMetadata,
@@ -17,6 +18,7 @@ import type {
   ScheduleMetadata,
   ChecklistMetadata,
   PlannerNoteMetadata,
+  CollageMetadata,
   PlannerHeaderStyle,
 } from '@/types'
 
@@ -272,6 +274,10 @@ const notesPanelMetadata = computed<PlannerNoteMetadata | null>(() =>
   elementMetadata.value?.kind === 'planner-note' ? elementMetadata.value : null,
 )
 
+const collageMetadata = computed<CollageMetadata | null>(() =>
+  elementMetadata.value?.kind === 'collage' ? elementMetadata.value : null,
+)
+
 function updateCalendarMetadata(updater: (draft: CalendarGridMetadata) => void) {
   editorStore.updateSelectedElementMetadata((metadata) => {
     if (metadata.kind !== 'calendar-grid') return null
@@ -318,6 +324,10 @@ function updateNotesPanelMetadata(updater: (draft: PlannerNoteMetadata) => void)
     updater(metadata as PlannerNoteMetadata)
     return metadata
   })
+}
+
+function updateCollageMetadata(updates: Partial<CollageMetadata>) {
+  editorStore.updateActiveElementMetadata(updates)
 }
 
 const localAlignTarget = computed({
@@ -427,6 +437,9 @@ const patternVariantOptions = [
 
     <!-- Date Cell Properties -->
     <DateCellProperties v-if="dateCellMetadata" :date-cell-metadata="dateCellMetadata" :update-date-cell-metadata="updateDateCellMetadata" />
+
+    <!-- Collage Properties -->
+    <CollageProperties v-if="collageMetadata" :collage-metadata="collageMetadata" :update-collage-metadata="updateCollageMetadata" />
 
     <!-- Lines & Arrows -->
     <template v-if="isLineOrArrow">

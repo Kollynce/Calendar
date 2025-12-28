@@ -8,8 +8,9 @@ import TypographyProperties from './TypographyProperties.vue'
 import MonthGridProperties from './MonthGridProperties.vue'
 import WeekStripProperties from './WeekStripProperties.vue'
 import DateCellProperties from './DateCellProperties.vue'
+import CollageProperties from './CollageProperties.vue'
 import CanvasProperties from './CanvasProperties.vue'
-import type { CanvasElementMetadata, CalendarGridMetadata, WeekStripMetadata, DateCellMetadata } from '@/types'
+import type { CanvasElementMetadata, CalendarGridMetadata, WeekStripMetadata, DateCellMetadata, CollageMetadata } from '@/types'
 
 const props = defineProps<{
   alignTarget: 'canvas' | 'selection'
@@ -246,6 +247,10 @@ const dateCellMetadata = computed<DateCellMetadata | null>(() =>
   elementMetadata.value?.kind === 'date-cell' ? elementMetadata.value : null,
 )
 
+const collageMetadata = computed<CollageMetadata | null>(() =>
+  elementMetadata.value?.kind === 'collage' ? elementMetadata.value : null,
+)
+
 function updateCalendarMetadata(updates: Partial<CalendarGridMetadata>) {
   editorStore.updateActiveElementMetadata(updates)
 }
@@ -255,6 +260,10 @@ function updateWeekStripMetadata(updates: Partial<WeekStripMetadata>) {
 }
 
 function updateDateCellMetadata(updates: Partial<DateCellMetadata>) {
+  editorStore.updateActiveElementMetadata(updates)
+}
+
+function updateCollageMetadata(updates: Partial<CollageMetadata>) {
   editorStore.updateActiveElementMetadata(updates)
 }
 
@@ -345,6 +354,9 @@ const localAlignTarget = computed({
 
     <!-- Date Cell Properties -->
     <DateCellProperties v-if="dateCellMetadata" :date-cell-metadata="dateCellMetadata" :update-date-cell-metadata="updateDateCellMetadata" />
+
+    <!-- Collage Properties -->
+    <CollageProperties v-if="collageMetadata" :collage-metadata="collageMetadata" :update-collage-metadata="updateCollageMetadata" />
 
     <!-- Lines & Arrows -->
     <template v-if="isLineOrArrow">
@@ -467,7 +479,7 @@ const localAlignTarget = computed({
     </template>
 
     <!-- Common Properties -->
-    <div class="pt-4 border-t border-white/10 space-y-4">
+    <template class="pt-4 border-t border-white/10 space-y-4">
       <div>
         <label class="text-xs font-medium text-white/60 mb-1.5 block">Opacity</label>
         <div class="flex items-center gap-3">

@@ -93,6 +93,8 @@ function addElement(element: ElementItem) {
     if (element.plannerType === 'notes-panel') editorStore.addObject('notes-panel', options)
     else if (element.plannerType === 'schedule') editorStore.addObject('schedule', options)
     else if (element.plannerType === 'checklist') editorStore.addObject('checklist', options)
+  } else if (element.type === 'collage') {
+    editorStore.addObject('collage', { collageLayout: element.collageLayout || 'grid-2x2', ...options })
   }
 }
 

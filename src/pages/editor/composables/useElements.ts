@@ -1,6 +1,6 @@
 import { useEditorStore } from '@/stores/editor.store'
 
-export type ElementType = 'shape' | 'calendar' | 'planner' | 'text'
+export type ElementType = 'shape' | 'calendar' | 'planner' | 'text' | 'collage'
 
 export interface ElementItem {
   id: string
@@ -11,6 +11,7 @@ export interface ElementItem {
   shapeType?: string
   calendarType?: 'month-grid' | 'week-strip' | 'date-cell'
   plannerType?: 'notes-panel' | 'schedule' | 'checklist'
+  collageLayout?: 'grid-2x2' | 'grid-3x3' | 'grid-2x3' | 'masonry' | 'polaroid' | 'filmstrip' | 'scrapbook' | 'mood-board'
   options?: Record<string, any>
 }
 
@@ -32,6 +33,7 @@ export const elementPlacementDefaults: Record<ElementType, { x: number; y: numbe
   calendar: { x: 80, y: 220 },
   planner: { x: 420, y: 160 },
   text: { x: 180, y: 180 },
+  collage: { x: 100, y: 100 },
 }
 
 // Expanded emoji library organized by categories
@@ -359,6 +361,83 @@ export const elementCategories: ElementCategory[] = [
         plannerType: 'checklist',
         description: 'To-do list',
         options: { title: 'To Do', accentColor: '#ec4899', rows: 8, showCheckboxes: true, width: 320, height: 420 },
+      },
+    ],
+  },
+  {
+    name: 'Photo Collages',
+    items: [
+      {
+        id: 'collage-grid-2x2',
+        name: '2×2 Grid',
+        icon: '⊞',
+        type: 'collage',
+        collageLayout: 'grid-2x2',
+        description: 'Simple 4-photo grid layout',
+        options: { width: 400, height: 400 },
+      },
+      {
+        id: 'collage-grid-3x3',
+        name: '3×3 Grid',
+        icon: '▦',
+        type: 'collage',
+        collageLayout: 'grid-3x3',
+        description: '9-photo grid layout',
+        options: { width: 450, height: 450 },
+      },
+      {
+        id: 'collage-grid-2x3',
+        name: '2×3 Grid',
+        icon: '▤',
+        type: 'collage',
+        collageLayout: 'grid-2x3',
+        description: '6-photo vertical grid',
+        options: { width: 360, height: 480 },
+      },
+      {
+        id: 'collage-masonry',
+        name: 'Masonry',
+        icon: '⧉',
+        type: 'collage',
+        collageLayout: 'masonry',
+        description: 'Pinterest-style layout',
+        options: { width: 420, height: 400 },
+      },
+      {
+        id: 'collage-polaroid',
+        name: 'Polaroid',
+        icon: '📷',
+        type: 'collage',
+        collageLayout: 'polaroid',
+        description: 'Stacked polaroid photos',
+        options: { width: 400, height: 380 },
+      },
+      {
+        id: 'collage-filmstrip',
+        name: 'Filmstrip',
+        icon: '🎞️',
+        type: 'collage',
+        collageLayout: 'filmstrip',
+        description: 'Horizontal film strip',
+        options: { width: 520, height: 200 },
+      },
+      {
+        id: 'collage-scrapbook',
+        name: 'Scrapbook',
+        icon: '📔',
+        type: 'collage',
+        collageLayout: 'scrapbook',
+        description: 'Overlapping creative layout',
+        options: { width: 440, height: 400 },
+      },
+      {
+        id: 'collage-mood-board',
+        name: 'Mood Board',
+        icon: '🎨',
+        type: 'collage',
+        collageLayout: 'mood-board',
+        description: 'Marketing mood board',
+        options: { width: 480, height: 420 },
       },
     ],
   },

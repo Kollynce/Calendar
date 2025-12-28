@@ -50,6 +50,7 @@ export type ObjectType =
   | 'notes-panel'
   | 'schedule'
   | 'checklist'
+  | 'collage'
   | 'text'
   | 'image'
   | 'shape'
@@ -130,6 +131,7 @@ export type CanvasElementMetadata =
   | PlannerNoteMetadata
   | ScheduleMetadata
   | ChecklistMetadata
+  | CollageMetadata
 
 export interface CalendarGridMetadata {
   kind: 'calendar-grid'
@@ -341,6 +343,53 @@ export interface ChecklistMetadata {
   headerBackgroundOpacity?: number
   lineColor?: string
   checkboxColor?: string
+  size: {
+    width: number
+    height: number
+  }
+}
+
+export type CollageLayoutType =
+  | 'grid-2x2'
+  | 'grid-3x3'
+  | 'grid-2x3'
+  | 'masonry'
+  | 'polaroid'
+  | 'filmstrip'
+  | 'scrapbook'
+  | 'mood-board'
+
+export interface CollageSlot {
+  x: number
+  y: number
+  width: number
+  height: number
+  rotation?: number
+  imageUrl?: string
+  imageFit?: 'cover' | 'contain' | 'fill'
+}
+
+export interface CollageMetadata {
+  kind: 'collage'
+  layout: CollageLayoutType
+  title?: string
+  slots: CollageSlot[]
+  backgroundColor?: string
+  borderColor?: string
+  borderWidth?: number
+  cornerRadius?: number
+  slotCornerRadius?: number
+  slotBorderColor?: string
+  slotBorderWidth?: number
+  slotBackgroundColor?: string
+  gap?: number
+  padding?: number
+  showFrame?: boolean
+  showShadow?: boolean
+  shadowColor?: string
+  shadowBlur?: number
+  shadowOffsetX?: number
+  shadowOffsetY?: number
   size: {
     width: number
     height: number

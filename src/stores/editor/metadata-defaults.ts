@@ -1,6 +1,9 @@
 import type {
   CalendarGridMetadata,
   ChecklistMetadata,
+  CollageLayoutType,
+  CollageMetadata,
+  CollageSlot,
   DateCellMetadata,
   PlannerNoteMetadata,
   PlannerPatternVariant,
@@ -241,6 +244,156 @@ export function getDefaultChecklistMetadata(
     headerBackgroundOpacity: overrides.headerBackgroundOpacity,
     lineColor: overrides.lineColor,
     checkboxColor: overrides.checkboxColor,
+    size,
+  }
+}
+
+function generateCollageSlots(
+  layout: CollageLayoutType,
+  width: number,
+  height: number,
+  gap: number,
+  padding: number,
+): CollageSlot[] {
+  const innerWidth = width - padding * 2
+  const innerHeight = height - padding * 2
+
+  switch (layout) {
+    case 'grid-2x2': {
+      const cellW = (innerWidth - gap) / 2
+      const cellH = (innerHeight - gap) / 2
+      return [
+        { x: padding, y: padding, width: cellW, height: cellH },
+        { x: padding + cellW + gap, y: padding, width: cellW, height: cellH },
+        { x: padding, y: padding + cellH + gap, width: cellW, height: cellH },
+        { x: padding + cellW + gap, y: padding + cellH + gap, width: cellW, height: cellH },
+      ]
+    }
+    case 'grid-3x3': {
+      const cellW = (innerWidth - gap * 2) / 3
+      const cellH = (innerHeight - gap * 2) / 3
+      const slots: CollageSlot[] = []
+      for (let row = 0; row < 3; row++) {
+        for (let col = 0; col < 3; col++) {
+          slots.push({
+            x: padding + col * (cellW + gap),
+            y: padding + row * (cellH + gap),
+            width: cellW,
+            height: cellH,
+          })
+        }
+      }
+      return slots
+    }
+    case 'grid-2x3': {
+      const cellW = (innerWidth - gap) / 2
+      const cellH = (innerHeight - gap * 2) / 3
+      const slots: CollageSlot[] = []
+      for (let row = 0; row < 3; row++) {
+        for (let col = 0; col < 2; col++) {
+          slots.push({
+            x: padding + col * (cellW + gap),
+            y: padding + row * (cellH + gap),
+            width: cellW,
+            height: cellH,
+          })
+        }
+      }
+      return slots
+    }
+    case 'masonry': {
+      const col1W = innerWidth * 0.55
+      const col2W = innerWidth - col1W - gap
+      return [
+        { x: padding, y: padding, width: col1W, height: innerHeight * 0.6 },
+        { x: padding, y: padding + innerHeight * 0.6 + gap, width: col1W, height: innerHeight * 0.4 - gap },
+        { x: padding + col1W + gap, y: padding, width: col2W, height: innerHeight * 0.35 },
+        { x: padding + col1W + gap, y: padding + innerHeight * 0.35 + gap, width: col2W, height: innerHeight * 0.35 },
+        { x: padding + col1W + gap, y: padding + innerHeight * 0.7 + gap * 2, width: col2W, height: innerHeight * 0.3 - gap * 2 },
+      ]
+    }
+    case 'polaroid': {
+      const polaroidW = innerWidth * 0.4
+      const polaroidH = polaroidW * 1.2
+      const centerX = width / 2
+      const centerY = height / 2
+      return [
+        { x: centerX - polaroidW * 0.8, y: centerY - polaroidH * 0.6, width: polaroidW, height: polaroidH, rotation: -8 },
+        { x: centerX - polaroidW * 0.3, y: centerY - polaroidH * 0.5, width: polaroidW, height: polaroidH, rotation: 5 },
+        { x: centerX + polaroidW * 0.1, y: centerY - polaroidH * 0.4, width: polaroidW, height: polaroidH, rotation: -3 },
+      ]
+    }
+    case 'filmstrip': {
+      const frameH = innerHeight * 0.7
+      const frameW = frameH * 0.75
+      const totalFrames = 4
+      const totalWidth = totalFrames * frameW + (totalFrames - 1) * gap
+      const startX = padding + (innerWidth - totalWidth) / 2
+      const startY = padding + (innerHeight - frameH) / 2
+      const slots: CollageSlot[] = []
+      for (let i = 0; i < totalFrames; i++) {
+        slots.push({
+          x: startX + i * (frameW + gap),
+          y: startY,
+          width: frameW,
+          height: frameH,
+        })
+      }
+      return slots
+    }
+    case 'scrapbook': {
+      return [
+        { x: padding, y: padding, width: innerWidth * 0.5, height: innerHeight * 0.55, rotation: -2 },
+        { x: padding + innerWidth * 0.45, y: padding + innerHeight * 0.1, width: innerWidth * 0.55, height: innerHeight * 0.45, rotation: 3 },
+        { x: padding + innerWidth * 0.05, y: padding + innerHeight * 0.5, width: innerWidth * 0.45, height: innerHeight * 0.48, rotation: 1 },
+        { x: padding + innerWidth * 0.48, y: padding + innerHeight * 0.52, width: innerWidth * 0.5, height: innerHeight * 0.46, rotation: -4 },
+      ]
+    }
+    case 'mood-board': {
+      return [
+        { x: padding, y: padding, width: innerWidth * 0.65, height: innerHeight * 0.5 },
+        { x: padding + innerWidth * 0.65 + gap, y: padding, width: innerWidth * 0.35 - gap, height: innerHeight * 0.3 },
+        { x: padding + innerWidth * 0.65 + gap, y: padding + innerHeight * 0.3 + gap, width: innerWidth * 0.35 - gap, height: innerHeight * 0.2 - gap },
+        { x: padding, y: padding + innerHeight * 0.5 + gap, width: innerWidth * 0.4, height: innerHeight * 0.5 - gap },
+        { x: padding + innerWidth * 0.4 + gap, y: padding + innerHeight * 0.5 + gap, width: innerWidth * 0.6 - gap, height: innerHeight * 0.5 - gap },
+      ]
+    }
+    default:
+      return []
+  }
+}
+
+export function getDefaultCollageMetadata(
+  layout: CollageLayoutType = 'grid-2x2',
+  overrides: Partial<CollageMetadata> = {},
+): CollageMetadata {
+  const defaultSize = { width: 400, height: 400 }
+  const size = overrides.size ? { ...defaultSize, ...overrides.size } : defaultSize
+  const gap = overrides.gap ?? 8
+  const padding = overrides.padding ?? 12
+
+  const slots = overrides.slots ?? generateCollageSlots(layout, size.width, size.height, gap, padding)
+
+  return {
+    kind: 'collage',
+    layout: overrides.layout ?? layout,
+    title: overrides.title,
+    slots,
+    backgroundColor: overrides.backgroundColor ?? '#ffffff',
+    borderColor: overrides.borderColor ?? '#e2e8f0',
+    borderWidth: overrides.borderWidth ?? 1,
+    cornerRadius: overrides.cornerRadius ?? 16,
+    slotCornerRadius: overrides.slotCornerRadius ?? 8,
+    slotBorderColor: overrides.slotBorderColor ?? '#e5e7eb',
+    slotBorderWidth: overrides.slotBorderWidth ?? 1,
+    slotBackgroundColor: overrides.slotBackgroundColor ?? '#f3f4f6',
+    gap,
+    padding,
+    showShadow: overrides.showShadow ?? false,
+    shadowColor: overrides.shadowColor ?? 'rgba(0,0,0,0.1)',
+    shadowBlur: overrides.shadowBlur ?? 8,
+    shadowOffsetX: overrides.shadowOffsetX ?? 0,
+    shadowOffsetY: overrides.shadowOffsetY ?? 4,
     size,
   }
 }

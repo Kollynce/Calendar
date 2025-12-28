@@ -272,14 +272,20 @@ function stopResizingRightSidebar() {
   document.body.style.userSelect = ''
 }
 
+function handleRequestRender() {
+  editorStore.rebuildActiveCollage()
+}
+
 onMounted(() => {
   document.addEventListener('mousemove', handleResizeRightSidebar)
   document.addEventListener('mouseup', stopResizingRightSidebar)
+  window.addEventListener('editor:request-render', handleRequestRender)
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('mousemove', handleResizeRightSidebar)
   document.removeEventListener('mouseup', stopResizingRightSidebar)
+  window.removeEventListener('editor:request-render', handleRequestRender)
 })
 
 const uploadCategoryOptions: { id: UploadCategory; label: string; description: string }[] = [

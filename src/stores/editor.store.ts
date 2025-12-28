@@ -16,6 +16,7 @@ import { useCalendarStore } from '@/stores/calendar.store'
 import {
   buildCalendarGridGraphics,
   buildChecklistGraphics,
+  buildCollageGraphics,
   buildDateCellGraphics,
   buildPlannerNoteGraphics,
   buildScheduleGraphics,
@@ -512,6 +513,9 @@ export const useEditorStore = defineStore('editor', () => {
       case 'checklist':
         rebuilt = buildChecklistGraphics(metadata)
         break
+      case 'collage':
+        rebuilt = buildCollageGraphics(metadata)
+        break
       default:
         rebuilt = null
     }
@@ -600,6 +604,33 @@ export const useEditorStore = defineStore('editor', () => {
     }
 
     flushQueuedMetadataUpdate()
+  }
+
+  function updateActiveElementMetadata(updates: Partial<CanvasElementMetadata>): void {
+    updateSelectedElementMetadata((draft) => {
+      return { ...draft, ...updates } as CanvasElementMetadata
+    })
+  }
+
+  function rebuildActiveCollage() {
+    const active = getActiveCanvasObject()
+    if (!active) return
+    const metadata = getActiveElementMetadata()
+    if (!metadata || metadata.kind !== 'collage') return
+    
+    // Trigger a refresh by updating with same metadata
+    // but using the existing flush mechanism to replace the object
+    queuedMetadataUpdate = {
+      targetId: (active as any).id,
+      metadata: metadata,
+    }
+    flushQueuedMetadataUpdate()
+  }
+
+  function requestRender(): void {
+    if (canvas.value) {
+      canvas.value.requestRenderAll()
+    }
   }
 
   let queuedHistorySaveTimeout: ReturnType<typeof setTimeout> | null = null
@@ -733,6 +764,9 @@ export const useEditorStore = defineStore('editor', () => {
     getHolidaysForCalendarYear,
     // Metadata-aware helpers
     getActiveElementMetadata,
+    updateActiveElementMetadata,
     updateSelectedElementMetadata,
+    requestRender,
+    rebuildActiveCollage,
   }
 })
