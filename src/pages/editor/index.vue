@@ -32,10 +32,8 @@ import TypographyProperties from '@/components/editor/properties/TypographyPrope
 import CalendarConfigPanel from '@/components/editor/CalendarConfigPanel.vue'
 import EditorLayers from '@/components/editor/EditorLayers.vue'
 import TemplatePanel from '@/components/editor/TemplatePanel.vue'
-import AdobeCanvas from '@/components/editor/AdobeCanvas.vue'
-import MonthGridProperties from '@/components/editor/properties/MonthGridProperties.vue'
-import WeekStripProperties from '@/components/editor/properties/WeekStripProperties.vue'
-import DateCellProperties from '@/components/editor/properties/DateCellProperties.vue'
+import Canvas from '@/components/editor/Canvas.vue'
+import PropertiesPanelContent from '@/components/editor/panels/PropertiesPanelContent.vue'
 import ElementsPanel from '@/components/editor/panels/ElementsPanel.vue'
 import TextPanel from '@/components/editor/panels/TextPanel.vue'
 import AppButton from '@/components/ui/AppButton.vue'
@@ -82,9 +80,9 @@ const {
 
 // Local State
 const activeTool = ref('templates')
-const canvasRef = ref<HTMLCanvasElement | null>(null)
-const adobeCanvasRef = ref<InstanceType<typeof AdobeCanvas> | null>(null)
-const canvasKey = ref(0) // Key to force AdobeCanvas remount on project switch
+const canvasElRef = ref<HTMLCanvasElement | null>(null)
+const canvasComponentRef = ref<InstanceType<typeof Canvas> | null>(null)
+const canvasKey = ref(0) // Key to force Canvas remount on project switch
 const isExportModalOpen = ref(false)
 const isCanvasSetupModalOpen = ref(false)
 const userUploads = ref<UserUploadAsset[]>([])
@@ -300,7 +298,6 @@ const uploadsTabOptions: { id: 'my_uploads' | 'curated'; label: string }[] = [
 
 const DEFAULT_CANVAS = PAPER_SIZES.portrait
 
-const paperWidth = computed(() => canvasSize.value.width || PAPER_SIZES.portrait.width)
 const canvasOrientation = computed(() => {
   const { width, height } = canvasSize.value
   if (!width || !height) return 'Portrait'
@@ -491,25 +488,29 @@ const objectType = computed(() => {
   return selectedObject.value.type
 })
 
+// Canvas background color
+const canvasBackgroundColor = computed(() => {
+  return editorStore.project?.canvas?.backgroundColor || '#ffffff'
+})
+
+const canvasColorPresets = [
+  '#ffffff', '#f8fafc', '#f1f5f9', '#e2e8f0', '#cbd5e1', '#94a3b8',
+  '#fef3c7', '#fde68a', '#fcd34d', '#fbbf24', '#f59e0b', '#d97706',
+  '#dcfce7', '#bbf7d0', '#86efac', '#4ade80', '#22c55e', '#16a34a',
+  '#dbeafe', '#bfdbfe', '#93c5fd', '#60a5fa', '#3b82f6', '#2563eb',
+  '#f3e8ff', '#e9d5ff', '#d8b4fe', '#c084fc', '#a855f7', '#9333ea',
+  '#fce7f3', '#fbcfe8', '#f9a8d4', '#f472b6', '#ec4899', '#db2777',
+  '#1a1a1a', '#262626', '#404040', '#525252', '#737373', '#a3a3a3',
+]
+
+function updateCanvasBackgroundColor(color: string) {
+  editorStore.setBackgroundColor(color)
+}
+
 // Text properties (two-way binding with canvas)
 const textContent = computed({
   get: () => (selectedObject.value as any)?.text || '',
   set: (value) => editorStore.updateObjectProperty('text', value),
-})
-
-const fontSize = computed({
-  get: () => (selectedObject.value as any)?.fontSize || 16,
-  set: (value) => editorStore.updateObjectProperty('fontSize', value),
-})
-
-const fontFamily = computed({
-  get: () => (selectedObject.value as any)?.fontFamily || 'Inter',
-  set: (value) => editorStore.updateObjectProperty('fontFamily', value),
-})
-
-const textColor = computed({
-  get: () => (selectedObject.value as any)?.fill || '#000000',
-  set: (value) => editorStore.updateObjectProperty('fill', value),
 })
 
 // Shape properties
@@ -526,6 +527,14 @@ const strokeColor = computed({
 const strokeWidth = computed({
   get: () => (selectedObject.value as any)?.strokeWidth || 0,
   set: (value) => editorStore.updateObjectProperty('strokeWidth', value),
+})
+
+const cornerRadius = computed({
+  get: () => (selectedObject.value as any)?.rx || 0,
+  set: (value) => {
+    editorStore.updateObjectProperty('rx', value)
+    editorStore.updateObjectProperty('ry', value)
+  },
 })
 
 const isArrow = computed(() => {
@@ -830,30 +839,23 @@ async function ensureProjectForRoute(): Promise<void> {
     project.canvas.height = project.canvas.height || DEFAULT_CANVAS.height
   }
 
-  if (canvasRef.value && !editorStore.canvas) {
+  if (canvasElRef.value && !editorStore.canvas) {
     await initializeEditorCanvas()
   }
-}
-
-function shouldAddWelcomeText(): boolean {
-  if (routeProjectId.value) return false
-  if (!editorStore.project) return false
-  if (editorStore.project.canvas.objects?.length) return false
-  return true
 }
 
 let isInitializing = false
 
 function handleCanvasReady(canvasEl: HTMLCanvasElement): void {
   console.log('[handleCanvasReady] Canvas element ready, initializing editor canvas')
-  canvasRef.value = canvasEl
+  canvasElRef.value = canvasEl
   void initializeEditorCanvas()
 }
 
 async function initializeEditorCanvas(): Promise<void> {
   await nextTick()
 
-  if (!canvasRef.value) {
+  if (!canvasElRef.value) {
     console.log('[initializeEditorCanvas] No canvas ref, skipping')
     return
   }
@@ -877,7 +879,7 @@ async function initializeEditorCanvas(): Promise<void> {
   isInitializing = true
   try {
     console.log('[initializeEditorCanvas] Initializing canvas for project:', editorStore.project?.id)
-    await editorStore.initializeCanvas(canvasRef.value)
+    await editorStore.initializeCanvas(canvasElRef.value)
     const currentCanvas = editorStore.canvas
     const objectCount = (currentCanvas as any)?.getObjects?.().length ?? 0
     console.log('[initializeEditorCanvas] Canvas initialized with', objectCount, 'objects')
@@ -889,27 +891,10 @@ async function initializeEditorCanvas(): Promise<void> {
     editorStore.setZoom(1)
     editorStore.canvas?.calcOffset()
     // Fit canvas to screen after initialization
-    adobeCanvasRef.value?.fitToScreen()
+    canvasComponentRef.value?.fitToScreen()
   })
 
-  if (shouldAddWelcomeText()) {
-    setTimeout(() => {
-      editorStore.addObject('text', {
-        content: 'Start Designing Your Calendar',
-        x: Math.round(paperWidth.value / 2),
-        y: 90,
-        fontSize: 32,
-        fontFamily: 'Outfit',
-        textAlign: 'center',
-        originX: 'center',
-        color: '#1a1a1a',
-      })
-
-      requestAnimationFrame(() => {
-        editorStore.canvas?.calcOffset()
-      })
-    }, 100)
-  }
+  // Welcome text removed as per request for blank canvas
 }
 
 onMounted(() => {
@@ -942,9 +927,9 @@ watch(routeProjectId, async (next, prev) => {
   }
   
   // Clear the canvas ref so it gets recreated
-  canvasRef.value = null
+  canvasElRef.value = null
   
-  // Increment key to force AdobeCanvas component to remount with fresh DOM element
+  // Increment key to force Canvas component to remount with fresh DOM element
   canvasKey.value++
   console.log('[routeProjectId watch] Canvas key incremented to', canvasKey.value)
   
@@ -955,11 +940,11 @@ watch(routeProjectId, async (next, prev) => {
   await ensureProjectForRoute()
   console.log('[routeProjectId watch] Project loaded:', editorStore.project?.id, 'with', editorStore.project?.canvas.objects.length, 'objects')
   
-  // Wait another tick to ensure project is fully loaded and AdobeCanvas remounts
+  // Wait another tick to ensure project is fully loaded and Canvas remounts
   await nextTick()
   
-  // AdobeCanvas will emit canvas-ready when it remounts, which will call initializeEditorCanvas
-  console.log('[routeProjectId watch] Waiting for AdobeCanvas to remount and emit canvas-ready')
+  // Canvas will emit canvas-ready when it remounts, which will call initializeEditorCanvas
+  console.log('[routeProjectId watch] Waiting for Canvas to remount and emit canvas-ready')
 }, { immediate: false, flush: 'post' })
 
 onBeforeUnmount(() => {
@@ -1787,7 +1772,7 @@ function handleDistribute(axis: 'horizontal' | 'vertical') {
                       <div
                         v-for="asset in userUploads"
                         :key="asset.storagePath"
-                        class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/70 shadow-sm p-3 space-y-3"
+                        class="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/70 shadow-sm p-3 space-y-3"
                         draggable="true"
                         @dragstart="onAssetDragStart($event, asset)"
                         @dragend="onAssetDragEnd"
@@ -1929,10 +1914,10 @@ function handleDistribute(axis: 'horizontal' | 'vertical') {
         @dragleave="handleCanvasDragLeave"
         @drop="handleCanvasDrop"
       >
-        <AdobeCanvas 
+        <Canvas 
           :key="canvasKey"
-          ref="adobeCanvasRef"
-          :canvas-ref="canvasRef"
+          ref="canvasComponentRef"
+          :canvas-ref="canvasElRef"
           @canvas-ready="handleCanvasReady"
         />
         <div
@@ -2036,608 +2021,64 @@ function handleDistribute(axis: 'horizontal' | 'vertical') {
               </div>
             </section>
 
-            <!-- No Selection State -->
+            <!-- Canvas Properties (No Selection State) -->
             <section
               v-if="!hasSelection"
-              class="rounded-2xl border border-dashed border-white/10 bg-white/5 backdrop-blur px-6 py-8 text-center space-y-4"
+              class="rounded-2xl border border-white/10 bg-white/5 backdrop-blur px-4 py-4 space-y-5"
             >
-              <div class="w-16 h-16 mx-auto bg-white/10 rounded-3xl flex items-center justify-center text-white/60">
-                <svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
-                </svg>
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-semibold uppercase tracking-widest text-white/60">Canvas</span>
               </div>
-              <div>
-                <p class="text-sm font-medium text-white">Select an object to edit</p>
-                <p class="text-xs text-white/60">Click any layer on the canvas or in the list below.</p>
+              
+              <!-- Canvas Background Color -->
+              <div class="space-y-3">
+                <div>
+                  <label class="text-xs font-medium text-white/60 mb-1.5 block">Background Color</label>
+                  <ColorPicker 
+                    :model-value="canvasBackgroundColor" 
+                    @update:modelValue="updateCanvasBackgroundColor"
+                  />
+                </div>
+                
+                <!-- Quick Color Presets -->
+                <div>
+                  <label class="text-xs font-medium text-white/60 mb-2 block">Quick Presets</label>
+                  <div class="grid grid-cols-6 gap-1.5">
+                    <button
+                      v-for="color in canvasColorPresets"
+                      :key="color"
+                      @click="updateCanvasBackgroundColor(color)"
+                      class="w-8 h-8 rounded-lg border-2 transition-all hover:scale-110"
+                      :class="canvasBackgroundColor === color ? 'border-primary-400 ring-2 ring-primary-400/30' : 'border-white/20'"
+                      :style="{ backgroundColor: color }"
+                      :title="color"
+                    />
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Canvas Size Info -->
+              <div class="pt-3 border-t border-white/10">
+                <div class="flex items-center justify-between text-xs">
+                  <span class="text-white/60">Size</span>
+                  <span class="text-white/80 font-medium">{{ canvasSize.width }} × {{ canvasSize.height }} px</span>
+                </div>
+              </div>
+              
+              <!-- Hint -->
+              <div class="pt-3 border-t border-white/10 text-center">
+                <p class="text-xs text-white/50">Click any object on the canvas to edit its properties</p>
               </div>
             </section>
             
-            <!-- Properties Panel -->
-            <section v-else class="rounded-2xl border border-white/10 bg-white/5 backdrop-blur px-4 py-4 space-y-5">
-              <!-- Object Type -->
-              <div class="flex items-center justify-between">
-                <span class="text-xs font-semibold uppercase tracking-widest text-white/60">{{ objectType }}</span>
-                <button @click="editorStore.deleteSelected()" class="p-1.5 hover:bg-red-500/20 rounded-lg transition-colors group" title="Delete">
-                  <TrashIcon class="w-4 h-4 text-white/50 group-hover:text-red-200" />
-                </button>
-              </div>
-
-              <!-- Layout (Position & Size) -->
-              <div class="space-y-3">
-                <div class="flex items-center justify-between">
-                  <p class="text-xs font-semibold uppercase tracking-widest text-white/60">Layout</p>
-                </div>
-
-                <div class="grid grid-cols-2 gap-3">
-                  <div>
-                    <label class="text-xs font-medium text-white/60 mb-1.5 block">X</label>
-                    <input
-                      v-model.number="positionX"
-                      type="number"
-                      class="control-glass"
-                    />
-                  </div>
-                  <div>
-                    <label class="text-xs font-medium text-white/60 mb-1.5 block">Y</label>
-                    <input
-                      v-model.number="positionY"
-                      type="number"
-                      class="control-glass"
-                    />
-                  </div>
-                </div>
-
-                <div v-if="elementSize" class="grid grid-cols-2 gap-3">
-                  <div>
-                    <label class="text-xs font-medium text-white/60 mb-1.5 block">W</label>
-                    <input
-                      type="number"
-                      min="10"
-                      class="control-glass"
-                      :value="Math.round(elementSize.width)"
-                      @change="updateElementSize({ width: Number(($event.target as HTMLInputElement).value), height: elementSize.height })"
-                    />
-                  </div>
-                  <div>
-                    <label class="text-xs font-medium text-white/60 mb-1.5 block">H</label>
-                    <input
-                      type="number"
-                      min="10"
-                      class="control-glass"
-                      :value="Math.round(elementSize.height)"
-                      @change="updateElementSize({ width: elementSize.width, height: Number(($event.target as HTMLInputElement).value) })"
-                    />
-                  </div>
-                </div>
-
-                <div v-else class="grid grid-cols-2 gap-3">
-                  <div>
-                    <label class="text-xs font-medium text-white/60 mb-1.5 block">W</label>
-                    <input
-                      v-model.number="objectWidth"
-                      type="number"
-                      min="1"
-                      class="control-glass"
-                    />
-                  </div>
-                  <div>
-                    <label class="text-xs font-medium text-white/60 mb-1.5 block">H</label>
-                    <input
-                      v-model.number="objectHeight"
-                      type="number"
-                      min="1"
-                      class="control-glass"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <!-- Align & Distribute -->
-              <div class="pt-4 border-t border-white/10 space-y-3">
-                <div class="flex items-center justify-between gap-3">
-                  <p class="text-xs font-semibold uppercase tracking-widest text-white/60">Align</p>
-                  <select v-model="alignTarget" class="control-glass-sm w-auto">
-                    <option value="canvas">To Page</option>
-                    <option value="selection">To Selection</option>
-                  </select>
-                </div>
-
-                <div class="grid grid-cols-3 gap-2">
-                  <button type="button" class="btn-glass-sm w-full" @click="handleAlign('left')">Left</button>
-                  <button type="button" class="btn-glass-sm w-full" @click="handleAlign('center')">Center</button>
-                  <button type="button" class="btn-glass-sm w-full" @click="handleAlign('right')">Right</button>
-                  <button type="button" class="btn-glass-sm w-full" @click="handleAlign('top')">Top</button>
-                  <button type="button" class="btn-glass-sm w-full" @click="handleAlign('middle')">Middle</button>
-                  <button type="button" class="btn-glass-sm w-full" @click="handleAlign('bottom')">Bottom</button>
-                </div>
-
-                <div class="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    class="btn-glass-sm w-full"
-                    :disabled="selectedObjects.length < 3"
-                    :class="selectedObjects.length < 3 ? 'opacity-50 cursor-not-allowed' : ''"
-                    @click="handleDistribute('horizontal')"
-                  >
-                    Distribute H
-                  </button>
-                  <button
-                    type="button"
-                    class="btn-glass-sm w-full"
-                    :disabled="selectedObjects.length < 3"
-                    :class="selectedObjects.length < 3 ? 'opacity-50 cursor-not-allowed' : ''"
-                    @click="handleDistribute('vertical')"
-                  >
-                    Distribute V
-                  </button>
-                </div>
-
-                <p class="text-[11px] text-white/50">
-                  Tip: single object → “To Page”. Multiple → “To Selection”.
-                </p>
-              </div>
-
-              <!-- Month Grid Properties -->
-              <MonthGridProperties
-                v-if="calendarMetadata"
-                :calendar-metadata="calendarMetadata"
-                :update-calendar-metadata="updateCalendarMetadata"
-              />
-
-              <template v-if="isLineOrArrow">
-                <div class="pt-4 border-t border-white/10 space-y-4">
-                  <p class="text-[11px] font-semibold text-white/60">Lines &amp; Arrows</p>
-
-                  <div>
-                    <label class="text-xs font-medium text-white/60 mb-1.5 block">Stroke</label>
-                    <ColorPicker v-model="lineStrokeColor" />
-                  </div>
-
-                  <div>
-                    <label class="text-xs font-medium text-white/60 mb-1.5 block">Stroke Width</label>
-                    <div class="flex items-center gap-3">
-                      <input
-                        v-model.number="lineStrokeWidth"
-                        type="range"
-                        min="1"
-                        max="24"
-                        class="flex-1 accent-primary-400"
-                      />
-                      <span class="text-xs text-white/70 w-8 text-right">{{ lineStrokeWidth }}px</span>
-                    </div>
-                  </div>
-
-                  <div class="grid grid-cols-2 gap-3">
-                    <div>
-                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Dash</label>
-                      <select class="control-glass" :value="dashStyle" @change="dashStyle = ($event.target as HTMLSelectElement).value as 'solid' | 'dashed' | 'dotted' | 'dash-dot'">
-                        <option value="solid">Solid</option>
-                        <option value="dashed">Dashed</option>
-                        <option value="dotted">Dotted</option>
-                        <option value="dash-dot">Dash-dot</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Cap</label>
-                      <select class="control-glass" :value="lineCap" @change="lineCap = ($event.target as HTMLSelectElement).value">
-                        <option value="butt">Butt</option>
-                        <option value="round">Round</option>
-                        <option value="square">Square</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label class="text-xs font-medium text-white/60 mb-1.5 block">Join</label>
-                    <select class="control-glass" :value="lineJoin" @change="lineJoin = ($event.target as HTMLSelectElement).value">
-                      <option value="miter">Miter</option>
-                      <option value="round">Round</option>
-                      <option value="bevel">Bevel</option>
-                    </select>
-                  </div>
-
-                  <div v-if="isArrow" class="pt-3 border-t border-white/10 space-y-3">
-                    <p class="text-[11px] font-semibold text-white/60">Arrowhead</p>
-
-                    <div class="grid grid-cols-2 gap-3">
-                      <div>
-                        <label class="text-xs font-medium text-white/60 mb-1.5 block">Ends</label>
-                        <select class="control-glass" :value="arrowEnds" @change="arrowEnds = ($event.target as HTMLSelectElement).value">
-                          <option value="end">End</option>
-                          <option value="start">Start</option>
-                          <option value="both">Both</option>
-                          <option value="none">None</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label class="text-xs font-medium text-white/60 mb-1.5 block">Style</label>
-                        <select class="control-glass" :value="arrowHeadStyle" @change="arrowHeadStyle = ($event.target as HTMLSelectElement).value">
-                          <option value="filled">Filled</option>
-                          <option value="open">Open</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    <div class="grid grid-cols-2 gap-3">
-                      <div>
-                        <label class="text-xs font-medium text-white/60 mb-1.5 block">Length</label>
-                        <input v-model.number="arrowHeadLength" type="number" min="4" max="80" class="control-glass" />
-                      </div>
-                      <div>
-                        <label class="text-xs font-medium text-white/60 mb-1.5 block">Width</label>
-                        <input v-model.number="arrowHeadWidth" type="number" min="4" max="80" class="control-glass" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </template>
-
-              <!-- Week Strip Properties -->
-              <WeekStripProperties
-                v-if="weekStripMetadata"
-                :week-strip-metadata="weekStripMetadata"
-                :update-week-strip-metadata="updateWeekStripMetadata"
-              />
-
-              <!-- Date Cell Properties -->
-              <DateCellProperties
-                v-if="dateCellMetadata"
-                :date-cell-metadata="dateCellMetadata"
-                :update-date-cell-metadata="updateDateCellMetadata"
-              />
-
-              <!-- Schedule Block -->
-              <template v-if="scheduleMetadata">
-                <div class="pt-4 border-t border-white/10 space-y-4">
-                  <div class="flex items-center justify-between">
-                    <p class="text-xs font-semibold uppercase tracking-widest text-white/60">Schedule</p>
-                    <select
-                      class="control-glass-sm"
-                      :value="scheduleMetadata.intervalMinutes"
-                      @change="updateScheduleMetadata((draft) => { draft.intervalMinutes = Number(($event.target as HTMLSelectElement).value) as ScheduleMetadata['intervalMinutes'] })"
-                    >
-                      <option v-for="opt in scheduleIntervalOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label class="text-xs font-medium text-white/60 mb-1.5 block">Title</label>
-                    <input
-                      type="text"
-                      class="control-glass"
-                      :value="scheduleMetadata.title"
-                      @input="updateScheduleMetadata((draft) => { draft.title = ($event.target as HTMLInputElement).value })"
-                    />
-                  </div>
-
-                  <div>
-                    <label class="text-xs font-medium text-white/60 mb-1.5 block">Header Style</label>
-                    <select
-                      class="control-glass"
-                      :value="scheduleMetadata.headerStyle ?? 'minimal'"
-                      @change="updateScheduleMetadata((draft) => { draft.headerStyle = ($event.target as HTMLSelectElement).value as PlannerHeaderStyle })"
-                    >
-                      <option v-for="opt in headerStyleOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-                    </select>
-                  </div>
-
-                  <div class="grid grid-cols-2 gap-3">
-                    <div>
-                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Accent</label>
-                      <ColorPicker
-                        :model-value="scheduleMetadata.accentColor"
-                        @update:modelValue="(c) => updateScheduleMetadata((draft) => { draft.accentColor = c })"
-                      />
-                    </div>
-                    <div>
-                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Lines</label>
-                      <ColorPicker
-                        :model-value="scheduleMetadata.lineColor ?? '#e2e8f0'"
-                        @update:modelValue="(c) => updateScheduleMetadata((draft) => { draft.lineColor = c })"
-                      />
-                    </div>
-                  </div>
-
-                  <div class="grid grid-cols-2 gap-3">
-                    <div>
-                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Background</label>
-                      <ColorPicker
-                        :model-value="scheduleMetadata.backgroundColor ?? '#ffffff'"
-                        @update:modelValue="(c) => updateScheduleMetadata((draft) => { draft.backgroundColor = c })"
-                      />
-                    </div>
-                    <div>
-                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Border</label>
-                      <ColorPicker
-                        :model-value="scheduleMetadata.borderColor ?? '#e2e8f0'"
-                        @update:modelValue="(c) => updateScheduleMetadata((draft) => { draft.borderColor = c })"
-                      />
-                    </div>
-                  </div>
-
-                  <div class="grid grid-cols-2 gap-3">
-                    <div>
-                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Radius</label>
-                      <input
-                        type="number"
-                        min="0"
-                        max="80"
-                        class="control-glass"
-                        :value="scheduleMetadata.cornerRadius ?? 22"
-                        @change="updateScheduleMetadata((draft) => { draft.cornerRadius = Math.max(0, Math.min(80, Number(($event.target as HTMLInputElement).value) || 0)) })"
-                      />
-                    </div>
-                    <div>
-                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Border Width</label>
-                      <input
-                        type="number"
-                        min="0"
-                        max="10"
-                        class="control-glass"
-                        :value="scheduleMetadata.borderWidth ?? 1"
-                        @change="updateScheduleMetadata((draft) => { draft.borderWidth = Math.max(0, Math.min(10, Number(($event.target as HTMLInputElement).value) || 0)) })"
-                      />
-                    </div>
-                  </div>
-
-                  <div class="grid grid-cols-2 gap-3">
-                    <div>
-                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Start Hour</label>
-                      <input
-                        type="number"
-                        min="0"
-                        max="23"
-                        class="control-glass"
-                        :value="scheduleMetadata.startHour"
-                        @change="updateScheduleMetadata((draft) => { draft.startHour = Math.max(0, Math.min(23, Number(($event.target as HTMLInputElement).value) || draft.startHour)) })"
-                      />
-                    </div>
-                    <div>
-                      <label class="text-xs font-medium text-white/60 mb-1.5 block">End Hour</label>
-                      <input
-                        type="number"
-                        min="0"
-                        max="23"
-                        class="control-glass"
-                        :value="scheduleMetadata.endHour"
-                        @change="updateScheduleMetadata((draft) => { draft.endHour = Math.max(0, Math.min(23, Number(($event.target as HTMLInputElement).value) || draft.endHour)) })"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </template>
-
-              <!-- Checklist Block -->
-              <template v-if="checklistMetadata">
-                <div class="pt-4 border-t border-white/10 space-y-4">
-                  <p class="text-xs font-semibold uppercase tracking-widest text-white/60">Checklist</p>
-
-                  <div>
-                    <label class="text-xs font-medium text-white/60 mb-1.5 block">Title</label>
-                    <input
-                      type="text"
-                      class="control-glass"
-                      :value="checklistMetadata.title"
-                      @input="updateChecklistMetadata((draft) => { draft.title = ($event.target as HTMLInputElement).value })"
-                    />
-                  </div>
-
-                  <div>
-                    <label class="text-xs font-medium text-white/60 mb-1.5 block">Header Style</label>
-                    <select
-                      class="control-glass"
-                      :value="checklistMetadata.headerStyle ?? 'tint'"
-                      @change="updateChecklistMetadata((draft) => { draft.headerStyle = ($event.target as HTMLSelectElement).value as PlannerHeaderStyle })"
-                    >
-                      <option v-for="opt in headerStyleOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-                    </select>
-                  </div>
-
-                  <div class="grid grid-cols-2 gap-3">
-                    <div>
-                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Accent</label>
-                      <ColorPicker
-                        :model-value="checklistMetadata.accentColor"
-                        @update:modelValue="(c) => updateChecklistMetadata((draft) => { draft.accentColor = c })"
-                      />
-                    </div>
-                    <div>
-                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Checkbox</label>
-                      <ColorPicker
-                        :model-value="checklistMetadata.checkboxColor ?? checklistMetadata.accentColor"
-                        @update:modelValue="(c) => updateChecklistMetadata((draft) => { draft.checkboxColor = c })"
-                      />
-                    </div>
-                  </div>
-
-                  <div class="grid grid-cols-2 gap-3">
-                    <div>
-                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Background</label>
-                      <ColorPicker
-                        :model-value="checklistMetadata.backgroundColor ?? '#ffffff'"
-                        @update:modelValue="(c) => updateChecklistMetadata((draft) => { draft.backgroundColor = c })"
-                      />
-                    </div>
-                    <div>
-                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Border</label>
-                      <ColorPicker
-                        :model-value="checklistMetadata.borderColor ?? '#e2e8f0'"
-                        @update:modelValue="(c) => updateChecklistMetadata((draft) => { draft.borderColor = c })"
-                      />
-                    </div>
-                  </div>
-
-                  <div class="grid grid-cols-2 gap-3">
-                    <div>
-                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Rows</label>
-                      <input
-                        type="number"
-                        min="1"
-                        max="30"
-                        class="control-glass"
-                        :value="checklistMetadata.rows"
-                        @change="updateChecklistMetadata((draft) => { draft.rows = Math.max(1, Math.min(30, Number(($event.target as HTMLInputElement).value) || draft.rows)) })"
-                      />
-                    </div>
-                    <div class="flex items-end">
-                      <label class="flex items-center gap-2 text-sm text-white/80">
-                        <input
-                          type="checkbox"
-                          class="accent-primary-400"
-                          :checked="checklistMetadata.showCheckboxes"
-                          @change="updateChecklistMetadata((draft) => { draft.showCheckboxes = ($event.target as HTMLInputElement).checked })"
-                        >
-                        <span>Checkboxes</span>
-                      </label>
-                    </div>
-                  </div>
-                </div>
-              </template>
-
-              <!-- Notes Block (Planner Note) -->
-              <template v-if="plannerNoteMetadata">
-                <div class="pt-4 border-t border-white/10 space-y-4">
-                  <div class="flex items-center justify-between">
-                    <p class="text-xs font-semibold uppercase tracking-widest text-white/60">Notes</p>
-                    <select
-                      class="control-glass-sm"
-                      :value="plannerNoteMetadata.pattern"
-                      @change="updatePlannerMetadata((draft) => { draft.pattern = ($event.target as HTMLSelectElement).value as PlannerPatternVariant })"
-                    >
-                      <option v-for="opt in plannerPatternOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label class="text-xs font-medium text-white/60 mb-1.5 block">Title</label>
-                    <input
-                      type="text"
-                      class="control-glass"
-                      :value="plannerNoteMetadata.title"
-                      @input="updatePlannerMetadata((draft) => { draft.title = ($event.target as HTMLInputElement).value })"
-                    />
-                  </div>
-
-                  <div>
-                    <label class="text-xs font-medium text-white/60 mb-1.5 block">Header Style</label>
-                    <select
-                      class="control-glass"
-                      :value="plannerNoteMetadata.headerStyle ?? (plannerNoteMetadata.pattern === 'hero' ? 'filled' : 'minimal')"
-                      @change="updatePlannerMetadata((draft) => { draft.headerStyle = ($event.target as HTMLSelectElement).value as PlannerHeaderStyle })"
-                    >
-                      <option v-for="opt in headerStyleOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label class="text-xs font-medium text-white/60 mb-1.5 block">Accent</label>
-                    <ColorPicker
-                      :model-value="plannerNoteMetadata.accentColor"
-                      @update:modelValue="(c) => updatePlannerMetadata((draft) => { draft.accentColor = c })"
-                    />
-                  </div>
-
-                  <div class="grid grid-cols-2 gap-3">
-                    <div>
-                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Background</label>
-                      <ColorPicker
-                        :model-value="plannerNoteMetadata.backgroundColor ?? '#ffffff'"
-                        @update:modelValue="(c) => updatePlannerMetadata((draft) => { draft.backgroundColor = c })"
-                      />
-                    </div>
-                    <div>
-                      <label class="text-xs font-medium text-white/60 mb-1.5 block">Border</label>
-                      <ColorPicker
-                        :model-value="plannerNoteMetadata.borderColor ?? '#e2e8f0'"
-                        @update:modelValue="(c) => updatePlannerMetadata((draft) => { draft.borderColor = c })"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </template>
-              
-              <!-- Text Properties -->
-              <template v-if="objectType === 'textbox'">
-                <div class="space-y-4">
-                  <!-- Content -->
-                  <div>
-                    <label class="text-xs font-medium text-white/60 mb-1.5 block">Content</label>
-                    <textarea 
-                      v-model="textContent" 
-                      rows="3"
-                      class="control-glass resize-none"
-                    ></textarea>
-                  </div>
-                  
-                  <!-- Typography Section -->
-                  <div class="pt-4 border-t border-white/10">
-                    <TypographyProperties />
-                  </div>
-                </div>
-              </template>
-              
-              <!-- Shape Properties -->
-              <template v-if="objectType === 'rect' || objectType === 'circle'">
-                <div class="space-y-4">
-                  <div>
-                    <label class="text-xs font-medium text-white/60 mb-1.5 block">Fill Color</label>
-                    <ColorPicker v-model="fillColor" />
-                  </div>
-                  <div>
-                    <label class="text-xs font-medium text-white/60 mb-1.5 block">Stroke Color</label>
-                    <ColorPicker v-model="strokeColor" />
-                  </div>
-                  <div>
-                    <label class="text-xs font-medium text-white/60 mb-1.5 block">Stroke Width</label>
-                    <div class="flex items-center gap-3">
-                      <input 
-                        v-model.number="strokeWidth" 
-                        type="range" 
-                        min="0" 
-                        max="20"
-                        class="flex-1 accent-primary-400"
-                      />
-                      <span class="text-xs text-white/70 w-8 text-right">{{ strokeWidth }}px</span>
-                    </div>
-                  </div>
-                </div>
-              </template>
-              
-              <!-- Common Properties -->
-              <div class="pt-4 border-t border-white/10 space-y-4">
-                <div>
-                  <label class="text-xs font-medium text-white/60 mb-1.5 block">Opacity</label>
-                  <div class="flex items-center gap-3">
-                    <input 
-                      v-model.number="opacity" 
-                      type="range" 
-                      min="0" 
-                      max="100"
-                      class="flex-1 accent-primary-400"
-                    />
-                    <span class="text-xs text-white/70 w-10 text-right">{{ Math.round(opacity) }}%</span>
-                  </div>
-                </div>
-                
-                <div>
-                  <label class="text-xs font-medium text-white/60 mb-2 block">Layer Order</label>
-                  <div class="grid grid-cols-2 gap-2">
-                    <button 
-                      @click="editorStore.bringToFront()"
-                      class="btn-glass-sm w-full"
-                    >
-                      Bring Front
-                    </button>
-                    <button 
-                      @click="editorStore.sendToBack()"
-                      class="btn-glass-sm w-full"
-                    >
-                      Send Back
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </section>
+            <!-- Properties Panel Content (extracted component) -->
+            <PropertiesPanelContent
+              v-else
+              :align-target="alignTarget"
+              @align="handleAlign"
+              @distribute="handleDistribute"
+              @update:alignTarget="alignTarget = $event"
+            />
           </div>
         </div>
         

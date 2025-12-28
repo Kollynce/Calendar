@@ -5,7 +5,7 @@ import { useCalendarStore } from '@/stores/calendar.store'
 import { useAuthStore } from '@/stores/auth.store'
 import { storeToRefs } from 'pinia'
 import { getPresetByCanvasSize } from '@/config/canvas-presets'
-import type AdobeCanvas from '@/components/editor/AdobeCanvas.vue'
+import type Canvas from '@/components/editor/Canvas.vue'
 
 export const PAPER_SIZES = {
   portrait: { width: 744, height: 1052 },
@@ -33,7 +33,7 @@ export function useEditorState() {
   // Local State
   const activeTool = ref('templates')
   const canvasRef = ref<HTMLCanvasElement | null>(null)
-  const adobeCanvasRef = ref<InstanceType<typeof AdobeCanvas> | null>(null)
+  const canvasComponentRef = ref<InstanceType<typeof Canvas> | null>(null)
   const canvasKey = ref(0)
   const isExportModalOpen = ref(false)
   const isCanvasSetupModalOpen = ref(false)
@@ -119,7 +119,7 @@ export function useEditorState() {
     // Local state
     activeTool,
     canvasRef,
-    adobeCanvasRef,
+    canvasComponentRef,
     canvasKey,
     isExportModalOpen,
     isCanvasSetupModalOpen,

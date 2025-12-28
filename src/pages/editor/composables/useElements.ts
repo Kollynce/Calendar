@@ -17,6 +17,14 @@ export interface ElementItem {
 export interface ElementCategory {
   name: string
   items: ElementItem[]
+  collapsed?: boolean
+}
+
+export interface EmojiCategory {
+  id: string
+  name: string
+  icon: string
+  emojis: string[]
 }
 
 export const elementPlacementDefaults: Record<ElementType, { x: number; y: number }> = {
@@ -26,6 +34,273 @@ export const elementPlacementDefaults: Record<ElementType, { x: number; y: numbe
   text: { x: 180, y: 180 },
 }
 
+// Expanded emoji library organized by categories
+export const emojiCategories: EmojiCategory[] = [
+  {
+    id: 'popular',
+    name: 'Popular',
+    icon: '⭐',
+    emojis: ['😊', '❤️', '✨', '🎉', '🔥', '💯', '👍', '🙌', '💪', '🎯', '⚡', '🌟'],
+  },
+  {
+    id: 'faces',
+    name: 'Faces',
+    icon: '😀',
+    emojis: ['😀', '😃', '😄', '😁', '😊', '🥰', '😍', '🤩', '😎', '🤗', '🤔', '😌', '😴', '🥳', '😇', '🙂'],
+  },
+  {
+    id: 'hearts',
+    name: 'Hearts & Love',
+    icon: '❤️',
+    emojis: ['❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '💕', '💖', '💗', '💘', '💝', '💞', '💓'],
+  },
+  {
+    id: 'nature',
+    name: 'Nature',
+    icon: '🌸',
+    emojis: ['🌸', '🌺', '🌻', '🌹', '🌷', '💐', '🌿', '🍀', '🌴', '🌳', '🌲', '🍁', '🍂', '🌾', '☀️', '🌙'],
+  },
+  {
+    id: 'weather',
+    name: 'Weather',
+    icon: '☀️',
+    emojis: ['☀️', '🌤️', '⛅', '🌥️', '☁️', '🌧️', '⛈️', '🌩️', '❄️', '🌨️', '🌪️', '🌈', '💧', '💦', '🌊', '⚡'],
+  },
+  {
+    id: 'celebration',
+    name: 'Celebration',
+    icon: '🎉',
+    emojis: ['🎉', '🎊', '🎈', '🎁', '🎀', '🎂', '🍰', '🥳', '🎆', '🎇', '✨', '🎄', '🎃', '🎗️', '🏆', '🥇'],
+  },
+  {
+    id: 'food',
+    name: 'Food & Drink',
+    icon: '🍕',
+    emojis: ['🍕', '🍔', '🍟', '🌮', '🍣', '🍜', '🍝', '🍩', '🍪', '🍫', '🍦', '🧁', '☕', '🍵', '🧃', '🍷'],
+  },
+  {
+    id: 'animals',
+    name: 'Animals',
+    icon: '🐱',
+    emojis: ['🐱', '🐶', '🐰', '🦊', '🐻', '🐼', '🐨', '🦁', '🐯', '🦋', '🐝', '🐞', '🦄', '🐬', '🦅', '🦉'],
+  },
+  {
+    id: 'travel',
+    name: 'Travel',
+    icon: '✈️',
+    emojis: ['✈️', '🚗', '🚕', '🚌', '🚂', '🚀', '🛸', '⛵', '🏖️', '🏔️', '🗼', '🗽', '🏰', '⛺', '🎡', '🌍'],
+  },
+  {
+    id: 'activities',
+    name: 'Activities',
+    icon: '⚽',
+    emojis: ['⚽', '🏀', '🏈', '⚾', '🎾', '🏐', '🎱', '🏓', '🎯', '🎮', '🎨', '🎭', '🎬', '🎤', '🎧', '🎹'],
+  },
+  {
+    id: 'objects',
+    name: 'Objects',
+    icon: '💡',
+    emojis: ['💡', '🔔', '📌', '📎', '✏️', '📝', '📅', '📆', '🗓️', '📋', '📁', '💼', '🎒', '👓', '🔑', '🔒'],
+  },
+  {
+    id: 'symbols',
+    name: 'Symbols',
+    icon: '✅',
+    emojis: ['✅', '❌', '⭕', '❗', '❓', '💯', '🔴', '🟠', '🟡', '🟢', '🔵', '🟣', '⚫', '⚪', '🔶', '🔷'],
+  },
+  {
+    id: 'arrows',
+    name: 'Arrows',
+    icon: '➡️',
+    emojis: ['➡️', '⬅️', '⬆️', '⬇️', '↗️', '↘️', '↙️', '↖️', '↕️', '↔️', '🔄', '🔃', '🔙', '🔚', '🔛', '🔜'],
+  },
+  {
+    id: 'zodiac',
+    name: 'Zodiac',
+    icon: '♈',
+    emojis: ['♈', '♉', '♊', '♋', '♌', '♍', '♎', '♏', '♐', '♑', '♒', '♓', '⛎', '🔯', '☯️', '🌙'],
+  },
+  {
+    id: 'hands',
+    name: 'Hands',
+    icon: '👋',
+    emojis: ['👋', '🤚', '✋', '🖐️', '👌', '🤌', '🤏', '✌️', '🤞', '🫰', '🤟', '🤘', '🤙', '👍', '👎', '👏'],
+  },
+]
+
+// Premium decorative elements
+export const decorativeElements: ElementItem[] = [
+  // Frames & Containers
+  {
+    id: 'soft-frame',
+    name: 'Soft Frame',
+    icon: '⬜',
+    type: 'shape',
+    shapeType: 'rect',
+    description: 'Rounded photo frame',
+    options: { width: 240, height: 180, cornerRadius: 32, fill: '#ffffff', stroke: '#e2e8f0', strokeWidth: 2 },
+  },
+  {
+    id: 'gradient-card',
+    name: 'Gradient Card',
+    icon: '🎨',
+    type: 'shape',
+    shapeType: 'rect',
+    description: 'Modern gradient card',
+    options: { width: 280, height: 160, cornerRadius: 20, fill: '#f0f9ff', stroke: '#bae6fd', strokeWidth: 1 },
+  },
+  {
+    id: 'pill-badge',
+    name: 'Pill Badge',
+    icon: '💊',
+    type: 'shape',
+    shapeType: 'rect',
+    description: 'Rounded pill shape',
+    options: { width: 120, height: 40, cornerRadius: 20, fill: '#fef3c7', stroke: '#fcd34d', strokeWidth: 1 },
+  },
+  {
+    id: 'circle-frame',
+    name: 'Circle Frame',
+    icon: '⭕',
+    type: 'shape',
+    shapeType: 'circle',
+    description: 'Circular photo frame',
+    options: { radius: 80, fill: '#ffffff', stroke: '#e2e8f0', strokeWidth: 3 },
+  },
+  // Accent shapes
+  {
+    id: 'accent-dot',
+    name: 'Accent Dot',
+    icon: '●',
+    type: 'shape',
+    shapeType: 'circle',
+    description: 'Small decorative dot',
+    options: { radius: 8, fill: '#3b82f6' },
+  },
+  {
+    id: 'highlight-bar',
+    name: 'Highlight Bar',
+    icon: '▬',
+    type: 'shape',
+    shapeType: 'rect',
+    description: 'Accent highlight bar',
+    options: { width: 60, height: 6, cornerRadius: 3, fill: '#f59e0b' },
+  },
+  {
+    id: 'section-divider',
+    name: 'Section Divider',
+    icon: '━',
+    type: 'shape',
+    shapeType: 'line',
+    description: 'Elegant section divider',
+    options: { width: 200, stroke: '#cbd5e1', strokeWidth: 1 },
+  },
+]
+
+// Sticker-style elements (emojis with preset styles)
+export const stickerElements: ElementItem[] = [
+  {
+    id: 'sticker-star',
+    name: 'Star',
+    icon: '⭐',
+    type: 'text',
+    description: 'Star sticker',
+    options: { content: '⭐', fontSize: 48, fontFamily: 'Noto Color Emoji, Segoe UI Emoji, Apple Color Emoji, sans-serif' },
+  },
+  {
+    id: 'sticker-heart',
+    name: 'Heart',
+    icon: '❤️',
+    type: 'text',
+    description: 'Heart sticker',
+    options: { content: '❤️', fontSize: 48, fontFamily: 'Noto Color Emoji, Segoe UI Emoji, Apple Color Emoji, sans-serif' },
+  },
+  {
+    id: 'sticker-sparkle',
+    name: 'Sparkle',
+    icon: '✨',
+    type: 'text',
+    description: 'Sparkle sticker',
+    options: { content: '✨', fontSize: 48, fontFamily: 'Noto Color Emoji, Segoe UI Emoji, Apple Color Emoji, sans-serif' },
+  },
+  {
+    id: 'sticker-fire',
+    name: 'Fire',
+    icon: '🔥',
+    type: 'text',
+    description: 'Fire sticker',
+    options: { content: '🔥', fontSize: 48, fontFamily: 'Noto Color Emoji, Segoe UI Emoji, Apple Color Emoji, sans-serif' },
+  },
+  {
+    id: 'sticker-check',
+    name: 'Check',
+    icon: '✅',
+    type: 'text',
+    description: 'Check sticker',
+    options: { content: '✅', fontSize: 48, fontFamily: 'Noto Color Emoji, Segoe UI Emoji, Apple Color Emoji, sans-serif' },
+  },
+  {
+    id: 'sticker-target',
+    name: 'Target',
+    icon: '🎯',
+    type: 'text',
+    description: 'Target sticker',
+    options: { content: '🎯', fontSize: 48, fontFamily: 'Noto Color Emoji, Segoe UI Emoji, Apple Color Emoji, sans-serif' },
+  },
+]
+
+// Icon elements (text-based icons)
+export const iconElements: ElementItem[] = [
+  {
+    id: 'icon-calendar',
+    name: 'Calendar',
+    icon: '📅',
+    type: 'text',
+    description: 'Calendar icon',
+    options: { content: '📅', fontSize: 32, fontFamily: 'Noto Color Emoji, Segoe UI Emoji, Apple Color Emoji, sans-serif' },
+  },
+  {
+    id: 'icon-clock',
+    name: 'Clock',
+    icon: '🕐',
+    type: 'text',
+    description: 'Clock icon',
+    options: { content: '🕐', fontSize: 32, fontFamily: 'Noto Color Emoji, Segoe UI Emoji, Apple Color Emoji, sans-serif' },
+  },
+  {
+    id: 'icon-pin',
+    name: 'Pin',
+    icon: '📌',
+    type: 'text',
+    description: 'Pin icon',
+    options: { content: '📌', fontSize: 32, fontFamily: 'Noto Color Emoji, Segoe UI Emoji, Apple Color Emoji, sans-serif' },
+  },
+  {
+    id: 'icon-bell',
+    name: 'Bell',
+    icon: '🔔',
+    type: 'text',
+    description: 'Bell icon',
+    options: { content: '🔔', fontSize: 32, fontFamily: 'Noto Color Emoji, Segoe UI Emoji, Apple Color Emoji, sans-serif' },
+  },
+  {
+    id: 'icon-note',
+    name: 'Note',
+    icon: '📝',
+    type: 'text',
+    description: 'Note icon',
+    options: { content: '📝', fontSize: 32, fontFamily: 'Noto Color Emoji, Segoe UI Emoji, Apple Color Emoji, sans-serif' },
+  },
+  {
+    id: 'icon-folder',
+    name: 'Folder',
+    icon: '📁',
+    type: 'text',
+    description: 'Folder icon',
+    options: { content: '📁', fontSize: 32, fontFamily: 'Noto Color Emoji, Segoe UI Emoji, Apple Color Emoji, sans-serif' },
+  },
+]
+
 export const elementCategories: ElementCategory[] = [
   {
     name: 'Basic Shapes',
@@ -33,6 +308,9 @@ export const elementCategories: ElementCategory[] = [
       { id: 'rect', name: 'Rectangle', icon: '▢', type: 'shape', shapeType: 'rect', options: { width: 220, height: 140, fill: '#f4f4f5', stroke: '#d4d4d8', strokeWidth: 1 } },
       { id: 'rounded-rect', name: 'Rounded Rect', icon: '▢', type: 'shape', shapeType: 'rect', options: { width: 220, height: 120, cornerRadius: 28, fill: '#fef3c7', stroke: '#fcd34d', strokeWidth: 1 } },
       { id: 'circle', name: 'Circle', icon: '○', type: 'shape', shapeType: 'circle', options: { radius: 70, fill: '#dbeafe' } },
+      { id: 'ellipse', name: 'Ellipse', icon: '⬭', type: 'shape', shapeType: 'ellipse', options: { width: 160, height: 100, fill: '#fce7f3', stroke: '#f9a8d4', strokeWidth: 1 } },
+      { id: 'triangle', name: 'Triangle', icon: '△', type: 'shape', shapeType: 'triangle', options: { width: 120, height: 104, fill: '#dcfce7', stroke: '#86efac', strokeWidth: 1 } },
+      { id: 'square', name: 'Square', icon: '■', type: 'shape', shapeType: 'rect', options: { width: 120, height: 120, fill: '#e0e7ff', stroke: '#a5b4fc', strokeWidth: 1 } },
     ],
   },
   {
@@ -41,6 +319,7 @@ export const elementCategories: ElementCategory[] = [
       { id: 'line', name: 'Line', icon: '—', type: 'shape', shapeType: 'line', options: { width: 260, stroke: '#0f172a', strokeWidth: 4 } },
       { id: 'arrow', name: 'Arrow', icon: '→', type: 'shape', shapeType: 'arrow', options: { width: 240, stroke: '#1d4ed8', strokeWidth: 4, arrowEnds: 'end', arrowHeadStyle: 'filled', arrowHeadLength: 18, arrowHeadWidth: 14 } },
       { id: 'divider', name: 'Divider', icon: '┄', type: 'shape', shapeType: 'line', options: { width: 260, stroke: '#94a3b8', strokeWidth: 2, strokeDashArray: [10, 8] } },
+      { id: 'double-arrow', name: 'Double Arrow', icon: '↔', type: 'shape', shapeType: 'arrow', options: { width: 200, stroke: '#7c3aed', strokeWidth: 3, arrowEnds: 'both', arrowHeadStyle: 'filled', arrowHeadLength: 14, arrowHeadWidth: 10 } },
     ],
   },
   {
@@ -60,14 +339,8 @@ export const elementCategories: ElementCategory[] = [
         icon: '🗒️',
         type: 'planner',
         plannerType: 'notes-panel',
-        description: 'Patterned notes panel (Hero / Ruled / Grid / Dot)',
-        options: {
-          pattern: 'ruled',
-          title: 'Notes',
-          accentColor: '#2563eb',
-          width: 320,
-          height: 320,
-        },
+        description: 'Patterned notes panel',
+        options: { pattern: 'ruled', title: 'Notes', accentColor: '#2563eb', width: 320, height: 320 },
       },
       {
         id: 'schedule-block',
@@ -75,16 +348,8 @@ export const elementCategories: ElementCategory[] = [
         icon: '🕒',
         type: 'planner',
         plannerType: 'schedule',
-        description: 'Timeline schedule with time slots',
-        options: {
-          title: 'Schedule',
-          accentColor: '#a855f7',
-          startHour: 6,
-          endHour: 20,
-          intervalMinutes: 60,
-          width: 320,
-          height: 640,
-        },
+        description: 'Timeline schedule',
+        options: { title: 'Schedule', accentColor: '#a855f7', startHour: 6, endHour: 20, intervalMinutes: 60, width: 320, height: 640 },
       },
       {
         id: 'checklist-block',
@@ -92,44 +357,26 @@ export const elementCategories: ElementCategory[] = [
         icon: '☑️',
         type: 'planner',
         plannerType: 'checklist',
-        description: 'To-do list with optional checkboxes',
-        options: {
-          title: 'To Do',
-          accentColor: '#ec4899',
-          rows: 8,
-          showCheckboxes: true,
-          width: 320,
-          height: 420,
-        },
+        description: 'To-do list',
+        options: { title: 'To Do', accentColor: '#ec4899', rows: 8, showCheckboxes: true, width: 320, height: 420 },
       },
     ],
   },
   {
-    name: 'Decorative',
-    items: [
-      {
-        id: 'soft-frame',
-        name: 'Soft Frame',
-        icon: '⬜',
-        type: 'shape',
-        shapeType: 'rect',
-        description: 'Rounded photo frame with subtle stroke',
-        options: { width: 240, height: 180, cornerRadius: 32, fill: '#ffffff', stroke: '#cbd5f5', strokeWidth: 3 },
-      },
-      {
-        id: 'emoji',
-        name: 'Emoji',
-        icon: '😊',
-        type: 'text',
-        description: 'Add an emoji sticker',
-        options: {
-          content: '😊',
-          fontSize: 64,
-          fontFamily: 'Noto Color Emoji, Segoe UI Emoji, Apple Color Emoji, sans-serif',
-          fontWeight: 400,
-        },
-      },
-    ],
+    name: 'Frames & Cards',
+    items: decorativeElements.slice(0, 4),
+  },
+  {
+    name: 'Accents',
+    items: decorativeElements.slice(4),
+  },
+  {
+    name: 'Stickers',
+    items: stickerElements,
+  },
+  {
+    name: 'Icons',
+    items: iconElements,
   },
 ]
 

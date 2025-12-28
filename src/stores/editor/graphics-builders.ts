@@ -499,9 +499,19 @@ export function buildWeekStripGraphics(
     Math.min(Math.max(40, Math.round(labelFontSize + 24)), Math.max(44, Math.round(targetHeight * 0.45)))
   const startDate = new Date(metadata.startDate)
   const isBlank = metadata.mode === 'blank'
-  const holidaysForYear = getHolidaysForCalendarYear
-    ? getHolidaysForCalendarYear(startDate.getFullYear(), metadata.country, metadata.language)
-    : []
+  // Get holidays for both the start year and end year (in case week spans two years like Dec 28 - Jan 3)
+  const endDate = new Date(startDate)
+  endDate.setDate(endDate.getDate() + 6)
+  const startYear = startDate.getFullYear()
+  const endYear = endDate.getFullYear()
+  let holidaysForYear: Holiday[] = []
+  if (getHolidaysForCalendarYear) {
+    holidaysForYear = getHolidaysForCalendarYear(startYear, metadata.country, metadata.language)
+    if (endYear !== startYear) {
+      const nextYearHolidays = getHolidaysForCalendarYear(endYear, metadata.country, metadata.language)
+      holidaysForYear = [...holidaysForYear, ...nextYearHolidays]
+    }
+  }
   const days = isBlank
     ? (Array.from({ length: 7 }, () => ({
         date: new Date(startDate),

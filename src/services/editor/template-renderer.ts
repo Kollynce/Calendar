@@ -4,10 +4,9 @@ import {
   Rect,
   Textbox,
   Group,
-  Line,
   Object as FabricObject,
 } from 'fabric'
-import type { CalendarTemplate } from '@/data/templates/calendar-templates'
+import type { CalendarTemplate, TemplateDecorativeElement } from '@/data/templates/calendar-templates'
 import { createGridConfig } from '@/data/templates/calendar-templates'
 import type { Holiday } from '@/types'
 import { buildTemplateLayout, type TemplateLayout } from './template-layout'
@@ -103,15 +102,27 @@ function populateCanvas(
     objects.push(createAreaRect(layout.photoArea))
   }
 
-  if (layout.notesArea && layout.notesArea.variant !== 'background') {
-    objects.push(createAreaRect(layout.notesArea, true))
-  }
-
   objects.push(createHeaderText(layout))
   objects.push(createCalendarGrid(layout, template, options))
 
-  if (layout.notesArea) {
-    objects.push(...createNotesGuides(layout.notesArea))
+  // Add decorative elements from template
+  if (template.preview.decorativeElements?.length) {
+    const decorativeObjects = createDecorativeElements(
+      template.preview.decorativeElements,
+      layout.canvas.width,
+      layout.canvas.height
+    )
+    objects.push(...decorativeObjects)
+  }
+
+  // Add title text if specified
+  if (template.preview.titleText) {
+    objects.push(createTitleText(template, layout))
+  }
+
+  // Add subtitle text if specified
+  if (template.preview.subtitleText) {
+    objects.push(createSubtitleText(template, layout))
   }
 
   objects.forEach((obj) => {
@@ -151,29 +162,6 @@ function createAreaRect(area: TemplateLayout['photoArea'], dashed = false): Rect
   })
 }
 
-function createNotesGuides(area: TemplateLayout['notesArea']): Line[] {
-  if (!area || area.variant !== 'notes') return []
-
-  const lines: Line[] = []
-  const spacing = 28
-  const startY = area.position.y + spacing
-  for (let y = startY; y < area.position.y + area.size.height - spacing / 2; y += spacing) {
-    lines.push(
-      new Line(
-        [area.position.x + 16, y, area.position.x + area.size.width - 16, y],
-        {
-          stroke: '#cbd5f5',
-          strokeWidth: 1,
-          selectable: false,
-          evented: false,
-          opacity: 0.7,
-        }
-      )
-    )
-  }
-  return lines
-}
-
 function createCalendarGrid(
   layout: TemplateLayout,
   template: CalendarTemplate,
@@ -199,6 +187,60 @@ function markTemplateObject(obj: FabricObject): void {
   obj.set('data', {
     ...existingData,
     templateObject: true,
+  })
+}
+
+function createDecorativeElements(
+  elements: TemplateDecorativeElement[],
+  canvasWidth: number,
+  canvasHeight: number
+): FabricObject[] {
+  return elements.map((el) => {
+    const left = (el.x / 100) * canvasWidth
+    const top = (el.y / 100) * canvasHeight
+
+    // Only emoji type is supported
+    return new Textbox(el.content, {
+      left,
+      top,
+      fontSize: el.fontSize || 24,
+      fontFamily: 'Noto Color Emoji, Segoe UI Emoji, Apple Color Emoji, sans-serif',
+      opacity: el.opacity ?? 1,
+      selectable: true,
+      objectCaching: false,
+    })
+  })
+}
+
+function createTitleText(template: CalendarTemplate, layout: TemplateLayout): Textbox {
+  const [primaryColor] = template.preview.colorScheme
+  return new Textbox(template.preview.titleText || '', {
+    left: layout.canvas.padding,
+    top: layout.canvas.padding,
+    width: layout.canvas.width - layout.canvas.padding * 2,
+    fontFamily: template.config.fontFamily,
+    fontSize: template.config.fontSize === 'large' ? 42 : template.config.fontSize === 'medium' ? 36 : 28,
+    fill: primaryColor || '#1a1a1a',
+    fontWeight: 'bold',
+    textAlign: 'center',
+    selectable: true,
+    objectCaching: false,
+  })
+}
+
+function createSubtitleText(template: CalendarTemplate, layout: TemplateLayout): Textbox {
+  const [, secondaryColor] = template.preview.colorScheme
+  return new Textbox(template.preview.subtitleText || '', {
+    left: layout.canvas.padding,
+    top: layout.canvas.padding + 50,
+    width: layout.canvas.width - layout.canvas.padding * 2,
+    fontFamily: template.config.fontFamily,
+    fontSize: template.config.fontSize === 'large' ? 18 : template.config.fontSize === 'medium' ? 16 : 14,
+    fill: secondaryColor || '#6b7280',
+    fontWeight: 'normal',
+    textAlign: 'center',
+    selectable: true,
+    objectCaching: false,
   })
 }
 

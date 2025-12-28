@@ -3,6 +3,8 @@ import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useEditorStore } from '@/stores/editor.store'
 import EditorRulers from './EditorRulers.vue'
+import CanvasContextMenu from './CanvasContextMenu.vue'
+import KeyboardShortcutsPanel from './KeyboardShortcutsPanel.vue'
 
 const props = defineProps<{
   canvasRef: HTMLCanvasElement | null
@@ -19,6 +21,8 @@ const { zoom, canvasSize, showRulers } = storeToRefs(editorStore)
 const viewportRef = ref<HTMLDivElement | null>(null)
 const internalCanvasRef = ref<HTMLCanvasElement | null>(null)
 const canvasWrapperRef = ref<HTMLDivElement | null>(null)
+const contextMenuRef = ref<InstanceType<typeof CanvasContextMenu> | null>(null)
+const shortcutsPanelRef = ref<InstanceType<typeof KeyboardShortcutsPanel> | null>(null)
 
 // Viewport dimensions for rulers
 const viewportDimensions = ref({ width: 0, height: 0 })
@@ -134,6 +138,12 @@ function handleMouseDown(e: MouseEvent) {
       editorStore.canvas.selection = false
     }
   }
+}
+
+function handleContextMenu(e: MouseEvent) {
+  e.preventDefault()
+  e.stopPropagation()
+  contextMenuRef.value?.show(e.clientX, e.clientY)
 }
 
 function handleMouseMove(e: MouseEvent) {
@@ -350,6 +360,13 @@ function handleKeyDown(e: KeyboardEvent) {
   if (!shouldIgnoreShortcuts && e.shiftKey && e.code === 'Digit2') {
     e.preventDefault()
     zoomToSelection()
+    return
+  }
+
+  // Open keyboard shortcuts panel with ? key
+  if (!shouldIgnoreShortcuts && (e.key === '?' || (e.shiftKey && e.key === '/'))) {
+    e.preventDefault()
+    shortcutsPanelRef.value?.toggle()
     return
   }
 
@@ -623,6 +640,7 @@ defineExpose({
       :style="{ cursor: viewportCursor }"
       @wheel.prevent="handleWheel"
       @mousedown="handleMouseDown"
+      @contextmenu="handleContextMenu"
     >
       <!-- Rulers (positioned at top-left, fixed) -->
       <div 
@@ -756,8 +774,14 @@ defineExpose({
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
           </svg>
         </button>
+        
+        <!-- Keyboard Shortcuts Help -->
+        <KeyboardShortcutsPanel ref="shortcutsPanelRef" />
       </div>
     </div>
+    
+    <!-- Context Menu -->
+    <CanvasContextMenu ref="contextMenuRef" />
   </div>
 </template>
 

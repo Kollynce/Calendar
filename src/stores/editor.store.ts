@@ -412,8 +412,13 @@ export const useEditorStore = defineStore('editor', () => {
             return metadata.year === y
           }
           if (metadata.kind === 'week-strip') {
-            const startYear = Number(new Date(metadata.startDate).getFullYear())
-            return Number.isFinite(startYear) && startYear === y
+            const startDate = new Date(metadata.startDate)
+            const endDate = new Date(startDate)
+            endDate.setDate(endDate.getDate() + 6)
+            const startYear = startDate.getFullYear()
+            const endYear = endDate.getFullYear()
+            // Refresh if the requested year matches either the start or end year of the week
+            return Number.isFinite(startYear) && (startYear === y || endYear === y)
           }
           if (metadata.kind === 'date-cell') {
             const cellYear = Number(new Date(metadata.date).getFullYear())

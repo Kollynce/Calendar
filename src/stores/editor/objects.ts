@@ -3,12 +3,14 @@ import {
   ActiveSelection,
   Canvas,
   Circle,
+  Ellipse,
   FabricImage,
   Group,
   Line,
   Polygon,
   Rect,
   Textbox,
+  Triangle,
   type Object as FabricObject,
 } from 'fabric'
 import type { CanvasElementMetadata, CanvasObject, ObjectType } from '@/types'
@@ -39,6 +41,9 @@ export function createObjectIdentityHelper(params: {
       textbox: 'Text',
       rect: 'Rectangle',
       circle: 'Circle',
+      ellipse: 'Ellipse',
+      triangle: 'Triangle',
+      polygon: 'Polygon',
       line: 'Line',
       image: 'Image',
       group: 'Group',
@@ -54,6 +59,13 @@ export function createObjectIdentityHelper(params: {
     if (metadata?.kind === 'planner-note') return 'Notes Panel'
     if (metadata?.kind === 'schedule') return 'Schedule'
     if (metadata?.kind === 'checklist') return 'Checklist'
+    
+    // Check for arrow (group with shapeKind)
+    if (obj?.data?.shapeKind === 'arrow') return 'Arrow'
+    
+    // Check for custom name property
+    if (obj?.name) return obj.name
+    
     return getObjectTypeName(obj?.type)
   }
 
@@ -86,42 +98,70 @@ export function createObjectIdentityHelper(params: {
 
     if (!line) return
 
-    const width = Number(opts.baseWidth ?? 140) || 140
+    const totalWidth = Number(opts.baseWidth ?? 140) || 140
     const strokeWidth = Math.max(1, Number(opts.strokeWidth ?? (line as any).strokeWidth ?? 2) || 2)
-    const headLength = Math.max(4, Number(opts.arrowHeadLength ?? Math.max(14, strokeWidth * 4)) || Math.max(14, strokeWidth * 4))
+    const headLength = Math.max(4, Number(opts.arrowHeadLength ?? Math.max(12, strokeWidth * 3)) || 12)
+    const headWidth = Math.max(4, Number(opts.arrowHeadWidth ?? Math.max(8, strokeWidth * 2)) || 8)
+    const stroke = opts.stroke ?? (line as any).stroke ?? '#000000'
+    const headStyle = (opts.arrowHeadStyle ?? 'filled') as 'filled' | 'open'
+    const isOpen = headStyle === 'open'
 
-    const arrowEnds = (opts.arrowEnds ?? 'end') as 'none' | 'start' | 'end' | 'both'
+    const halfWidth = totalWidth / 2
+    const halfHeadWidth = headWidth / 2
 
-    const hasStart = arrowEnds === 'start' || arrowEnds === 'both'
-    const hasEnd = arrowEnds === 'end' || arrowEnds === 'both'
-
-    const offsetX = -width / 2
-    const x1 = hasStart ? headLength : 0
-    const x2 = Math.max(x1, width - (hasEnd ? headLength : 0))
-
-    const len = Math.max(0, x2 - x1)
-
+    // Update line to span full width centered at origin
     line.set({
-      originX: 'left',
+      originX: 'center',
       originY: 'center',
-      left: offsetX + x1,
+      left: 0,
       top: 0,
+      stroke,
+      strokeWidth,
     } as any)
+    ;(line as any).set?.({ x1: -halfWidth, y1: 0, x2: halfWidth, y2: 0 } as any)
 
-      ; (line as any).set?.({ x1: 0, y1: 0, x2: len, y2: 0 } as any)
-
+    // Update start arrowhead position and shape
     if (startHead) {
-      startHead.set({ originX: 'left', originY: 'center', left: offsetX + 0, top: 0 } as any)
+      startHead.set({
+        originX: 'left',
+        originY: 'center',
+        left: -halfWidth,
+        top: 0,
+        fill: isOpen ? 'transparent' : stroke,
+        stroke: stroke,
+        strokeWidth: isOpen ? strokeWidth : 0,
+      } as any)
+      // Update polygon points for left-pointing triangle
+      ;(startHead as any).points = [
+        { x: 0, y: 0 },
+        { x: headLength, y: -halfHeadWidth },
+        { x: headLength, y: halfHeadWidth },
+      ]
     }
 
+    // Update end arrowhead position and shape
     if (endHead) {
-      endHead.set({ originX: 'left', originY: 'center', left: offsetX + (width - headLength), top: 0 } as any)
+      endHead.set({
+        originX: 'right',
+        originY: 'center',
+        left: halfWidth,
+        top: 0,
+        fill: isOpen ? 'transparent' : stroke,
+        stroke: stroke,
+        strokeWidth: isOpen ? strokeWidth : 0,
+      } as any)
+      // Update polygon points for right-pointing triangle
+      ;(endHead as any).points = [
+        { x: 0, y: 0 },
+        { x: -headLength, y: -halfHeadWidth },
+        { x: -headLength, y: halfHeadWidth },
+      ]
     }
 
-    ; (group as any).dirty = true
-      ; (group as any)._calcBounds?.()
-      ; (group as any)._updateObjectsCoords?.()
-      ; (group as any).setCoords?.()
+    ;(group as any).dirty = true
+    ;(group as any)._calcBounds?.()
+    ;(group as any)._updateObjectsCoords?.()
+    ;(group as any).setCoords?.()
   }
 
   function ensureObjectIdentity(obj: any): void {
@@ -332,17 +372,22 @@ export function createObjectsModule(params: {
       ...other
     } = options
 
-    const basePosition = {
+    const baseOptions = {
+      id,
       left: x ?? left ?? 100,
       top: y ?? top ?? 100,
       selectable: selectable ?? true,
       evented: evented ?? true,
+      fill,
+      stroke,
+      strokeWidth,
+      ...other,
     }
 
     switch (shapeType) {
       case 'circle':
         return new Circle({
-          id,
+          ...baseOptions,
           name: options.name ?? 'Circle',
           radius: radius ?? (width ? width / 2 : 50),
           fill: fill ?? '#3b82f6',
@@ -354,8 +399,38 @@ export function createObjectsModule(params: {
           borderColor: other.borderColor ?? '#2563eb',
           transparentCorners: other.transparentCorners ?? false,
           cornerSize: other.cornerSize ?? 8,
-          ...basePosition,
-          ...other,
+        })
+      case 'ellipse':
+        return new Ellipse({
+          ...baseOptions,
+          name: options.name ?? 'Ellipse',
+          rx: width ? width / 2 : 60,
+          ry: height ? height / 2 : 40,
+          fill: fill ?? '#3b82f6',
+          stroke: stroke ?? '',
+          strokeWidth: strokeWidth ?? 0,
+          cornerStyle: other.cornerStyle ?? 'circle',
+          cornerColor: other.cornerColor ?? '#ffffff',
+          cornerStrokeColor: other.cornerStrokeColor ?? '#2563eb',
+          borderColor: other.borderColor ?? '#2563eb',
+          transparentCorners: other.transparentCorners ?? false,
+          cornerSize: other.cornerSize ?? 8,
+        })
+      case 'triangle':
+        return new Triangle({
+          ...baseOptions,
+          name: options.name ?? 'Triangle',
+          width: width ?? 100,
+          height: height ?? 87,
+          fill: fill ?? '#3b82f6',
+          stroke: stroke ?? '',
+          strokeWidth: strokeWidth ?? 0,
+          cornerStyle: other.cornerStyle ?? 'circle',
+          cornerColor: other.cornerColor ?? '#ffffff',
+          cornerStrokeColor: other.cornerStrokeColor ?? '#2563eb',
+          borderColor: other.borderColor ?? '#2563eb',
+          transparentCorners: other.transparentCorners ?? false,
+          cornerSize: other.cornerSize ?? 8,
         })
       case 'arrow':
         return createArrowObject(id, {
@@ -363,21 +438,28 @@ export function createObjectsModule(params: {
           width,
           stroke,
           strokeWidth,
-          ...basePosition,
+          left: baseOptions.left,
+          top: baseOptions.top,
+          selectable: baseOptions.selectable,
+          evented: baseOptions.evented,
           ...other,
         })
       case 'line':
         return new Line([0, 0, width ?? 100, 0], {
-          id,
+          ...baseOptions,
           name: options.name ?? 'Line',
           stroke: stroke ?? '#000000',
           strokeWidth: strokeWidth ?? 2,
-          ...basePosition,
-          ...other,
+          cornerStyle: other.cornerStyle ?? 'circle',
+          cornerColor: other.cornerColor ?? '#ffffff',
+          cornerStrokeColor: other.cornerStrokeColor ?? '#2563eb',
+          borderColor: other.borderColor ?? '#2563eb',
+          transparentCorners: other.transparentCorners ?? false,
+          cornerSize: other.cornerSize ?? 8,
         })
       default:
         return new Rect({
-          id,
+          ...baseOptions,
           name: options.name ?? 'Rectangle',
           width: width ?? 100,
           height: height ?? 100,
@@ -386,50 +468,14 @@ export function createObjectsModule(params: {
           strokeWidth: strokeWidth ?? 0,
           rx: cornerRadius ?? other.rx ?? 0,
           ry: cornerRadius ?? other.ry ?? 0,
-          ...basePosition,
-          ...other,
+          cornerStyle: other.cornerStyle ?? 'circle',
+          cornerColor: other.cornerColor ?? '#ffffff',
+          cornerStrokeColor: other.cornerStrokeColor ?? '#2563eb',
+          borderColor: other.borderColor ?? '#2563eb',
+          transparentCorners: other.transparentCorners ?? false,
+          cornerSize: other.cornerSize ?? 8,
         })
     }
-  }
-
-  function createArrowHeadPolygon(
-    part: 'startHead' | 'endHead',
-    headLength: number,
-    headWidth: number,
-    stroke: string,
-    strokeWidth: number,
-    style: 'filled' | 'open',
-    strokeLineCap?: CanvasLineCap,
-    strokeLineJoin?: CanvasLineJoin,
-  ): Polygon {
-    const points =
-      part === 'endHead'
-        ? [
-          { x: 0, y: 0 },
-          { x: 0, y: headWidth },
-          { x: headLength, y: headWidth / 2 },
-        ]
-        : [
-          { x: headLength, y: 0 },
-          { x: headLength, y: headWidth },
-          { x: 0, y: headWidth / 2 },
-        ]
-
-    const isOpen = style === 'open'
-
-    const poly = new Polygon(points as any, {
-      fill: isOpen ? 'transparent' : stroke,
-      stroke,
-      strokeWidth: isOpen ? strokeWidth : 0,
-      strokeLineCap,
-      strokeLineJoin,
-      selectable: false,
-      evented: false,
-      objectCaching: false,
-    })
-
-      ; (poly as any).data = { ...(poly as any).data, arrowPart: part }
-    return poly
   }
 
   function createArrowObject(id: string, options: any): FabricObject {
@@ -447,74 +493,88 @@ export function createObjectsModule(params: {
       ...groupOther
     } = options
 
-    const width = Math.max(10, Number(providedWidth ?? 140) || 140)
+    const totalWidth = Math.max(10, Number(providedWidth ?? 140) || 140)
     const stroke = providedStroke ?? '#000000'
     const strokeWidth = Math.max(1, Number(providedStrokeWidth ?? 2) || 2)
-    const headLength = Math.max(
-      4,
-      Number(providedHeadLength ?? Math.max(14, strokeWidth * 4)) || Math.max(14, strokeWidth * 4),
-    )
-    const headWidth = Math.max(
-      4,
-      Number(providedHeadWidth ?? Math.max(10, headLength * 0.7)) || Math.max(10, headLength * 0.7),
-    )
+    const headLength = Math.max(4, Number(providedHeadLength ?? Math.max(12, strokeWidth * 3)) || 12)
+    const headWidth = Math.max(4, Number(providedHeadWidth ?? Math.max(8, strokeWidth * 2)) || 8)
     const arrowEnds = (providedArrowEnds ?? 'end') as 'none' | 'start' | 'end' | 'both'
     const headStyle = (providedHeadStyle ?? 'filled') as 'filled' | 'open'
 
     const hasStart = arrowEnds === 'start' || arrowEnds === 'both'
     const hasEnd = arrowEnds === 'end' || arrowEnds === 'both'
 
-    const offsetX = -width / 2
-    const y = 0
-    const x1 = hasStart ? headLength : 0
-    const x2 = Math.max(x1, width - (hasEnd ? headLength : 0))
+    // Calculate line endpoints - line runs from left edge to right edge
+    // Arrowheads are drawn AT the endpoints, not offset from them
+    const halfWidth = totalWidth / 2
+    const halfHeadWidth = headWidth / 2
 
-    const len = Math.max(0, x2 - x1)
-    const line = new Line([0, 0, len, 0], {
+    // Create the main line - spans the full width
+    const line = new Line([-halfWidth, 0, halfWidth, 0], {
       stroke,
       strokeWidth,
       strokeDashArray,
-      strokeLineCap,
-      strokeLineJoin,
-      originX: 'left',
+      strokeLineCap: strokeLineCap ?? 'round',
+      strokeLineJoin: strokeLineJoin ?? 'round',
+      originX: 'center',
       originY: 'center',
-      left: offsetX + x1,
-      top: y,
+      left: 0,
+      top: 0,
       selectable: false,
       evented: false,
       objectCaching: false,
     })
-      ; (line as any).data = { ...(line as any).data, arrowPart: 'line' }
+    ;(line as any).data = { arrowPart: 'line' }
 
     const objects: FabricObject[] = [line]
 
+    // Create start arrowhead (pointing left) at left end of line
     if (hasStart) {
-      const startHead = createArrowHeadPolygon(
-        'startHead',
-        headLength,
-        headWidth,
-        stroke,
-        strokeWidth,
-        headStyle,
-        strokeLineCap,
-        strokeLineJoin,
-      )
-      startHead.set({ originX: 'left', originY: 'center', left: offsetX + 0, top: y } as any)
+      const isOpen = headStyle === 'open'
+      // Triangle pointing left: tip at left, base at right
+      const startHead = new Polygon([
+        { x: 0, y: 0 },                    // tip (pointing left)
+        { x: headLength, y: -halfHeadWidth }, // top-right
+        { x: headLength, y: halfHeadWidth },  // bottom-right
+      ] as any, {
+        fill: isOpen ? 'transparent' : stroke,
+        stroke: stroke,
+        strokeWidth: isOpen ? strokeWidth : 0,
+        strokeLineJoin: 'round',
+        originX: 'left',
+        originY: 'center',
+        left: -halfWidth,
+        top: 0,
+        selectable: false,
+        evented: false,
+        objectCaching: false,
+      })
+      ;(startHead as any).data = { arrowPart: 'startHead' }
       objects.push(startHead)
     }
 
+    // Create end arrowhead (pointing right) at right end of line
     if (hasEnd) {
-      const endHead = createArrowHeadPolygon(
-        'endHead',
-        headLength,
-        headWidth,
-        stroke,
-        strokeWidth,
-        headStyle,
-        strokeLineCap,
-        strokeLineJoin,
-      )
-      endHead.set({ originX: 'left', originY: 'center', left: offsetX + (width - headLength), top: y } as any)
+      const isOpen = headStyle === 'open'
+      // Triangle pointing right: tip at right, base at left
+      const endHead = new Polygon([
+        { x: 0, y: 0 },                     // tip (pointing right)
+        { x: -headLength, y: -halfHeadWidth }, // top-left
+        { x: -headLength, y: halfHeadWidth },  // bottom-left
+      ] as any, {
+        fill: isOpen ? 'transparent' : stroke,
+        stroke: stroke,
+        strokeWidth: isOpen ? strokeWidth : 0,
+        strokeLineJoin: 'round',
+        originX: 'right',
+        originY: 'center',
+        left: halfWidth,
+        top: 0,
+        selectable: false,
+        evented: false,
+        objectCaching: false,
+      })
+      ;(endHead as any).data = { arrowPart: 'endHead' }
       objects.push(endHead)
     }
 
@@ -528,24 +588,30 @@ export function createObjectsModule(params: {
       subTargetCheck: false,
       hoverCursor: 'move',
       objectCaching: false,
+      // Figma-style controls
+      cornerStyle: 'circle',
+      cornerColor: '#ffffff',
+      cornerStrokeColor: '#2563eb',
+      borderColor: '#2563eb',
+      transparentCorners: false,
+      cornerSize: 8,
       ...groupOther,
     })
 
-      ; (group as any).data = {
-        ...((group as any).data ?? {}),
-        shapeKind: 'arrow',
-        arrowOptions: {
-          baseWidth: width,
-          arrowHeadLength: headLength,
-          arrowHeadWidth: headWidth,
-          arrowHeadStyle: headStyle,
-          arrowEnds,
-          stroke,
-          strokeWidth,
-        },
-      }
+    ;(group as any).data = {
+      ...((group as any).data ?? {}),
+      shapeKind: 'arrow',
+      arrowOptions: {
+        baseWidth: totalWidth,
+        arrowHeadLength: headLength,
+        arrowHeadWidth: headWidth,
+        arrowHeadStyle: headStyle,
+        arrowEnds,
+        stroke,
+        strokeWidth,
+      },
+    }
 
-    refreshArrowGroupGeometry(group)
     return group
   }
 
@@ -715,16 +781,42 @@ export function createObjectsModule(params: {
     if (!activeObject) return
 
     activeObject.clone().then((cloned: FabricObject) => {
+      const newId = generateObjectId(activeObject.type || 'object')
       cloned.set({
         left: (cloned.left || 0) + 20,
         top: (cloned.top || 0) + 20,
         // @ts-ignore - id is added custom prop
-        id: generateObjectId(activeObject.type || 'object'),
+        id: newId,
       })
+      
+      // Ensure cloned object has proper identity and data
       ensureObjectIdentity(cloned as any)
+      
+      // For arrow groups, ensure the arrow data is preserved and geometry is refreshed
+      const isArrowGroup = 
+        (cloned as any)?.type === 'group' && 
+        ((cloned as any)?.data?.shapeKind === 'arrow' ||
+         (Array.isArray((cloned as any)?._objects) && 
+          (cloned as any)._objects.some((o: any) => o?.data?.arrowPart)))
+      
+      if (isArrowGroup) {
+        // Ensure arrow data is properly set
+        const existingData = (cloned as any).data ?? {}
+        ;(cloned as any).data = {
+          ...existingData,
+          shapeKind: 'arrow',
+        }
+        // Refresh arrow geometry after cloning
+        refreshArrowGroupGeometry(cloned as unknown as Group)
+      }
+      
       canvas.value!.add(cloned)
       canvas.value!.setActiveObject(cloned)
       canvas.value!.renderAll()
+      
+      // Manually trigger selection update to ensure properties panel shows
+      selectedObjectIds.value = [(cloned as any).id].filter(Boolean)
+      
       snapshotCanvasState()
     })
   }
@@ -745,16 +837,38 @@ export function createObjectsModule(params: {
 
     const cloned = clipboard.value as unknown as FabricObject
     cloned.clone().then((pasted: FabricObject) => {
+      const newId = generateObjectId(pasted.type || 'object')
       pasted.set({
         left: (pasted.left || 0) + 20,
         top: (pasted.top || 0) + 20,
         // @ts-ignore
-        id: generateObjectId(pasted.type || 'object'),
+        id: newId,
       })
       ensureObjectIdentity(pasted as any)
+      
+      // For arrow groups, ensure the arrow data is preserved and geometry is refreshed
+      const isArrowGroup = 
+        (pasted as any)?.type === 'group' && 
+        ((pasted as any)?.data?.shapeKind === 'arrow' ||
+         (Array.isArray((pasted as any)?._objects) && 
+          (pasted as any)._objects.some((o: any) => o?.data?.arrowPart)))
+      
+      if (isArrowGroup) {
+        const existingData = (pasted as any).data ?? {}
+        ;(pasted as any).data = {
+          ...existingData,
+          shapeKind: 'arrow',
+        }
+        refreshArrowGroupGeometry(pasted as unknown as Group)
+      }
+      
       canvas.value!.add(pasted)
       canvas.value!.setActiveObject(pasted)
       canvas.value!.renderAll()
+      
+      // Manually trigger selection update to ensure properties panel shows
+      selectedObjectIds.value = [(pasted as any).id].filter(Boolean)
+      
       snapshotCanvasState()
     })
   }
@@ -884,6 +998,8 @@ export function createObjectsModule(params: {
         }
 
         canvas.value.setActiveObject(group)
+        // Update selectedObjectIds with the new group ID
+        selectedObjectIds.value = [(group as any).id].filter(Boolean)
         canvas.value.requestRenderAll?.()
         canvas.value.renderAll()
         snapshotCanvasState()
@@ -948,6 +1064,8 @@ export function createObjectsModule(params: {
 
     ensureObjectIdentity(group as any)
     canvas.value.setActiveObject(group as any)
+    // Update selectedObjectIds with the new group ID
+    selectedObjectIds.value = [(group as any).id].filter(Boolean)
     canvas.value.requestRenderAll?.()
     canvas.value.renderAll()
     snapshotCanvasState()
@@ -958,6 +1076,12 @@ export function createObjectsModule(params: {
     const active = canvas.value.getActiveObject() as any
     if (!active) return
     if (active.type !== 'group') return
+    
+    // Don't ungroup arrow groups - they are special compound objects
+    if (active?.data?.shapeKind === 'arrow') {
+      console.log('[ungroupSelected] Skipping arrow group - not a user group')
+      return
+    }
 
     const group = active as any
     const children = (Array.isArray(group._objects) ? group._objects.slice() : []) as FabricObject[]
@@ -967,35 +1091,63 @@ export function createObjectsModule(params: {
     const all = canvas.value.getObjects() as any[]
     const groupIndex = all.indexOf(group)
 
+    // First discard the active object to clear selection state
     canvas.value.discardActiveObject()
+    selectedObjectIds.value = []
 
+    // Restore objects state if available (transforms children back to canvas coordinates)
     if (typeof group._restoreObjectsState === 'function') {
       group._restoreObjectsState()
     }
 
+    // Remove the group from canvas
     canvas.value.remove(group)
 
+    // Add children back to canvas with proper coordinates
+    const addedChildren: FabricObject[] = []
     children.forEach((obj) => {
-      ; (obj as any).group = undefined
+      // Clear the group reference
+      ;(obj as any).group = undefined
+      
+      // Ensure proper identity
       ensureObjectIdentity(obj as any)
+      
+      // Add to canvas
       canvas.value!.add(obj)
+      
+      // Update coordinates
       obj.setCoords?.()
+      ;(obj as any).dirty = true
+      
+      addedChildren.push(obj)
     })
 
+    // Reorder objects to maintain z-index
     if (typeof canvasAny.moveObjectTo === 'function' && groupIndex >= 0) {
-      children.forEach((obj, i) => {
+      addedChildren.forEach((obj, i) => {
         canvasAny.moveObjectTo(obj, groupIndex + i)
       })
     }
 
-    if (children.length === 1) {
-      canvas.value.setActiveObject(children[0]!)
-    } else {
-      const sel = new ActiveSelection(children, { canvas: canvas.value })
+    // Create new selection from ungrouped children
+    if (addedChildren.length === 1 && addedChildren[0]) {
+      canvas.value.setActiveObject(addedChildren[0])
+      selectedObjectIds.value = [(addedChildren[0] as any).id].filter(Boolean)
+    } else if (addedChildren.length > 1) {
+      // Create a fresh ActiveSelection
+      const sel = new ActiveSelection(addedChildren, { canvas: canvas.value })
       canvas.value.setActiveObject(sel)
+      // Update selectedObjectIds with all children IDs
+      selectedObjectIds.value = addedChildren.map((obj) => (obj as any).id).filter(Boolean)
     }
 
-    canvas.value.getActiveObject()?.setCoords?.()
+    // Force recalculation of selection bounds
+    const newActive = canvas.value.getActiveObject()
+    if (newActive) {
+      newActive.setCoords?.()
+      ;(newActive as any).dirty = true
+    }
+    
     canvas.value.requestRenderAll?.()
     canvas.value.renderAll()
     snapshotCanvasState()

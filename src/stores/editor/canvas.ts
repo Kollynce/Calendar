@@ -72,7 +72,9 @@ export function createCanvasModule(params: {
 
     const meta = (target as any)?.data?.elementMetadata as CanvasElementMetadata | undefined
     if (!meta) return
-    if (meta.kind !== 'calendar-grid' && meta.kind !== 'week-strip' && meta.kind !== 'date-cell') return
+    // Handle all element types that have size metadata and should regenerate on resize
+    const resizableKinds = ['calendar-grid', 'week-strip', 'date-cell', 'planner-note', 'schedule', 'checklist']
+    if (!resizableKinds.includes(meta.kind)) return
 
     const scaleX = Number((target as any).scaleX ?? 1) || 1
     const scaleY = Number((target as any).scaleY ?? 1) || 1
@@ -106,10 +108,39 @@ export function createCanvasModule(params: {
     }
   }
 
+  function bakeScaledTextFontSize(target: FabricObject): void {
+    if (!canvas.value) return
+    // Only handle Textbox objects (emojis, stickers, text)
+    if ((target as any).type !== 'textbox') return
+    
+    const scaleX = Number((target as any).scaleX ?? 1) || 1
+    const scaleY = Number((target as any).scaleY ?? 1) || 1
+    // Use the average scale for uniform scaling
+    const scale = (scaleX + scaleY) / 2
+    const hasScale = Math.abs(scale - 1) > 1e-3
+    if (!hasScale) return
+
+    const currentFontSize = Number((target as any).fontSize ?? 16) || 16
+    const newFontSize = Math.round(currentFontSize * scale)
+    
+    // Update font size and reset scale to prevent blurriness
+    ;(target as any).set({
+      fontSize: newFontSize,
+      scaleX: 1,
+      scaleY: 1,
+    })
+    ;(target as any).dirty = true
+    if (typeof (target as any).setCoords === 'function') {
+      ;(target as any).setCoords()
+    }
+    canvas.value.renderAll()
+  }
+
   function handleObjectModified(e: any): void {
     const target = (e?.target as FabricObject | undefined) ?? null
     if (target) {
       bakeScaledCalendarElementSize(target)
+      bakeScaledTextFontSize(target)
     }
     isDirty.value = true
     saveToHistory()
@@ -206,7 +237,7 @@ export function createCanvasModule(params: {
     const clampedZoom = Math.min(Math.max(newZoom, MIN_ZOOM), MAX_ZOOM)
     zoom.value = clampedZoom
 
-    // NOTE: Visual zoom is handled by CSS transforms in AdobeCanvas.vue
+    // NOTE: Visual zoom is handled by CSS transforms in Canvas.vue
     // We do NOT apply FabricJS's zoomToPoint here because it would create
     // a double-zoom effect and interfere with object coordinate calculations.
     // The viewportTransform should remain at identity [1,0,0,1,0,0] so that
@@ -230,7 +261,7 @@ export function createCanvasModule(params: {
   function resetZoom(): void {
     if (!canvas.value) return
 
-    // Reset zoom - visual zoom is handled by CSS transforms in AdobeCanvas.vue
+    // Reset zoom - visual zoom is handled by CSS transforms in Canvas.vue
     // Keep viewportTransform at identity so object coordinates remain in pure canvas space
     zoom.value = 1
     panOffset.value = { x: 0, y: 0 }
@@ -240,7 +271,7 @@ export function createCanvasModule(params: {
   function setPan(x: number, y: number): void {
     if (!canvas.value) return
 
-    // Pan is handled by CSS transforms in AdobeCanvas.vue
+    // Pan is handled by CSS transforms in Canvas.vue
     // We only update the panOffset ref here for state tracking
     panOffset.value = { x, y }
     canvas.value.requestRenderAll()
@@ -249,7 +280,7 @@ export function createCanvasModule(params: {
   function panBy(deltaX: number, deltaY: number): void {
     if (!canvas.value) return
 
-    // Pan is handled by CSS transforms in AdobeCanvas.vue
+    // Pan is handled by CSS transforms in Canvas.vue
     // We only update the panOffset ref here for state tracking
     panOffset.value = { x: panOffset.value.x + deltaX, y: panOffset.value.y + deltaY }
     canvas.value.requestRenderAll()
@@ -273,7 +304,7 @@ export function createCanvasModule(params: {
     const centerX = (containerWidth - canvasWidth * scale) / 2
     const centerY = (containerHeight - canvasHeight * scale) / 2
 
-    // Visual zoom/pan is handled by CSS transforms in AdobeCanvas.vue
+    // Visual zoom/pan is handled by CSS transforms in Canvas.vue
     // We only update the refs here for state tracking
     // Do NOT apply FabricJS viewportTransform as it would interfere with object coordinates
     zoom.value = scale

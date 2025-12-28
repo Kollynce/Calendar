@@ -1,75 +1,43 @@
 <script setup lang="ts">
+import { ref, computed } from 'vue'
 import { useEditorStore } from '@/stores/editor.store'
-
-type ElementType = 'shape' | 'calendar' | 'planner' | 'text'
-
-interface ElementItem {
-  id: string
-  name: string
-  icon: string
-  type: ElementType
-  description?: string
-  shapeType?: string
-  calendarType?: 'month-grid' | 'week-strip' | 'date-cell'
-  plannerType?: 'notes-panel' | 'schedule' | 'checklist'
-  options?: Record<string, any>
-}
-
-interface ElementCategory {
-  name: string
-  items: ElementItem[]
-}
-
-const elementPlacementDefaults: Record<ElementType, { x: number; y: number }> = {
-  shape: { x: 140, y: 140 },
-  calendar: { x: 80, y: 220 },
-  planner: { x: 420, y: 160 },
-  text: { x: 180, y: 180 },
-}
-
-const elementCategories: ElementCategory[] = [
-  {
-    name: 'Basic Shapes',
-    items: [
-      { id: 'rect', name: 'Rectangle', icon: '▢', type: 'shape', shapeType: 'rect', options: { width: 220, height: 140, fill: '#f4f4f5', stroke: '#d4d4d8', strokeWidth: 1 } },
-      { id: 'rounded-rect', name: 'Rounded Rect', icon: '▢', type: 'shape', shapeType: 'rect', options: { width: 220, height: 120, cornerRadius: 28, fill: '#fef3c7', stroke: '#fcd34d', strokeWidth: 1 } },
-      { id: 'circle', name: 'Circle', icon: '○', type: 'shape', shapeType: 'circle', options: { radius: 70, fill: '#dbeafe' } },
-    ],
-  },
-  {
-    name: 'Lines & Arrows',
-    items: [
-      { id: 'line', name: 'Line', icon: '—', type: 'shape', shapeType: 'line', options: { width: 260, stroke: '#0f172a', strokeWidth: 4 } },
-      { id: 'arrow', name: 'Arrow', icon: '→', type: 'shape', shapeType: 'arrow', options: { width: 240, stroke: '#1d4ed8', strokeWidth: 4, arrowEnds: 'end', arrowHeadStyle: 'filled', arrowHeadLength: 18, arrowHeadWidth: 14 } },
-      { id: 'divider', name: 'Divider', icon: '┄', type: 'shape', shapeType: 'line', options: { width: 260, stroke: '#94a3b8', strokeWidth: 2, strokeDashArray: [10, 8] } },
-    ],
-  },
-  {
-    name: 'Calendar Elements',
-    items: [
-      { id: 'month-grid', name: 'Month Grid', icon: '▦', type: 'calendar', calendarType: 'month-grid', options: { width: 460, height: 360 } },
-      { id: 'week-strip', name: 'Week Strip', icon: '▤', type: 'calendar', calendarType: 'week-strip', options: { width: 520, height: 180 } },
-      { id: 'date-cell', name: 'Date Cell', icon: '□', type: 'calendar', calendarType: 'date-cell', options: { width: 200, height: 220 } },
-    ],
-  },
-  {
-    name: 'Planner Blocks',
-    items: [
-      { id: 'notes-panel', name: 'Notes Panel', icon: '🗒️', type: 'planner', plannerType: 'notes-panel', description: 'Patterned notes panel', options: { pattern: 'ruled', title: 'Notes', accentColor: '#2563eb', width: 320, height: 320 } },
-      { id: 'schedule-block', name: 'Schedule', icon: '🕒', type: 'planner', plannerType: 'schedule', description: 'Timeline schedule', options: { title: 'Schedule', accentColor: '#a855f7', startHour: 6, endHour: 20, intervalMinutes: 60, width: 320, height: 640 } },
-      { id: 'checklist-block', name: 'Checklist', icon: '☑️', type: 'planner', plannerType: 'checklist', description: 'To-do list', options: { title: 'To Do', accentColor: '#ec4899', rows: 8, showCheckboxes: true, width: 320, height: 420 } },
-    ],
-  },
-  {
-    name: 'Decorative',
-    items: [
-      { id: 'soft-frame', name: 'Soft Frame', icon: '⬜', type: 'shape', shapeType: 'rect', description: 'Rounded photo frame', options: { width: 240, height: 180, cornerRadius: 32, fill: '#ffffff', stroke: '#cbd5f5', strokeWidth: 3 } },
-      { id: 'emoji', name: 'Emoji', icon: '😊', type: 'text', description: 'Add an emoji sticker', options: { content: '😊', fontSize: 64, fontFamily: 'Noto Color Emoji, Segoe UI Emoji, Apple Color Emoji, sans-serif', fontWeight: 400 } },
-    ],
-  },
-]
+import {
+  elementCategories,
+  emojiCategories,
+  elementPlacementDefaults,
+  type ElementItem,
+} from '@/pages/editor/composables/useElements'
 
 const editorStore = useEditorStore()
+
+// Emoji picker state
+const showEmojiPicker = ref(false)
+const selectedEmojiCategory = ref('popular')
+const emojiSearchQuery = ref('')
+
+const currentEmojiCategory = computed(() => {
+  return emojiCategories.find(c => c.id === selectedEmojiCategory.value) || emojiCategories[0]
+})
+
+const filteredEmojis = computed(() => {
+  if (!emojiSearchQuery.value.trim()) {
+    return currentEmojiCategory.value?.emojis || []
+  }
+  // Search across all categories
+  const query = emojiSearchQuery.value.toLowerCase()
+  const results: string[] = []
+  for (const cat of emojiCategories) {
+    if (cat.name.toLowerCase().includes(query)) {
+      results.push(...cat.emojis)
+    }
+  }
+  // Also include emojis from matching category names
+  if (results.length === 0) {
+    // Return all emojis from current category if no search match
+    return currentEmojiCategory.value?.emojis || []
+  }
+  return [...new Set(results)]
+})
 
 function getSmartCalendarPlacement(element: ElementItem): { x: number; y: number } {
   const fallback = elementPlacementDefaults[element.type] ?? { x: 140, y: 140 }
@@ -127,10 +95,32 @@ function addElement(element: ElementItem) {
     else if (element.plannerType === 'checklist') editorStore.addObject('checklist', options)
   }
 }
+
+function addEmoji(emoji: string) {
+  const placement = elementPlacementDefaults.text
+  editorStore.addObject('text', {
+    x: placement.x,
+    y: placement.y,
+    content: emoji,
+    fontSize: 64,
+    fontFamily: 'Noto Color Emoji, Segoe UI Emoji, Apple Color Emoji, sans-serif',
+    fontWeight: 400,
+  })
+}
+
+function openEmojiPicker() {
+  showEmojiPicker.value = true
+}
+
+function closeEmojiPicker() {
+  showEmojiPicker.value = false
+  emojiSearchQuery.value = ''
+}
 </script>
 
 <template>
   <div class="space-y-5">
+    <!-- Element Categories -->
     <div v-for="category in elementCategories" :key="category.name">
       <p class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-2">{{ category.name }}</p>
       <div class="grid grid-cols-3 gap-2">
@@ -139,11 +129,132 @@ function addElement(element: ElementItem) {
           :key="element.id"
           @click="addElement(element)"
           class="aspect-square surface-hover rounded-xl flex flex-col items-center justify-center transition-all group border border-gray-200 dark:border-gray-600"
+          :title="element.description || element.name"
         >
-          <span class="h-8 w-8 flex items-center justify-center text-2xl leading-none mb-1 transition-transform group-hover:scale-105">{{ element.icon }}</span>
+          <span class="h-8 w-8 flex items-center justify-center text-2xl leading-none mb-1 transition-transform group-hover:scale-110">{{ element.icon }}</span>
           <span class="text-[10px] text-gray-500 dark:text-gray-400 font-medium text-center leading-tight px-1">{{ element.name }}</span>
         </button>
       </div>
     </div>
+
+    <!-- Emoji Picker Section -->
+    <div>
+      <p class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-2">Emoji Library</p>
+      <button
+        @click="openEmojiPicker"
+        class="w-full py-3 px-4 surface-hover rounded-xl flex items-center justify-center gap-2 transition-all border border-gray-200 dark:border-gray-600 hover:border-primary-500"
+      >
+        <span class="text-2xl">😊</span>
+        <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Browse All Emojis</span>
+        <span class="text-xs text-gray-400">200+</span>
+      </button>
+    </div>
+
+    <!-- Emoji Picker Modal -->
+    <Teleport to="body">
+      <Transition name="fade">
+        <div
+          v-if="showEmojiPicker"
+          class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+          @click.self="closeEmojiPicker"
+        >
+          <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-[400px] max-h-[520px] flex flex-col overflow-hidden border border-gray-200 dark:border-gray-700">
+            <!-- Header -->
+            <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+              <div class="flex items-center justify-between mb-3">
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Emoji Library</h3>
+                <button
+                  @click="closeEmojiPicker"
+                  class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                >
+                  <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <!-- Search -->
+              <div class="relative">
+                <input
+                  v-model="emojiSearchQuery"
+                  type="text"
+                  placeholder="Search categories..."
+                  class="w-full px-4 py-2 pl-10 text-sm bg-gray-100 dark:bg-gray-700 rounded-lg border-0 focus:ring-2 focus:ring-primary-500 text-gray-900 dark:text-white placeholder-gray-500"
+                />
+                <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+            </div>
+
+            <!-- Category Tabs -->
+            <div class="relative border-b border-gray-200 dark:border-gray-700">
+              <div class="flex gap-1 px-3 py-2 overflow-x-auto" style="scrollbar-width: thin; -webkit-overflow-scrolling: touch;">
+                <button
+                  v-for="cat in emojiCategories"
+                  :key="cat.id"
+                  @click="selectedEmojiCategory = cat.id"
+                  :class="[
+                    'shrink-0 px-2.5 py-1.5 rounded-lg text-lg transition-all',
+                    selectedEmojiCategory === cat.id
+                      ? 'bg-primary-100 dark:bg-primary-900/50 ring-2 ring-primary-500'
+                      : 'hover:bg-gray-100 dark:hover:bg-gray-700'
+                  ]"
+                  :title="cat.name"
+                >
+                  {{ cat.icon }}
+                </button>
+              </div>
+              <!-- Scroll indicators -->
+              <div class="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-white dark:from-gray-800 to-transparent pointer-events-none"></div>
+            </div>
+
+            <!-- Category Name -->
+            <div class="px-4 py-2 bg-gray-50 dark:bg-gray-900/50">
+              <p class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">{{ currentEmojiCategory?.name }}</p>
+            </div>
+
+            <!-- Emoji Grid -->
+            <div class="flex-1 overflow-y-auto p-3">
+              <div class="grid grid-cols-8 gap-1">
+                <button
+                  v-for="emoji in filteredEmojis"
+                  :key="emoji"
+                  @click="addEmoji(emoji); closeEmojiPicker()"
+                  class="aspect-square flex items-center justify-center text-2xl rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all hover:scale-110 active:scale-95"
+                >
+                  {{ emoji }}
+                </button>
+              </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="p-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
+              <p class="text-xs text-gray-500 dark:text-gray-400 text-center">Click an emoji to add it to your canvas</p>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
+
+<style scoped>
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+</style>

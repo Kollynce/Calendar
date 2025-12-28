@@ -1,16 +1,15 @@
-import { ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { watch, nextTick } from 'vue'
 import { useEditorStore } from '@/stores/editor.store'
 import { useCalendarStore } from '@/stores/calendar.store'
 import { PAPER_SIZES } from './useEditorState'
 import type { Ref } from 'vue'
-import type AdobeCanvas from '@/components/editor/AdobeCanvas.vue'
+import type Canvas from '@/components/editor/Canvas.vue'
 
 export function useCanvasOperations(
   canvasRef: Ref<HTMLCanvasElement | null>,
-  adobeCanvasRef: Ref<InstanceType<typeof AdobeCanvas> | null>,
+  canvasComponentRef: Ref<InstanceType<typeof Canvas> | null>,
   canvasKey: Ref<number>,
-  routeProjectId: Ref<string | null>,
-  paperWidth: Ref<number>
+  routeProjectId: Ref<string | null>
 ) {
   const editorStore = useEditorStore()
   const calendarStore = useCalendarStore()
@@ -53,13 +52,6 @@ export function useCanvasOperations(
     if (canvasRef.value && !editorStore.canvas) {
       await initializeEditorCanvas()
     }
-  }
-
-  function shouldAddWelcomeText(): boolean {
-    if (routeProjectId.value) return false
-    if (!editorStore.project) return false
-    if (editorStore.project.canvas.objects?.length) return false
-    return true
   }
 
   function handleCanvasReady(canvasEl: HTMLCanvasElement): void {
@@ -105,27 +97,8 @@ export function useCanvasOperations(
     requestAnimationFrame(() => {
       editorStore.setZoom(1)
       editorStore.canvas?.calcOffset()
-      adobeCanvasRef.value?.fitToScreen()
+      canvasComponentRef.value?.fitToScreen()
     })
-
-    if (shouldAddWelcomeText()) {
-      setTimeout(() => {
-        editorStore.addObject('text', {
-          content: 'Start Designing Your Calendar',
-          x: Math.round(paperWidth.value / 2),
-          y: 90,
-          fontSize: 32,
-          fontFamily: 'Outfit',
-          textAlign: 'center',
-          originX: 'center',
-          color: '#1a1a1a',
-        })
-
-        requestAnimationFrame(() => {
-          editorStore.canvas?.calcOffset()
-        })
-      }, 100)
-    }
   }
 
   function setupRouteWatcher() {
