@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
-import { RouterLink } from 'vue-router'
-import { useAuthStore } from '@/stores'
 import AppLayout from '@/layouts/AppLayout.vue'
 import { projectsService } from '@/services/projects/projects.service'
 import AppButton from '@/components/ui/AppButton.vue'
+import AppCard from '@/components/ui/AppCard.vue'
 import AppTierBadge from '@/components/ui/AppTierBadge.vue'
+import { useAuthStore } from '@/stores'
 import type { Project } from '@/types'
 import { CalendarDaysIcon, PlusIcon } from '@heroicons/vue/24/outline'
 
@@ -74,35 +74,37 @@ watch(
       </div>
 
       <div v-else class="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        <RouterLink
+        <AppCard
           v-for="project in projects"
           :key="project.id"
           :to="`/editor/${project.id}`"
-          class="glass-card group overflow-hidden"
+          variant="glass"
+          hover="scale"
+          interactive
         >
-          <div class="aspect-4/3 bg-gray-100 dark:bg-gray-800 relative flex items-center justify-center overflow-hidden">
-            <img
-              v-if="project.thumbnail"
-              :src="project.thumbnail"
-              class="absolute inset-0 w-full h-full object-cover"
-              alt=""
-            />
-            <CalendarDaysIcon
-              v-else
-              class="w-12 h-12 text-gray-300 dark:text-gray-600 group-hover:scale-110 transition-transform duration-300"
-            />
-          </div>
-
-          <div class="p-4">
-            <div class="flex justify-between items-start gap-2 mb-1">
-              <h2 class="font-medium text-gray-900 dark:text-white truncate">{{ project.name }}</h2>
-              <span class="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                {{ project.status }}
-              </span>
+          <template #image>
+            <div class="aspect-4/3 bg-gray-100 dark:bg-gray-800 relative flex items-center justify-center overflow-hidden">
+              <img
+                v-if="project.thumbnail"
+                :src="project.thumbnail"
+                class="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                alt=""
+              />
+              <CalendarDaysIcon
+                v-else
+                class="w-12 h-12 text-gray-300 dark:text-gray-600 group-hover:scale-110 transition-transform duration-300"
+              />
             </div>
-            <p class="text-xs text-gray-500 dark:text-gray-400">Edited {{ formatUpdatedAt(project.updatedAt) }}</p>
+          </template>
+
+          <div class="flex justify-between items-start gap-2 mb-1">
+            <h2 class="font-medium text-gray-900 dark:text-white truncate">{{ project.name }}</h2>
+            <span class="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+              {{ project.status }}
+            </span>
           </div>
-        </RouterLink>
+          <p class="text-xs text-gray-500 dark:text-gray-400">Edited {{ formatUpdatedAt(project.updatedAt) }}</p>
+        </AppCard>
       </div>
     </div>
   </AppLayout>

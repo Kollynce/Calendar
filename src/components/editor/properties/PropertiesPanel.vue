@@ -251,16 +251,28 @@ const collageMetadata = computed<CollageMetadata | null>(() =>
   elementMetadata.value?.kind === 'collage' ? elementMetadata.value : null,
 )
 
-function updateCalendarMetadata(updates: Partial<CalendarGridMetadata>) {
-  editorStore.updateActiveElementMetadata(updates)
+function updateCalendarMetadata(updater: (draft: CalendarGridMetadata) => void) {
+  editorStore.updateSelectedElementMetadata((metadata) => {
+    if (metadata.kind !== 'calendar-grid') return null
+    updater(metadata)
+    return metadata
+  })
 }
 
-function updateWeekStripMetadata(updates: Partial<WeekStripMetadata>) {
-  editorStore.updateActiveElementMetadata(updates)
+function updateWeekStripMetadata(updater: (draft: WeekStripMetadata) => void) {
+  editorStore.updateSelectedElementMetadata((metadata) => {
+    if (metadata.kind !== 'week-strip') return null
+    updater(metadata)
+    return metadata
+  })
 }
 
-function updateDateCellMetadata(updates: Partial<DateCellMetadata>) {
-  editorStore.updateActiveElementMetadata(updates)
+function updateDateCellMetadata(updater: (draft: DateCellMetadata) => void) {
+  editorStore.updateSelectedElementMetadata((metadata) => {
+    if (metadata.kind !== 'date-cell') return null
+    updater(metadata)
+    return metadata
+  })
 }
 
 function updateCollageMetadata(updates: Partial<CollageMetadata>) {

@@ -12,6 +12,7 @@ import {
 import { db } from '@/config/firebase'
 import { useAuthStore } from '@/stores'
 import AppLayout from '@/layouts/AppLayout.vue'
+import AppCard from '@/components/ui/AppCard.vue'
 import type { SubscriptionTier, User, UserRole } from '@/types'
 
 type AdminUserRow = User & {
@@ -104,6 +105,13 @@ async function loadUsers(): Promise<void> {
           emailNotifications: true,
           marketingEmails: false,
         }) as any,
+        stats: (data.stats || {
+          storageUsed: 0,
+          activeDays: [],
+          projectCount: 0,
+          templateCount: 0,
+          totalDownloads: 0,
+        }) as any,
         createdAt: String(data.createdAt || ''),
         updatedAt: String(data.updatedAt || ''),
         lastLoginAt: typeof data.lastLoginAt === 'string' ? data.lastLoginAt : undefined,
@@ -153,36 +161,41 @@ onMounted(async () => {
         </div>
       </div>
 
-      <div v-if="!authStore.isAdmin" class="card p-4">
-        <p class="text-sm text-gray-600 dark:text-gray-300">You do not have access to this page.</p>
+      <div v-if="!authStore.isAdmin" class="space-y-6">
+        <AppCard variant="glass">
+          <p class="text-sm text-gray-600 dark:text-gray-300">You do not have access to this page.</p>
+        </AppCard>
       </div>
 
-      <div v-else class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div class="card p-4">
-          <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Users</p>
-          <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ totals.totalUsers }}</p>
-          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            Free: {{ totals.freeUsers }} | Pro: {{ totals.proUsers }} | Business: {{ totals.businessUsers }} | Enterprise: {{ totals.enterpriseUsers }}
-          </p>
+      <div v-else class="space-y-6">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <AppCard p="4" variant="outline">
+            <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Users</p>
+            <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ totals.totalUsers }}</p>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Free: {{ totals.freeUsers }} | Pro: {{ totals.proUsers }} | Business: {{ totals.businessUsers }} | Enterprise: {{ totals.enterpriseUsers }}
+            </p>
+          </AppCard>
+          <AppCard p="4" variant="outline">
+            <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Projects</p>
+            <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ totals.totalProjects }}</p>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Total projects across listed users</p>
+          </AppCard>
+          <AppCard p="4" variant="outline">
+            <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Search</p>
+            <input v-model="search" type="text" class="input mt-2" placeholder="Search by name or email" />
+          </AppCard>
         </div>
-        <div class="card p-4">
-          <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Projects</p>
-          <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ totals.totalProjects }}</p>
-          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Total projects across listed users</p>
-        </div>
-        <div class="card p-4">
-          <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Search</p>
-          <input v-model="search" type="text" class="input mt-2" placeholder="Search by name or email" />
-        </div>
-      </div>
 
-      <div v-if="error" class="card p-4 border-red-200 dark:border-red-800">
-        <p class="text-sm text-red-600 dark:text-red-400">{{ error }}</p>
-      </div>
+        <div v-if="error">
+          <AppCard variant="outline" class="border-red-200 dark:border-red-800">
+            <p class="text-sm text-red-600 dark:text-red-400">{{ error }}</p>
+          </AppCard>
+        </div>
 
-      <div class="card overflow-hidden">
-        <div class="overflow-x-auto">
-          <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-800">
+        <AppCard variant="outline" class="overflow-hidden p-0!">
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-800">
             <thead class="bg-gray-50 dark:bg-gray-900">
               <tr>
                 <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">User</th>
@@ -215,8 +228,9 @@ onMounted(async () => {
                 <td class="px-4 py-4 text-sm text-gray-700 dark:text-gray-300">{{ formatDate(u.lastLoginAt) }}</td>
               </tr>
             </tbody>
-          </table>
-        </div>
+            </table>
+          </div>
+        </AppCard>
       </div>
     </div>
   </AppLayout>

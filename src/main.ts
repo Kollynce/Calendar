@@ -23,6 +23,9 @@ async function bootstrap() {
   app.use(pinia)
   app.use(router)
 
+  // Global Components
+  app.component('AppTierBadge', AppTierBadge)
+
   // Initialize stores
   const themeStore = useThemeStore()
   const authStore = useAuthStore()

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import AppLayout from '@/layouts/AppLayout.vue'
 import AppButton from '@/components/ui/AppButton.vue'
+import AppCard from '@/components/ui/AppCard.vue'
 import { useAuthStore } from '@/stores'
 
 const authStore = useAuthStore()
@@ -15,7 +16,7 @@ const authStore = useAuthStore()
       </div>
 
       <div class="grid lg:grid-cols-3 gap-6">
-        <div class="glass-card p-6 lg:col-span-2">
+        <AppCard class="lg:col-span-2" variant="glass">
           <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Defaults</h2>
           <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Used when creating new projects.</p>
 
@@ -30,12 +31,12 @@ const authStore = useAuthStore()
             </div>
           </div>
 
-          <div class="mt-6">
+          <template #footer>
             <AppButton variant="secondary">Edit defaults</AppButton>
-          </div>
-        </div>
+          </template>
+        </AppCard>
 
-        <div class="glass-card p-6">
+        <AppCard variant="glass">
           <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Notifications</h2>
           <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Email updates and marketing.</p>
 
@@ -60,10 +61,10 @@ const authStore = useAuthStore()
             </div>
           </div>
 
-          <div class="mt-4">
+          <template #footer>
             <AppButton variant="secondary" class="w-full">Manage notifications</AppButton>
-          </div>
-        </div>
+          </template>
+        </AppCard>
       </div>
     </div>
   </AppLayout>

@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores'
 import MarketplaceLayout from '@/layouts/MarketplaceLayout.vue'
 import AppTierBadge from '@/components/ui/AppTierBadge.vue'
 import AppButton from '@/components/ui/AppButton.vue'
+import AppCard from '@/components/ui/AppCard.vue'
 import { 
   MagnifyingGlassIcon,
   Squares2X2Icon,
@@ -387,56 +388,58 @@ function viewDetails(id: string) {
 
           <!-- Professional Grid -->
           <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-x-8 gap-y-12">
-            <div
+            <AppCard
               v-for="template in filteredTemplates"
               :key="template.id"
               @click="viewDetails(template.id)"
-              class="group flex flex-col cursor-pointer"
+              variant="flat"
+              hover="ring"
+              interactive
             >
-              <!-- Refined Card -->
-              <div class="relative aspect-4/3 bg-gray-50 dark:bg-gray-800/50 rounded-2xl overflow-hidden ring-1 ring-gray-200 dark:ring-gray-800 transition-all duration-500 group-hover:ring-primary-500/50 group-hover:shadow-2xl group-hover:shadow-primary-500/10">
-                <div class="absolute inset-0 flex items-center justify-center opacity-10 dark:opacity-20 group-hover:scale-110 transition-transform duration-700">
-                  <Squares2X2Icon class="w-24 h-24 text-gray-400" />
-                </div>
-                
-                <!-- Pricing Badge -->
-                <div class="absolute bottom-4 left-4 z-20">
-                  <div class="bg-white dark:bg-gray-900 px-3 py-1.5 rounded-lg shadow-xl border border-gray-100 dark:border-gray-800 flex flex-col">
-                    <span 
-                      class="text-xs font-black tracking-tight leading-none"
-                      :class="isIncluded(template) ? 'text-primary-600 dark:text-primary-400' : 'text-gray-900 dark:text-white'"
-                    >
-                      {{ getDisplayPrice(template) }}
+              <template #image>
+                <div class="relative aspect-4/3 bg-gray-50 dark:bg-gray-800/50 rounded-2xl overflow-hidden ring-1 ring-gray-200 dark:ring-gray-800 transition-all duration-500 group-hover:ring-primary-500/50">
+                  <div class="absolute inset-0 flex items-center justify-center opacity-10 dark:opacity-20 group-hover:scale-110 transition-transform duration-700">
+                    <Squares2X2Icon class="w-24 h-24 text-gray-400" />
+                  </div>
+                  
+                  <!-- Pricing Badge -->
+                  <div class="absolute bottom-4 left-4 z-20">
+                    <div class="bg-white dark:bg-gray-900 px-3 py-1.5 rounded-lg shadow-xl border border-gray-100 dark:border-gray-800 flex flex-col">
+                      <span 
+                        class="text-xs font-black tracking-tight leading-none"
+                        :class="isIncluded(template) ? 'text-primary-600 dark:text-primary-400' : 'text-gray-900 dark:text-white'"
+                      >
+                        {{ getDisplayPrice(template) }}
+                      </span>
+                      <span v-if="isIncluded(template) && template.price > 0" class="text-[8px] text-gray-400 line-through font-medium mt-0.5">
+                        ${{ (template.price / 100).toFixed(2) }}
+                      </span>
+                    </div>
+                  </div>
+
+                  <!-- Tier Badge -->
+                  <div class="absolute top-4 right-4 z-20">
+                    <AppTierBadge :tier="template.requiredTier" size="sm" class="shadow-lg" />
+                  </div>
+
+                  <!-- Featured Badge -->
+                  <div class="absolute top-4 left-4 z-20 flex flex-col gap-2">
+                    <span v-if="template.isPopular" class="bg-amber-500 text-white text-[8px] font-black px-2 py-1 rounded shadow-lg uppercase tracking-widest flex items-center gap-1">
+                      <FireIcon class="w-3 h-3" /> Popular
                     </span>
-                    <span v-if="isIncluded(template) && template.price > 0" class="text-[8px] text-gray-400 line-through font-medium mt-0.5">
-                      ${{ (template.price / 100).toFixed(2) }}
-                    </span>
+                    <span v-if="template.isNew" class="bg-green-500 text-white text-[8px] font-black px-2 py-1 rounded shadow-lg uppercase tracking-widest">New</span>
+                  </div>
+
+                  <!-- Action Hover Overlay -->
+                  <div class="absolute inset-0 bg-gray-950/0 group-hover:bg-gray-950/20 transition-all duration-500 z-10 flex items-center justify-center">
+                    <div class="scale-90 opacity-0 group-hover:scale-100 group-hover:opacity-100 transition-all duration-500">
+                      <div class="bg-white text-gray-900 px-6 py-2.5 rounded-full font-black uppercase tracking-widest text-[9px] shadow-2xl">View Layout</div>
+                    </div>
                   </div>
                 </div>
+              </template>
 
-                <!-- Tier Badge -->
-                <div class="absolute top-4 right-4 z-20">
-                  <AppTierBadge :tier="template.requiredTier" size="sm" class="shadow-lg" />
-                </div>
-
-                <!-- Featured Badge -->
-                <div class="absolute top-4 left-4 z-20 flex flex-col gap-2">
-                  <span v-if="template.isPopular" class="bg-amber-500 text-white text-[8px] font-black px-2 py-1 rounded shadow-lg uppercase tracking-widest flex items-center gap-1">
-                    <FireIcon class="w-3 h-3" /> Popular
-                  </span>
-                  <span v-if="template.isNew" class="bg-green-500 text-white text-[8px] font-black px-2 py-1 rounded shadow-lg uppercase tracking-widest">New</span>
-                </div>
-
-                <!-- Action Hover Overlay -->
-                <div class="absolute inset-0 bg-gray-950/0 group-hover:bg-gray-950/20 transition-all duration-500 z-10 flex items-center justify-center">
-                  <div class="scale-90 opacity-0 group-hover:scale-100 group-hover:opacity-100 transition-all duration-500">
-                    <div class="bg-white text-gray-900 px-6 py-2.5 rounded-full font-black uppercase tracking-widest text-[9px] shadow-2xl">View Layout</div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Content Area -->
-              <div class="mt-5 space-y-1 px-1">
+              <div class="space-y-1">
                 <div class="flex items-center justify-between text-[10px] font-black uppercase tracking-[0.15em] text-primary-600 dark:text-primary-400">
                   {{ template.category }}
                   <div class="flex items-center gap-1">
@@ -455,7 +458,7 @@ function viewDetails(id: string) {
                   </div>
                 </div>
               </div>
-            </div>
+            </AppCard>
           </div>
 
           <!-- Empty State -->

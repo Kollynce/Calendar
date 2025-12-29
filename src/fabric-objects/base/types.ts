@@ -1,4 +1,4 @@
-import type { FabricObject, ObjectEvents, TClassProperties } from 'fabric'
+// import type { FabricObject, ObjectEvents, TClassProperties } from 'fabric'
 
 export interface BaseObjectProps {
   id?: string

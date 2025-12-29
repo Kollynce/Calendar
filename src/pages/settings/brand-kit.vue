@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import AppLayout from '@/layouts/AppLayout.vue'
 import AppButton from '@/components/ui/AppButton.vue'
+import AppCard from '@/components/ui/AppCard.vue'
 import AppTierBadge from '@/components/ui/AppTierBadge.vue'
 import { useAuthStore } from '@/stores'
 import { SwatchIcon, PhotoIcon, LanguageIcon, LockClosedIcon } from '@heroicons/vue/24/outline'
@@ -27,7 +28,7 @@ const limit = computed(() => authStore.tierLimits.brandKits)
       </div>
 
       <!-- Locked State Overlay for Free Users -->
-      <div v-if="!hasAccess" class="glass-card p-12 text-center space-y-4">
+      <AppCard v-if="!hasAccess" class="p-12 text-center space-y-4" variant="glass">
         <div class="mx-auto w-16 h-16 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center text-primary-600 dark:text-primary-400">
           <LockClosedIcon class="w-8 h-8" />
         </div>
@@ -41,11 +42,11 @@ const limit = computed(() => authStore.tierLimits.brandKits)
             <AppButton to="/settings/billing" variant="secondary">View Pricing</AppButton>
           </div>
         </div>
-      </div>
+      </AppCard>
 
       <div v-else :class="{ 'opacity-60 pointer-events-none grayscale-[0.5]': !canCreateMore && limit > 0 }" class="grid lg:grid-cols-3 gap-6">
         <!-- Content remains similar but with disabled states if needed -->
-        <div class="glass-card p-6">
+        <AppCard variant="glass">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2">
               <PhotoIcon class="h-5 w-5 text-primary-500" />
@@ -57,12 +58,12 @@ const limit = computed(() => authStore.tierLimits.brandKits)
           <div class="mt-6 h-32 rounded-xl border-2 border-dashed border-gray-300/60 dark:border-gray-700 flex items-center justify-center text-sm text-gray-500 dark:text-gray-400">
             Drop logo files here
           </div>
-          <div class="mt-4">
+          <template #footer>
             <AppButton variant="secondary" class="w-full">Upload logo</AppButton>
-          </div>
-        </div>
+          </template>
+        </AppCard>
 
-        <div class="glass-card p-6">
+        <AppCard variant="glass">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2">
               <SwatchIcon class="h-5 w-5 text-primary-500" />
@@ -80,12 +81,12 @@ const limit = computed(() => authStore.tierLimits.brandKits)
             <div class="h-10 rounded-lg bg-white border border-gray-200 dark:border-gray-700"></div>
           </div>
 
-          <div class="mt-4">
+          <template #footer>
             <AppButton variant="secondary" class="w-full">Edit palette</AppButton>
-          </div>
-        </div>
+          </template>
+        </AppCard>
 
-        <div class="glass-card p-6">
+        <AppCard variant="glass">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2">
               <LanguageIcon class="h-5 w-5 text-primary-500" />
@@ -106,10 +107,10 @@ const limit = computed(() => authStore.tierLimits.brandKits)
             </div>
           </div>
 
-          <div class="mt-4">
+          <template #footer>
             <AppButton variant="secondary" class="w-full">Manage fonts</AppButton>
-          </div>
-        </div>
+          </template>
+        </AppCard>
       </div>
     </div>
   </AppLayout>

@@ -68,6 +68,7 @@ const secondaryNavigation = computed(() => [
 
 const adminNavigation = [
   { name: 'Users', href: '/admin/users', icon: UsersIcon },
+  { name: 'Marketplace', href: '/marketplace', icon: SparklesIcon },
 ]
 
 const isActive = (path: string) => {

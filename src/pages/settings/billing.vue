@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import AppLayout from '@/layouts/AppLayout.vue'
 import AppButton from '@/components/ui/AppButton.vue'
+import AppCard from '@/components/ui/AppCard.vue'
 import { useAuthStore } from '@/stores'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { initPayPal, PAYPAL_PLANS } from '@/config/paypal'
@@ -132,7 +133,7 @@ onBeforeUnmount(() => {
       </div>
 
       <div class="grid lg:grid-cols-3 gap-6">
-        <div class="glass-card p-6 lg:col-span-2">
+        <AppCard class="lg:col-span-2" variant="glass">
           <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Current plan</h2>
           <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Your subscription tier and included features.</p>
 
@@ -169,9 +170,9 @@ onBeforeUnmount(() => {
               <div class="text-sm text-gray-600 dark:text-gray-300 mt-2">Coming soon.</div>
             </div>
           </div>
-        </div>
+        </AppCard>
 
-        <div class="glass-card p-6">
+        <AppCard variant="glass">
           <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Usage</h2>
           <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Storage and project limits.</p>
           <div class="mt-6 space-y-4">
@@ -200,7 +201,7 @@ onBeforeUnmount(() => {
               </div>
             </div>
           </div>
-        </div>
+        </AppCard>
       </div>
     </div>
   </AppLayout>

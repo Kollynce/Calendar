@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { CheckIcon, SparklesIcon } from '@heroicons/vue/24/outline'
+import AppCard from '@/components/ui/AppCard.vue'
 
 const plans = [
   {
@@ -86,11 +87,13 @@ const plans = [
 
       <!-- Pricing Cards -->
       <div class="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
-        <div
+        <AppCard
           v-for="(plan, index) in plans"
           :key="plan.name"
+          :variant="plan.highlighted ? 'glass' : 'outline'"
+          hover="shadow"
+          class="p-12! flex flex-col bg-white/40 dark:bg-gray-900/40 backdrop-blur-2xl border border-white/20 dark:border-white/5 animate-fade-in-up transition-all duration-700"
           :class="[
-            'relative rounded-[3rem] p-12 flex flex-col bg-white/40 dark:bg-gray-900/40 backdrop-blur-2xl border border-white/20 dark:border-white/5 animate-fade-in-up transition-all duration-700',
             plan.highlighted
               ? 'ring-2 ring-primary-500 shadow-[0_0_50px_-12px_rgba(59,130,246,0.5)] scale-105 z-10 hover:shadow-primary-500/40 hover:-translate-y-4'
               : 'shadow-2xl hover:shadow-primary-500/20 hover:-translate-y-3'
@@ -159,7 +162,7 @@ const plans = [
             <span class="relative z-10">{{ plan.cta }}</span>
             <div :class="['absolute inset-0 opacity-0 group-hover/btn:opacity-100 transition-opacity duration-500 bg-linear-to-r', plan.highlighted ? 'from-primary-600 to-indigo-600' : 'from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-600']"></div>
           </button>
-        </div>
+        </AppCard>
       </div>
 
       <!-- FAQ or Additional Info -->

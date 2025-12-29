@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import AppLayout from '@/layouts/AppLayout.vue'
 import AppButton from '@/components/ui/AppButton.vue'
+import AppCard from '@/components/ui/AppCard.vue'
 import AppTierBadge from '@/components/ui/AppTierBadge.vue'
 import { useAuthStore, useThemeStore } from '@/stores'
 import { 
@@ -30,7 +31,7 @@ const currentThemeName = computed(() => {
       </div>
 
       <div class="grid lg:grid-cols-3 gap-6">
-        <div class="glass-card p-6 lg:col-span-2">
+        <AppCard class="lg:col-span-2" variant="glass">
           <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Profile</h2>
           <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Your public account details.</p>
 
@@ -44,9 +45,9 @@ const currentThemeName = computed(() => {
               <input type="email" :value="authStore.user?.email" class="input opacity-50" disabled />
             </div>
           </div>
-        </div>
+        </AppCard>
 
-        <div class="glass-card p-6">
+        <AppCard variant="glass">
           <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Subscription</h2>
           <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Your current plan and limits.</p>
 
@@ -57,14 +58,14 @@ const currentThemeName = computed(() => {
             </div>
           </div>
 
-          <div class="mt-4">
+          <template #footer>
             <AppButton to="/settings/billing" variant="secondary" class="w-full">Manage subscription</AppButton>
-          </div>
-        </div>
+          </template>
+        </AppCard>
       </div>
 
       <div class="grid lg:grid-cols-3 gap-6">
-        <div class="glass-card p-6 lg:col-span-2">
+        <AppCard class="lg:col-span-2" variant="glass">
           <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Appearance</h2>
           <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Theme and color preferences.</p>
 
@@ -88,20 +89,20 @@ const currentThemeName = computed(() => {
               </div>
             </div>
           </div>
-        </div>
+        </AppCard>
 
-        <div class="glass-card p-6 border border-red-500/20">
+        <AppCard variant="glass" class="border-red-500/20">
           <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Sign out</h2>
           <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">End your current session.</p>
-          <div class="mt-6">
+          <template #footer>
             <AppButton variant="secondary" class="w-full" @click="authStore.logout()">
               <template #icon>
                 <ArrowLeftOnRectangleIcon class="w-4 h-4" />
               </template>
               Sign out
             </AppButton>
-          </div>
-        </div>
+          </template>
+        </AppCard>
       </div>
 
       <!-- Business Features Section -->
@@ -116,7 +117,7 @@ const currentThemeName = computed(() => {
 
         <div class="grid lg:grid-cols-3 gap-6">
           <!-- API Access -->
-          <div class="glass-card p-6 relative" :class="{ 'opacity-75 grayscale-[0.5]': !authStore.canUseAPI }">
+          <AppCard variant="glass" class="relative" :class="{ 'opacity-75 grayscale-[0.5]': !authStore.canUseAPI }">
             <div class="flex items-center justify-between mb-4">
               <div class="p-2 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400">
                 <CommandLineIcon class="w-6 h-6" />
@@ -127,13 +128,13 @@ const currentThemeName = computed(() => {
             <p class="text-sm text-gray-500 dark:text-gray-400 mt-2">
               Automate your calendar generation and integrate with your existing workflow via our REST API.
             </p>
-            <div class="mt-6">
+            <template #footer>
               <AppButton :disabled="!authStore.canUseAPI" variant="secondary" class="w-full">Manage API Keys</AppButton>
-            </div>
-          </div>
+            </template>
+          </AppCard>
 
           <!-- White Label -->
-          <div class="glass-card p-6 relative" :class="{ 'opacity-75 grayscale-[0.5]': !authStore.canUseWhiteLabel }">
+          <AppCard variant="glass" class="relative" :class="{ 'opacity-75 grayscale-[0.5]': !authStore.canUseWhiteLabel }">
             <div class="flex items-center justify-between mb-4">
               <div class="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400">
                 <ShieldCheckIcon class="w-6 h-6" />
@@ -144,13 +145,13 @@ const currentThemeName = computed(() => {
             <p class="text-sm text-gray-500 dark:text-gray-400 mt-2">
               Remove all branding and use your own custom domain and assets for a seamless brand experience.
             </p>
-            <div class="mt-6">
+            <template #footer>
               <AppButton :disabled="!authStore.canUseWhiteLabel" variant="secondary" class="w-full">Configure Branding</AppButton>
-            </div>
-          </div>
+            </template>
+          </AppCard>
 
           <!-- Team Collaboration -->
-          <div class="glass-card p-6 relative" :class="{ 'opacity-75 grayscale-[0.5]': !authStore.canUseTeamCollaboration }">
+          <AppCard variant="glass" class="relative" :class="{ 'opacity-75 grayscale-[0.5]': !authStore.canUseTeamCollaboration }">
             <div class="flex items-center justify-between mb-4">
               <div class="p-2 rounded-lg bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400">
                 <UsersIcon class="w-6 h-6" />
@@ -161,10 +162,10 @@ const currentThemeName = computed(() => {
             <p class="text-sm text-gray-500 dark:text-gray-400 mt-2">
               Invite team members, share projects, and manage roles and permissions across your organization.
             </p>
-            <div class="mt-6">
+            <template #footer>
               <AppButton :disabled="!authStore.canUseTeamCollaboration" variant="secondary" class="w-full">Manage Team</AppButton>
-            </div>
-          </div>
+            </template>
+          </AppCard>
         </div>
 
         <div v-if="!authStore.isBusiness" class="p-6 bg-primary-50 dark:bg-primary-900/10 rounded-2xl border border-primary-100 dark:border-primary-900/20 flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">

@@ -1,4 +1,4 @@
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref } from 'vue'
 
 export function useSidebarResize() {
   const rightSidebarWidth = ref(400)

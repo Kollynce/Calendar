@@ -1,4 +1,4 @@
-import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { useEditorStore } from '@/stores/editor.store'
 import {
   calendarTemplates,

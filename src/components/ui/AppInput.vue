@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, useAttrs } from 'vue'
+import { computed, useAttrs, ref } from 'vue'
 
 type Variant = 'default' | 'sm' | 'glass' | 'glass-sm'
 
@@ -57,10 +57,22 @@ const passthroughAttrs = computed(() => {
 function onInput(e: Event) {
   emit('update:modelValue', (e.target as HTMLInputElement).value)
 }
+
+const inputRef = ref<HTMLInputElement | null>(null)
+
+function focus() {
+  inputRef.value?.focus()
+}
+
+defineExpose({
+  input: inputRef,
+  focus
+})
 </script>
 
 <template>
   <input
+    ref="inputRef"
     v-bind="passthroughAttrs"
     :value="modelValue ?? ''"
     :disabled="disabled"

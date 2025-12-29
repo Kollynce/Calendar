@@ -26,17 +26,28 @@ import {
   TrashIcon,
 } from '@heroicons/vue/24/outline'
 import ExportModal from '@/components/export/ExportModal.vue'
-import TypographyProperties from '@/components/editor/properties/TypographyProperties.vue'
+// import TypographyProperties from '@/components/editor/properties/TypographyProperties.vue'
 import CalendarConfigPanel from '@/components/editor/CalendarConfigPanel.vue'
 import EditorLayers from '@/components/editor/EditorLayers.vue'
 import TemplatePanel from '@/components/editor/TemplatePanel.vue'
+import MarketplaceProductWizard from '@/components/editor/MarketplaceProductWizard.vue'
 import Canvas from '@/components/editor/Canvas.vue'
 import PropertiesPanelContent from '@/components/editor/panels/PropertiesPanelContent.vue'
 import ElementsPanel from '@/components/editor/panels/ElementsPanel.vue'
 import TextPanel from '@/components/editor/panels/TextPanel.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppAlert from '@/components/ui/AppAlert.vue'
+import AppTierBadge from '@/components/ui/AppTierBadge.vue'
+import {
+  Dialog,
+  DialogPanel,
+  DialogTitle,
+  TransitionChild,
+  TransitionRoot,
+} from '@headlessui/vue'
+import { MegaphoneIcon } from '@heroicons/vue/24/outline'
 import { renderTemplateOnCanvas, generateTemplateThumbnail } from '@/services/editor/template-renderer'
+import { marketplaceService, type MarketplaceProduct } from '@/services/marketplace.service'
 import { getPresetByCanvasSize } from '@/config/canvas-presets'
 import {
   uploadUserAsset,
@@ -46,16 +57,16 @@ import {
   type UploadCategory,
 } from '@/services/storage/user-uploads.service'
 import type {
-  CanvasElementMetadata,
-  CalendarGridMetadata,
+  // CanvasElementMetadata,
+  // CalendarGridMetadata,
   TemplateOptions,
-  WeekStripMetadata,
-  DateCellMetadata,
-  PlannerNoteMetadata,
-  PlannerPatternVariant,
-  PlannerHeaderStyle,
-  ScheduleMetadata,
-  ChecklistMetadata,
+  // WeekStripMetadata,
+  // DateCellMetadata,
+  // PlannerNoteMetadata,
+  // PlannerPatternVariant,
+  // PlannerHeaderStyle,
+  // ScheduleMetadata,
+  // ChecklistMetadata,
 } from '@/types'
 import { DEFAULT_TEMPLATE_OPTIONS } from '@/config/editor-defaults'
 
@@ -81,6 +92,8 @@ const canvasElRef = ref<HTMLCanvasElement | null>(null)
 const canvasComponentRef = ref<InstanceType<typeof Canvas> | null>(null)
 const canvasKey = ref(0) // Key to force Canvas remount on project switch
 const isExportModalOpen = ref(false)
+const isMarketplaceWizardOpen = ref(false)
+const isPostConfirmationOpen = ref(false)
 const userUploads = ref<UserUploadAsset[]>([])
 const uploadsLoading = ref(false)
 const uploadError = ref<string | null>(null)
@@ -248,8 +261,44 @@ async function handleSaveProject(): Promise<void> {
     if (!routeProjectId.value && editorStore.project?.id) {
       router.replace(`/editor/${editorStore.project.id}`)
     }
+    
+    // If admin, ask to post to marketplace
+    if (authStore.isAdmin) {
+      isPostConfirmationOpen.value = true
+    }
   } catch (e) {
     console.error('Failed to save project', e)
+  }
+}
+
+function handleStartMarketplaceWizard() {
+  isPostConfirmationOpen.value = false
+  isMarketplaceWizardOpen.value = true
+}
+
+async function handlePublishToMarketplace(productData: any) {
+  try {
+    if (!editorStore.project) return
+
+    const product: MarketplaceProduct = {
+      ...productData,
+      creatorId: authStore.user?.id || '',
+      creatorName: authStore.user?.displayName || 'Admin',
+      thumbnail: editorStore.project.thumbnail,
+      templateData: {
+        config: editorStore.project.config,
+        canvas: editorStore.project.canvas,
+      },
+      downloads: 0,
+    }
+
+    await marketplaceService.publishTemplate(product)
+    
+    isMarketplaceWizardOpen.value = false
+    alert('Template successfully published to marketplace!')
+  } catch (e) {
+    console.error('Failed to publish to marketplace', e)
+    alert('Failed to publish to marketplace')
   }
 }
 
@@ -483,301 +532,301 @@ watch(
 )
 
 // Computed
-const selectedObject = computed(() => selectedObjects.value[0])
+// const selectedObject = computed(() => selectedObjects.value[0])
 
-const objectType = computed(() => {
-  if (!selectedObject.value) return null
-  return selectedObject.value.type
-})
+// const objectType = computed(() => {
+//   if (!selectedObject.value) return null
+//   return selectedObject.value.type
+// })
 
-// Text properties (two-way binding with canvas)
-const textContent = computed({
-  get: () => (selectedObject.value as any)?.text || '',
-  set: (value) => editorStore.updateObjectProperty('text', value),
-})
+// // Text properties (two-way binding with canvas)
+// const textContent = computed({
+//   get: () => (selectedObject.value as any)?.text || '',
+//   set: (value) => editorStore.updateObjectProperty('text', value),
+// })
 
-// Shape properties
-const fillColor = computed({
-  get: () => (selectedObject.value as any)?.fill || '#3b82f6',
-  set: (value) => editorStore.updateObjectProperty('fill', value),
-})
+// // Shape properties
+// const fillColor = computed({
+//   get: () => (selectedObject.value as any)?.fill || '#3b82f6',
+//   set: (value) => editorStore.updateObjectProperty('fill', value),
+// })
 
-const strokeColor = computed({
-  get: () => (selectedObject.value as any)?.stroke || '',
-  set: (value) => editorStore.updateObjectProperty('stroke', value),
-})
+// const strokeColor = computed({
+//   get: () => (selectedObject.value as any)?.stroke || '',
+//   set: (value) => editorStore.updateObjectProperty('stroke', value),
+// })
 
-const strokeWidth = computed({
-  get: () => (selectedObject.value as any)?.strokeWidth || 0,
-  set: (value) => editorStore.updateObjectProperty('strokeWidth', value),
-})
+// const strokeWidth = computed({
+//   get: () => (selectedObject.value as any)?.strokeWidth || 0,
+//   set: (value) => editorStore.updateObjectProperty('strokeWidth', value),
+// })
 
-const cornerRadius = computed({
-  get: () => (selectedObject.value as any)?.rx || 0,
-  set: (value) => {
-    editorStore.updateObjectProperty('rx', value)
-    editorStore.updateObjectProperty('ry', value)
-  },
-})
+// const cornerRadius = computed({
+//   get: () => (selectedObject.value as any)?.rx || 0,
+//   set: (value) => {
+//     editorStore.updateObjectProperty('rx', value)
+//     editorStore.updateObjectProperty('ry', value)
+//   },
+// })
 
-const isArrow = computed(() => {
-  const obj: any = selectedObject.value as any
-  if (!obj) return false
-  if (obj.type === 'group' && obj?.data?.shapeKind === 'arrow') return true
-  if (obj.type !== 'group') return false
-  const parts = (obj?._objects ?? []).map((o: any) => o?.data?.arrowPart).filter(Boolean)
-  return parts.includes('line') && (parts.includes('startHead') || parts.includes('endHead'))
-})
+// const isArrow = computed(() => {
+//   const obj: any = selectedObject.value as any
+//   if (!obj) return false
+//   if (obj.type === 'group' && obj?.data?.shapeKind === 'arrow') return true
+//   if (obj.type !== 'group') return false
+//   const parts = (obj?._objects ?? []).map((o: any) => o?.data?.arrowPart).filter(Boolean)
+//   return parts.includes('line') && (parts.includes('startHead') || parts.includes('endHead'))
+// })
 
-const isLineOrArrow = computed(() => {
-  const obj: any = selectedObject.value as any
-  return obj?.type === 'line' || isArrow.value
-})
+// const isLineOrArrow = computed(() => {
+//   const obj: any = selectedObject.value as any
+//   return obj?.type === 'line' || isArrow.value
+// })
 
-const lineStrokeColor = computed({
-  get: () => {
-    const obj: any = selectedObject.value as any
-    if (isArrow.value) return obj?.data?.arrowOptions?.stroke ?? '#000000'
-    return obj?.stroke ?? '#000000'
-  },
-  set: (value) => editorStore.updateObjectProperty('stroke', value),
-})
+// const lineStrokeColor = computed({
+//   get: () => {
+//     const obj: any = selectedObject.value as any
+//     if (isArrow.value) return obj?.data?.arrowOptions?.stroke ?? '#000000'
+//     return obj?.stroke ?? '#000000'
+//   },
+//   set: (value) => editorStore.updateObjectProperty('stroke', value),
+// })
 
-const lineStrokeWidth = computed({
-  get: () => {
-    const obj: any = selectedObject.value as any
-    if (isArrow.value) return Number(obj?.data?.arrowOptions?.strokeWidth ?? 2) || 2
-    return Number(obj?.strokeWidth ?? 0) || 0
-  },
-  set: (value) => editorStore.updateObjectProperty('strokeWidth', Number(value) || 0),
-})
+// const lineStrokeWidth = computed({
+//   get: () => {
+//     const obj: any = selectedObject.value as any
+//     if (isArrow.value) return Number(obj?.data?.arrowOptions?.strokeWidth ?? 2) || 2
+//     return Number(obj?.strokeWidth ?? 0) || 0
+//   },
+//   set: (value) => editorStore.updateObjectProperty('strokeWidth', Number(value) || 0),
+// })
 
-const lineCap = computed({
-  get: () => {
-    const obj: any = selectedObject.value as any
-    const line = isArrow.value ? obj?._objects?.find((o: any) => o?.data?.arrowPart === 'line') : obj
-    return line?.strokeLineCap ?? 'butt'
-  },
-  set: (value) => editorStore.updateObjectProperty('strokeLineCap', value),
-})
+// const lineCap = computed({
+//   get: () => {
+//     const obj: any = selectedObject.value as any
+//     const line = isArrow.value ? obj?._objects?.find((o: any) => o?.data?.arrowPart === 'line') : obj
+//     return line?.strokeLineCap ?? 'butt'
+//   },
+//   set: (value) => editorStore.updateObjectProperty('strokeLineCap', value),
+// })
 
-const lineJoin = computed({
-  get: () => {
-    const obj: any = selectedObject.value as any
-    const line = isArrow.value ? obj?._objects?.find((o: any) => o?.data?.arrowPart === 'line') : obj
-    return line?.strokeLineJoin ?? 'miter'
-  },
-  set: (value) => editorStore.updateObjectProperty('strokeLineJoin', value),
-})
+// const lineJoin = computed({
+//   get: () => {
+//     const obj: any = selectedObject.value as any
+//     const line = isArrow.value ? obj?._objects?.find((o: any) => o?.data?.arrowPart === 'line') : obj
+//     return line?.strokeLineJoin ?? 'miter'
+//   },
+//   set: (value) => editorStore.updateObjectProperty('strokeLineJoin', value),
+// })
 
-const dashStyle = computed({
-  get: () => {
-    const obj: any = selectedObject.value as any
-    const line = isArrow.value ? obj?._objects?.find((o: any) => o?.data?.arrowPart === 'line') : obj
-    const dash = line?.strokeDashArray
-    if (!dash || dash.length === 0) return 'solid'
-    const key = JSON.stringify(dash)
-    if (key === JSON.stringify([10, 8])) return 'dashed'
-    if (key === JSON.stringify([2, 6])) return 'dotted'
-    if (key === JSON.stringify([20, 10, 6, 10])) return 'dash-dot'
-    return 'solid'
-  },
-  set: (value) => {
-    if (value === 'solid') editorStore.updateObjectProperty('strokeDashArray', undefined)
-    else if (value === 'dashed') editorStore.updateObjectProperty('strokeDashArray', [10, 8])
-    else if (value === 'dotted') editorStore.updateObjectProperty('strokeDashArray', [2, 6])
-    else if (value === 'dash-dot') editorStore.updateObjectProperty('strokeDashArray', [20, 10, 6, 10])
-  },
-})
+// const dashStyle = computed({
+//   get: () => {
+//     const obj: any = selectedObject.value as any
+//     const line = isArrow.value ? obj?._objects?.find((o: any) => o?.data?.arrowPart === 'line') : obj
+//     const dash = line?.strokeDashArray
+//     if (!dash || dash.length === 0) return 'solid'
+//     const key = JSON.stringify(dash)
+//     if (key === JSON.stringify([10, 8])) return 'dashed'
+//     if (key === JSON.stringify([2, 6])) return 'dotted'
+//     if (key === JSON.stringify([20, 10, 6, 10])) return 'dash-dot'
+//     return 'solid'
+//   },
+//   set: (value) => {
+//     if (value === 'solid') editorStore.updateObjectProperty('strokeDashArray', undefined)
+//     else if (value === 'dashed') editorStore.updateObjectProperty('strokeDashArray', [10, 8])
+//     else if (value === 'dotted') editorStore.updateObjectProperty('strokeDashArray', [2, 6])
+//     else if (value === 'dash-dot') editorStore.updateObjectProperty('strokeDashArray', [20, 10, 6, 10])
+//   },
+// })
 
-const arrowEnds = computed({
-  get: () => {
-    const obj: any = selectedObject.value as any
-    return obj?.data?.arrowOptions?.arrowEnds ?? 'end'
-  },
-  set: (value) => editorStore.updateObjectProperty('arrowEnds', value),
-})
+// const arrowEnds = computed({
+//   get: () => {
+//     const obj: any = selectedObject.value as any
+//     return obj?.data?.arrowOptions?.arrowEnds ?? 'end'
+//   },
+//   set: (value) => editorStore.updateObjectProperty('arrowEnds', value),
+// })
 
-const arrowHeadStyle = computed({
-  get: () => {
-    const obj: any = selectedObject.value as any
-    return obj?.data?.arrowOptions?.arrowHeadStyle ?? 'filled'
-  },
-  set: (value) => editorStore.updateObjectProperty('arrowHeadStyle', value),
-})
+// const arrowHeadStyle = computed({
+//   get: () => {
+//     const obj: any = selectedObject.value as any
+//     return obj?.data?.arrowOptions?.arrowHeadStyle ?? 'filled'
+//   },
+//   set: (value) => editorStore.updateObjectProperty('arrowHeadStyle', value),
+// })
 
-const arrowHeadLength = computed({
-  get: () => {
-    const obj: any = selectedObject.value as any
-    return Number(obj?.data?.arrowOptions?.arrowHeadLength ?? 18) || 18
-  },
-  set: (value) => editorStore.updateObjectProperty('arrowHeadLength', Math.max(4, Number(value) || 4)),
-})
+// const arrowHeadLength = computed({
+//   get: () => {
+//     const obj: any = selectedObject.value as any
+//     return Number(obj?.data?.arrowOptions?.arrowHeadLength ?? 18) || 18
+//   },
+//   set: (value) => editorStore.updateObjectProperty('arrowHeadLength', Math.max(4, Number(value) || 4)),
+// })
 
-const arrowHeadWidth = computed({
-  get: () => {
-    const obj: any = selectedObject.value as any
-    return Number(obj?.data?.arrowOptions?.arrowHeadWidth ?? 14) || 14
-  },
-  set: (value) => editorStore.updateObjectProperty('arrowHeadWidth', Math.max(4, Number(value) || 4)),
-})
+// const arrowHeadWidth = computed({
+//   get: () => {
+//     const obj: any = selectedObject.value as any
+//     return Number(obj?.data?.arrowOptions?.arrowHeadWidth ?? 14) || 14
+//   },
+//   set: (value) => editorStore.updateObjectProperty('arrowHeadWidth', Math.max(4, Number(value) || 4)),
+// })
 
-const opacity = computed({
-  get: () => ((selectedObject.value as any)?.opacity || 1) * 100,
-  set: (value) => editorStore.updateObjectProperty('opacity', value / 100),
-})
+// const opacity = computed({
+//   get: () => ((selectedObject.value as any)?.opacity || 1) * 100,
+//   set: (value) => editorStore.updateObjectProperty('opacity', value / 100),
+// })
 
-const positionX = computed({
-  get: () => Math.round(((selectedObject.value as any)?.left ?? 0) as number),
-  set: (value) => editorStore.updateObjectProperty('left', Number(value) || 0),
-})
+// const positionX = computed({
+//   get: () => Math.round(((selectedObject.value as any)?.left ?? 0) as number),
+//   set: (value) => editorStore.updateObjectProperty('left', Number(value) || 0),
+// })
 
-const positionY = computed({
-  get: () => Math.round(((selectedObject.value as any)?.top ?? 0) as number),
-  set: (value) => editorStore.updateObjectProperty('top', Number(value) || 0),
-})
+// const positionY = computed({
+//   get: () => Math.round(((selectedObject.value as any)?.top ?? 0) as number),
+//   set: (value) => editorStore.updateObjectProperty('top', Number(value) || 0),
+// })
 
-const elementMetadata = computed<CanvasElementMetadata | null>(() => {
-  // Ensure this recomputes on selection changes (Fabric active object isn't reactive).
-  void selectedObjects.value
-  return editorStore.getActiveElementMetadata()
-})
+// const elementMetadata = computed<CanvasElementMetadata | null>(() => {
+//   // Ensure this recomputes on selection changes (Fabric active object isn't reactive).
+//   void selectedObjects.value
+//   return editorStore.getActiveElementMetadata()
+// })
 
-const calendarMetadata = computed<CalendarGridMetadata | null>(() =>
-  elementMetadata.value?.kind === 'calendar-grid' ? elementMetadata.value : null,
-)
+// const calendarMetadata = computed<CalendarGridMetadata | null>(() =>
+//   elementMetadata.value?.kind === 'calendar-grid' ? elementMetadata.value : null,
+// )
 
-const weekStripMetadata = computed<WeekStripMetadata | null>(() =>
-  elementMetadata.value?.kind === 'week-strip' ? elementMetadata.value : null,
-)
+// const weekStripMetadata = computed<WeekStripMetadata | null>(() =>
+//   elementMetadata.value?.kind === 'week-strip' ? elementMetadata.value : null,
+// )
 
-const dateCellMetadata = computed<DateCellMetadata | null>(() =>
-  elementMetadata.value?.kind === 'date-cell' ? elementMetadata.value : null,
-)
+// const dateCellMetadata = computed<DateCellMetadata | null>(() =>
+//   elementMetadata.value?.kind === 'date-cell' ? elementMetadata.value : null,
+// )
 
-const scheduleMetadata = computed<ScheduleMetadata | null>(() =>
-  elementMetadata.value?.kind === 'schedule' ? elementMetadata.value : null,
-)
+// const scheduleMetadata = computed<ScheduleMetadata | null>(() =>
+//   elementMetadata.value?.kind === 'schedule' ? elementMetadata.value : null,
+// )
 
-const checklistMetadata = computed<ChecklistMetadata | null>(() =>
-  elementMetadata.value?.kind === 'checklist' ? elementMetadata.value : null,
-)
+// const checklistMetadata = computed<ChecklistMetadata | null>(() =>
+//   elementMetadata.value?.kind === 'checklist' ? elementMetadata.value : null,
+// )
 
-const plannerNoteMetadata = computed<PlannerNoteMetadata | null>(() =>
-  elementMetadata.value?.kind === 'planner-note' ? elementMetadata.value : null,
-)
+// const plannerNoteMetadata = computed<PlannerNoteMetadata | null>(() =>
+//   elementMetadata.value?.kind === 'planner-note' ? elementMetadata.value : null,
+// )
 
-function updateScheduleMetadata(updater: (draft: ScheduleMetadata) => void) {
-  editorStore.updateSelectedElementMetadata((metadata) => {
-    if (metadata.kind !== 'schedule') return null
-    updater(metadata)
-    return metadata
-  })
-}
+// function updateScheduleMetadata(updater: (draft: ScheduleMetadata) => void) {
+//   editorStore.updateSelectedElementMetadata((metadata) => {
+//     if (metadata.kind !== 'schedule') return null
+//     updater(metadata)
+//     return metadata
+//   })
+// }
 
-function updateChecklistMetadata(updater: (draft: ChecklistMetadata) => void) {
-  editorStore.updateSelectedElementMetadata((metadata) => {
-    if (metadata.kind !== 'checklist') return null
-    updater(metadata)
-    return metadata
-  })
-}
+// function updateChecklistMetadata(updater: (draft: ChecklistMetadata) => void) {
+//   editorStore.updateSelectedElementMetadata((metadata) => {
+//     if (metadata.kind !== 'checklist') return null
+//     updater(metadata)
+//     return metadata
+//   })
+// }
 
-function updatePlannerMetadata(updater: (draft: PlannerNoteMetadata) => void) {
-  editorStore.updateSelectedElementMetadata((metadata) => {
-    if (metadata.kind !== 'planner-note') return null
-    updater(metadata)
-    return metadata
-  })
-}
+// function updatePlannerMetadata(updater: (draft: PlannerNoteMetadata) => void) {
+//   editorStore.updateSelectedElementMetadata((metadata) => {
+//     if (metadata.kind !== 'planner-note') return null
+//     updater(metadata)
+//     return metadata
+//   })
+// }
 
-function updateCalendarMetadata(updater: (draft: CalendarGridMetadata) => void) {
-  editorStore.updateSelectedElementMetadata((metadata) => {
-    if (metadata.kind !== 'calendar-grid') return null
-    updater(metadata)
-    return metadata
-  })
-}
+// function updateCalendarMetadata(updater: (draft: CalendarGridMetadata) => void) {
+//   editorStore.updateSelectedElementMetadata((metadata) => {
+//     if (metadata.kind !== 'calendar-grid') return null
+//     updater(metadata)
+//     return metadata
+//   })
+// }
 
-function updateWeekStripMetadata(updater: (draft: WeekStripMetadata) => void) {
-  editorStore.updateSelectedElementMetadata((metadata) => {
-    if (metadata.kind !== 'week-strip') return null
-    updater(metadata)
-    return metadata
-  })
-}
+// function updateWeekStripMetadata(updater: (draft: WeekStripMetadata) => void) {
+//   editorStore.updateSelectedElementMetadata((metadata) => {
+//     if (metadata.kind !== 'week-strip') return null
+//     updater(metadata)
+//     return metadata
+//   })
+// }
 
-function updateDateCellMetadata(updater: (draft: DateCellMetadata) => void) {
-  editorStore.updateSelectedElementMetadata((metadata) => {
-    if (metadata.kind !== 'date-cell') return null
-    updater(metadata)
-    return metadata
-  })
-}
+// function updateDateCellMetadata(updater: (draft: DateCellMetadata) => void) {
+//   editorStore.updateSelectedElementMetadata((metadata) => {
+//     if (metadata.kind !== 'date-cell') return null
+//     updater(metadata)
+//     return metadata
+//   })
+// }
 
 
-const elementSize = computed(() => {
-  const meta = elementMetadata.value as any
-  if (!meta || !meta.size) return null
-  return meta.size as { width: number; height: number }
-})
+// const elementSize = computed(() => {
+//   const meta = elementMetadata.value as any
+//   if (!meta || !meta.size) return null
+//   return meta.size as { width: number; height: number }
+// })
 
-function updateElementSize(next: { width: number; height: number }) {
-  editorStore.updateSelectedElementMetadata((metadata) => {
-    const draft: any = metadata as any
-    if (!draft.size) return null
-    draft.size.width = Math.max(10, Number(next.width) || draft.size.width)
-    draft.size.height = Math.max(10, Number(next.height) || draft.size.height)
-    return metadata
-  })
-}
+// function updateElementSize(next: { width: number; height: number }) {
+//   editorStore.updateSelectedElementMetadata((metadata) => {
+//     const draft: any = metadata as any
+//     if (!draft.size) return null
+//     draft.size.width = Math.max(10, Number(next.width) || draft.size.width)
+//     draft.size.height = Math.max(10, Number(next.height) || draft.size.height)
+//     return metadata
+//   })
+// }
 
-const objectWidth = computed({
-  get: () => {
-    if (!selectedObject.value) return 0
-    return Math.round(selectedObject.value.getScaledWidth())
-  },
-  set: (value) => {
-    if (!selectedObject.value) return
-    const target = Math.max(1, Number(value) || 1)
-    const base = (selectedObject.value as any).width || selectedObject.value.getScaledWidth() || 1
-    const nextScale = target / base
-    editorStore.updateObjectProperty('scaleX', nextScale)
-  },
-})
+// const objectWidth = computed({
+//   get: () => {
+//     if (!selectedObject.value) return 0
+//     return Math.round(selectedObject.value.getScaledWidth())
+//   },
+//   set: (value) => {
+//     if (!selectedObject.value) return
+//     const target = Math.max(1, Number(value) || 1)
+//     const base = (selectedObject.value as any).width || selectedObject.value.getScaledWidth() || 1
+//     const nextScale = target / base
+//     editorStore.updateObjectProperty('scaleX', nextScale)
+//   },
+// })
 
-const objectHeight = computed({
-  get: () => {
-    if (!selectedObject.value) return 0
-    return Math.round(selectedObject.value.getScaledHeight())
-  },
-  set: (value) => {
-    if (!selectedObject.value) return
-    const target = Math.max(1, Number(value) || 1)
-    const base = (selectedObject.value as any).height || selectedObject.value.getScaledHeight() || 1
-    const nextScale = target / base
-    editorStore.updateObjectProperty('scaleY', nextScale)
-  },
-})
+// const objectHeight = computed({
+//   get: () => {
+//     if (!selectedObject.value) return 0
+//     return Math.round(selectedObject.value.getScaledHeight())
+//   },
+//   set: (value) => {
+//     if (!selectedObject.value) return
+//     const target = Math.max(1, Number(value) || 1)
+//     const base = (selectedObject.value as any).height || selectedObject.value.getScaledHeight() || 1
+//     const nextScale = target / base
+//     editorStore.updateObjectProperty('scaleY', nextScale)
+//   },
+// })
 
-const scheduleIntervalOptions: { value: ScheduleMetadata['intervalMinutes']; label: string }[] = [
-  { value: 30, label: '30 min' },
-  { value: 60, label: '60 min' },
-]
+// const scheduleIntervalOptions: { value: ScheduleMetadata['intervalMinutes']; label: string }[] = [
+//   { value: 30, label: '30 min' },
+//   { value: 60, label: '60 min' },
+// ]
 
-const headerStyleOptions: { value: PlannerHeaderStyle; label: string }[] = [
-  { value: 'none', label: 'None' },
-  { value: 'minimal', label: 'Minimal' },
-  { value: 'tint', label: 'Tint' },
-  { value: 'filled', label: 'Filled' },
-]
+// const headerStyleOptions: { value: PlannerHeaderStyle; label: string }[] = [
+//   { value: 'none', label: 'None' },
+//   { value: 'minimal', label: 'Minimal' },
+//   { value: 'tint', label: 'Tint' },
+//   { value: 'filled', label: 'Filled' },
+// ]
 
-const plannerPatternOptions: { value: PlannerPatternVariant; label: string }[] = [
-  { value: 'hero', label: 'Hero Banner' },
-  { value: 'ruled', label: 'Ruled Lines' },
-  { value: 'grid', label: 'Grid' },
-  { value: 'dot', label: 'Dot Grid' },
-]
+// const plannerPatternOptions: { value: PlannerPatternVariant; label: string }[] = [
+//   { value: 'hero', label: 'Hero Banner' },
+//   { value: 'ruled', label: 'Ruled Lines' },
+//   { value: 'grid', label: 'Grid' },
+//   { value: 'dot', label: 'Dot Grid' },
+// ]
 
 const projectName = computed({
   get: () => editorStore.project?.name || 'Untitled Calendar',
@@ -2046,6 +2095,84 @@ function handleDistribute(axis: 'horizontal' | 'vertical') {
     <ExportModal 
       :is-open="isExportModalOpen" 
       @close="isExportModalOpen = false"
+    />
+
+    <!-- Post to Marketplace Confirmation -->
+    <TransitionRoot as="template" :show="isPostConfirmationOpen">
+      <Dialog as="div" class="relative z-modal" @close="isPostConfirmationOpen = false">
+        <TransitionChild
+          as="template"
+          enter="ease-out duration-300"
+          enter-from="opacity-0"
+          enter-to="opacity-100"
+          leave="ease-in duration-200"
+          leave-from="opacity-100"
+          leave-to="opacity-0"
+        >
+          <div class="fixed inset-0 bg-gray-900/70 backdrop-blur-sm" />
+        </TransitionChild>
+
+        <div class="fixed inset-0 z-10 overflow-y-auto">
+          <div class="flex min-h-full items-center justify-center p-4 text-center sm:p-0">
+            <TransitionChild
+              as="template"
+              enter="ease-out duration-300"
+              enter-from="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+              enter-to="opacity-100 translate-y-0 sm:scale-100"
+              leave="ease-in duration-200"
+              leave-from="opacity-100 translate-y-0 sm:scale-100"
+              leave-to="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+            >
+              <DialogPanel class="relative transform overflow-hidden rounded-[2.5rem] bg-white dark:bg-gray-950 text-left shadow-2xl transition-all sm:my-8 sm:w-full sm:max-w-md border border-gray-200 dark:border-gray-800">
+                <div class="p-8">
+                  <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary-50 dark:bg-primary-900/20">
+                    <MegaphoneIcon class="h-8 w-8 text-primary-600 dark:text-primary-400" aria-hidden="true" />
+                  </div>
+                  <div class="mt-6 text-center">
+                    <DialogTitle as="h3" class="text-2xl font-black text-gray-900 dark:text-white leading-tight">
+                      Post to Marketplace?
+                    </DialogTitle>
+                    <div class="mt-4">
+                      <p class="text-sm text-gray-500 dark:text-gray-400">
+                        Admin detected. Would you like to turn this template into a marketplace product for other users?
+                      </p>
+                    </div>
+                  </div>
+                  <div class="mt-10 flex flex-col gap-3">
+                    <AppButton
+                      variant="primary"
+                      class="w-full py-4 text-sm font-black uppercase tracking-widest shadow-xl shadow-primary-500/20"
+                      @click="handleStartMarketplaceWizard"
+                    >
+                      Yes, Create Product
+                    </AppButton>
+                    <AppButton
+                      variant="secondary"
+                      class="w-full py-4 text-sm font-black uppercase tracking-widest"
+                      @click="isPostConfirmationOpen = false"
+                    >
+                      Maybe Later
+                    </AppButton>
+                  </div>
+                </div>
+              </DialogPanel>
+            </TransitionChild>
+          </div>
+        </div>
+      </Dialog>
+    </TransitionRoot>
+
+    <!-- Marketplace Wizard -->
+    <MarketplaceProductWizard
+      :is-open="isMarketplaceWizardOpen"
+      :template="{ 
+        name: editorStore.project?.name,
+        description: editorStore.project?.description,
+        category: editorStore.project?.templateId ? calendarTemplates.find(t => t.id === editorStore.project?.templateId)?.category : 'monthly'
+      }"
+      :thumbnail="editorStore.project?.thumbnail"
+      @close="isMarketplaceWizardOpen = false"
+      @publish="handlePublishToMarketplace"
     />
   </div>
 </template>
