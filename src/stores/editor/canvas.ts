@@ -1,6 +1,14 @@
-import type { Ref } from 'vue'
-import { Canvas, FabricImage, type Object as FabricObject } from 'fabric'
-import type { CanvasElementMetadata, CanvasPatternConfig, CanvasState, Project } from '@/types'
+import { ref, watch, type Ref } from 'vue'
+import { Canvas, FabricImage, Textbox, Group, type Object as FabricObject } from 'fabric'
+import type {
+  CanvasElementMetadata,
+  CanvasPatternConfig,
+  CanvasState,
+  Project,
+  WatermarkConfig,
+} from '@/types'
+import { DEFAULT_WATERMARK_CONFIG, enforceWatermarkForTier, clamp } from '@/config/watermark-defaults'
+import { useAuthStore } from '@/stores/auth.store'
 
 type NormalizeCanvasSize = (input: { width?: number; height?: number } | null | undefined) => {
   width: number
@@ -10,6 +18,8 @@ type NormalizeCanvasSize = (input: { width?: number; height?: number } | null | 
 type EnsureObjectIdentity = (obj: any) => void
 
 type LoadCanvasState = (state: CanvasState) => Promise<void>
+type SaveToHistory = () => void
+type RegisterAfterLoadCallback = ((callback: () => void) => () => void) | undefined
 
 type RebuildElementWithMetadata = (
   target: FabricObject,
@@ -25,7 +35,8 @@ export function createCanvasModule(params: {
   isDirty: Ref<boolean>
   normalizeCanvasSize: NormalizeCanvasSize
   loadCanvasState: LoadCanvasState
-  saveToHistory: () => void
+  saveToHistory: SaveToHistory
+  registerAfterLoadCallback?: RegisterAfterLoadCallback
   ensureObjectIdentity: EnsureObjectIdentity
   rebuildElementWithMetadata: RebuildElementWithMetadata
 }) {
@@ -39,9 +50,290 @@ export function createCanvasModule(params: {
     normalizeCanvasSize,
     loadCanvasState,
     saveToHistory,
+    registerAfterLoadCallback,
     ensureObjectIdentity,
     rebuildElementWithMetadata,
   } = params
+
+  const watermarkGroup = ref<any>(null)
+  const authStore = useAuthStore()
+
+  function resolveWatermarkMode(config: WatermarkConfig): 'text' | 'image' {
+    return config.mode === 'image' && config.imageSrc ? 'image' : 'text'
+  }
+
+  function getEffectiveWatermarkConfig(): WatermarkConfig | null {
+    const projectConfig = project.value?.config
+    if (!projectConfig) return null
+
+    const tierRequiresWatermark = authStore.tierLimits.watermark
+    const baseConfig = projectConfig.watermark ?? DEFAULT_WATERMARK_CONFIG
+    const enforced = enforceWatermarkForTier(baseConfig, { requiresWatermark: tierRequiresWatermark })
+
+    const legacyShowWatermark = projectConfig.showWatermark
+    const legacyAllowsHiding = legacyShowWatermark !== false
+
+    if (!tierRequiresWatermark) {
+      if (!legacyAllowsHiding) return null
+      if (!enforced.visible) return null
+    }
+
+    return enforced
+  }
+
+  async function createWatermarkObject(config: WatermarkConfig): Promise<FabricObject | null> {
+    if (!canvas.value || !project.value) return null
+    const canvasWidth = project.value.canvas.width
+    const normalizedSize = clamp(config.size ?? DEFAULT_WATERMARK_CONFIG.size, 0.05, 0.5)
+    const targetWidth = canvasWidth * normalizedSize
+
+    const objects: FabricObject[] = []
+
+    const resolvedMode = resolveWatermarkMode(config)
+
+    if (resolvedMode === 'image' && config.imageSrc) {
+      const imageSrc = config.imageSrc as string
+      try {
+        const img = await FabricImage.fromURL(imageSrc, {
+          crossOrigin: 'anonymous',
+        })
+        if (img) {
+          const scaling = targetWidth / (img.width || targetWidth || 1)
+          img.set({
+            scaleX: scaling,
+            scaleY: scaling,
+            selectable: false,
+            evented: false,
+          })
+          ;(img as FabricObject & { data?: Record<string, unknown> }).data = { watermark: true }
+          objects.push(img as unknown as FabricObject)
+        }
+      } catch (error) {
+        console.warn('[watermark] Failed to load watermark image', error)
+      }
+    } else {
+      const watermarkText = (config.text ?? DEFAULT_WATERMARK_CONFIG.text) ?? 'Calendar Creator'
+      const text = new Textbox(watermarkText, {
+        fontFamily: 'Outfit',
+        fontWeight: 600,
+        fontSize: 32,
+        fill: 'rgba(255,255,255,0.85)',
+        stroke: 'rgba(0,0,0,0.2)',
+        strokeWidth: 1,
+        textAlign: 'center',
+        width: targetWidth,
+        selectable: false,
+        evented: false,
+      })
+      ;(text as FabricObject & { data?: Record<string, unknown> }).data = { watermark: true }
+      objects.push(text as unknown as FabricObject)
+    }
+
+    if (!objects.length) return null
+
+    const group = new Group(objects)
+    const typedGroup = group as FabricObject & {
+      data?: Record<string, unknown>
+      excludeFromExport?: boolean
+      id?: string
+      name?: string
+    }
+    typedGroup.set({
+      selectable: false,
+      evented: false,
+      opacity: clamp(config.opacity ?? DEFAULT_WATERMARK_CONFIG.opacity, 0, 1),
+      hoverCursor: 'default',
+    } as Partial<any>)
+    typedGroup.excludeFromExport = true
+    typedGroup.id = 'watermark-layer'
+    typedGroup.name = 'Watermark'
+
+    typedGroup.data = {
+      ...(typedGroup.data || {}),
+      watermark: true,
+      watermarkMode: resolvedMode,
+      watermarkImageSrc: resolvedMode === 'image' ? config.imageSrc ?? null : null,
+    }
+
+    return group as unknown as FabricObject
+  }
+
+  function positionWatermark(group: FabricObject, config: WatermarkConfig): void {
+    if (!project.value) return
+    const canvasWidth = project.value.canvas.width
+    const canvasHeight = project.value.canvas.height
+
+    const margin = Math.min(canvasWidth, canvasHeight) * 0.04
+    const preset = config.position?.preset ?? 'bottom-right'
+    const coords = config.position?.coordinates
+
+    let x = canvasWidth - margin
+    let y = canvasHeight - margin
+    let originX: 'left' | 'center' | 'right' = 'right'
+    let originY: 'top' | 'center' | 'bottom' = 'bottom'
+
+    if (preset === 'top-left') {
+      x = margin
+      y = margin
+      originX = 'left'
+      originY = 'top'
+    } else if (preset === 'top-right') {
+      x = canvasWidth - margin
+      y = margin
+      originX = 'right'
+      originY = 'top'
+    } else if (preset === 'bottom-left') {
+      x = margin
+      y = canvasHeight - margin
+      originX = 'left'
+      originY = 'bottom'
+    } else if (preset === 'center') {
+      x = canvasWidth / 2
+      y = canvasHeight / 2
+      originX = 'center'
+      originY = 'center'
+    } else if (preset === 'custom' && coords) {
+      x = clamp(coords.x, 0, 1) * canvasWidth
+      y = clamp(coords.y, 0, 1) * canvasHeight
+      originX = 'center'
+      originY = 'center'
+    }
+
+    group.set({
+      left: x,
+      top: y,
+      originX,
+      originY,
+      angle: preset === 'center' ? -30 : -15,
+    })
+  }
+
+  function shouldRebuildWatermark(current: FabricObject | null, config: WatermarkConfig): boolean {
+    if (!current) return true
+    const currentData = (current as any).data || {}
+    const currentMode = currentData.watermarkMode
+    const resolvedMode = resolveWatermarkMode(config)
+    if (currentMode !== resolvedMode) return true
+    if (resolvedMode === 'image') {
+      const currentSrc = currentData.watermarkImageSrc
+      if (currentSrc !== (config.imageSrc ?? null)) return true
+    }
+    return false
+  }
+
+  async function ensureWatermark(): Promise<void> {
+    if (!canvas.value) return
+    const config = getEffectiveWatermarkConfig()
+
+    if (!config) {
+      if (watermarkGroup.value) {
+        canvas.value.remove(watermarkGroup.value as any)
+        watermarkGroup.value = null
+        canvas.value.requestRenderAll()
+      }
+      return
+    }
+
+    const needsRebuild = shouldRebuildWatermark(watermarkGroup.value, config)
+    let group = watermarkGroup.value
+
+    if (needsRebuild) {
+      if (group && canvas.value) {
+        canvas.value.remove(group as any)
+      }
+      group = await createWatermarkObject(config)
+      if (!group) return
+      canvas.value.add(group as any)
+      watermarkGroup.value = group
+    } else if (group) {
+      group.set('opacity', clamp(config.opacity ?? DEFAULT_WATERMARK_CONFIG.opacity, 0, 1))
+      const resolvedMode = resolveWatermarkMode(config)
+      const firstChild = (group as any)._objects?.[0]
+
+      if (resolvedMode === 'text' && firstChild && firstChild.type === 'textbox') {
+        const textbox = firstChild as Textbox
+        textbox.set('text', config.text || DEFAULT_WATERMARK_CONFIG.text)
+        const targetWidth =
+          (project.value?.canvas.width ?? 0) * clamp(config.size ?? DEFAULT_WATERMARK_CONFIG.size, 0.05, 0.5)
+        textbox.set('width', targetWidth)
+      } else if (resolvedMode === 'image' && firstChild && firstChild.type === 'image') {
+        const image = firstChild as FabricImage
+        const width = image.width || 1
+        const targetWidth =
+          (project.value?.canvas.width ?? 0) * clamp(config.size ?? DEFAULT_WATERMARK_CONFIG.size, 0.05, 0.5)
+        const scaling = targetWidth / width
+        image.set({
+          scaleX: scaling,
+          scaleY: scaling,
+        })
+      }
+
+      const typedGroup = group as FabricObject & { data?: Record<string, unknown> }
+      typedGroup.data = {
+        ...(typedGroup.data || {}),
+        watermark: true,
+        watermarkMode: resolvedMode,
+        watermarkImageSrc: resolvedMode === 'image' ? config.imageSrc ?? null : null,
+      }
+    }
+
+    if (!group) return
+
+    positionWatermark(group, config)
+    const fabricCanvas = canvas.value as Canvas & { bringToFront?: (obj: FabricObject) => void }
+    if (fabricCanvas.bringToFront) {
+      fabricCanvas.bringToFront(group as FabricObject)
+    } else {
+      fabricCanvas.remove(group as FabricObject)
+      fabricCanvas.add(group as FabricObject)
+    }
+    canvas.value.requestRenderAll()
+  }
+
+  watch(
+    () => [project.value?.config?.watermark, project.value?.config?.showWatermark],
+    () => {
+      void ensureWatermark()
+    },
+    { deep: true },
+  )
+
+  watch(
+    () => authStore.tierLimits.watermark,
+    () => {
+      void ensureWatermark()
+    },
+  )
+
+  watch(
+    () => [project.value?.canvas.width, project.value?.canvas.height],
+    () => {
+      if (watermarkGroup.value) {
+        positionWatermark(watermarkGroup.value, getEffectiveWatermarkConfig() ?? DEFAULT_WATERMARK_CONFIG)
+        canvas.value?.requestRenderAll()
+      } else {
+        void ensureWatermark()
+      }
+    },
+  )
+
+  watch(
+    canvas,
+    (next) => {
+      if (next) {
+        void ensureWatermark()
+      } else {
+        watermarkGroup.value = null
+      }
+    },
+    { immediate: true },
+  )
+
+  const unregisterAfterLoad = registerAfterLoadCallback
+    ? registerAfterLoadCallback(() => {
+        void ensureWatermark()
+      })
+    : null
 
   function setupCanvasEvents(): void {
     if (!canvas.value) return
@@ -139,6 +431,10 @@ export function createCanvasModule(params: {
   function handleObjectModified(e: any): void {
     const target = (e?.target as FabricObject | undefined) ?? null
     if (target) {
+      if ((target as any)?.data?.watermark) {
+        canvas.value?.requestRenderAll()
+        return
+      }
       bakeScaledCalendarElementSize(target)
       bakeScaledTextFontSize(target)
     }
@@ -150,12 +446,18 @@ export function createCanvasModule(params: {
     if (canvas.value) {
       const objects = canvas.value.getObjects() as any[]
       const last = objects[objects.length - 1]
+      if (last?.data?.watermark) {
+        return
+      }
       if (last) ensureObjectIdentity(last)
     }
     isDirty.value = true
   }
 
-  function handleObjectRemoved(): void {
+  function handleObjectRemoved(e?: any): void {
+    if (e?.target?.data?.watermark) {
+      return
+    }
     isDirty.value = true
     saveToHistory()
   }
@@ -176,6 +478,8 @@ export function createCanvasModule(params: {
       // Enable image smoothing for better quality at different zoom levels
       imageSmoothingEnabled: true,
       imageSmoothingQuality: 'high',
+      enableRetinaScaling: true,
+      devicePixelRatio: window.devicePixelRatio || 1,
     })
 
     // Set canvas element to allow proper panning via viewportTransform
@@ -210,10 +514,15 @@ export function createCanvasModule(params: {
 
     // Save initial state to history
     saveToHistory()
+    await ensureWatermark()
   }
 
   function destroyCanvas(): void {
     if (canvas.value) {
+      if (watermarkGroup.value) {
+        canvas.value.remove(watermarkGroup.value as any)
+        watermarkGroup.value = null
+      }
       // Clear all objects before disposing
       canvas.value.clear()
       // Remove all event listeners
@@ -226,6 +535,8 @@ export function createCanvasModule(params: {
     // Reset zoom and pan
     zoom.value = 1
     panOffset.value = { x: 0, y: 0 }
+
+    unregisterAfterLoad?.()
   }
 
   const MIN_ZOOM = 0.1
@@ -341,6 +652,7 @@ export function createCanvasModule(params: {
     canvas.value.renderAll()
     canvas.value.calcOffset()
     isDirty.value = true
+    void ensureWatermark()
   }
 
   function setBackgroundColor(color: string): void {

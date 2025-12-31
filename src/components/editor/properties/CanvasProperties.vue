@@ -12,9 +12,17 @@ import {
   type CanvasPreset,
 } from '@/config/canvas-presets'
 import { LockClosedIcon, LockOpenIcon } from '@heroicons/vue/24/outline'
-import type { CanvasBackgroundPattern, CanvasPatternConfig } from '@/types'
+import type {
+  CanvasBackgroundPattern,
+  CanvasPatternConfig,
+  WatermarkConfig,
+  WatermarkMode,
+  WatermarkPositionPreset,
+} from '@/types'
 
 import AppTierBadge from '@/components/ui/AppTierBadge.vue'
+import { DEFAULT_WATERMARK_CONFIG, FREE_WATERMARK_PRESETS } from '@/config/watermark-defaults'
+import { WATERMARK_MODE_OPTIONS, WATERMARK_PRESETS } from '@/config/watermark-ui'
 
 type CanvasUnit = 'px' | 'mm' | 'cm' | 'in'
 
@@ -53,15 +61,151 @@ const editorStore = useEditorStore()
 const calendarStore = useCalendarStore()
 const authStore = useAuthStore()
 const { canvasSize } = storeToRefs(editorStore)
+const watermarkFileInput = ref<HTMLInputElement | null>(null)
 
-const hideWatermark = computed({
-  get: () => editorStore.project?.config?.showWatermark === false,
-  set: (val) => {
-    if (authStore.isPro) {
-      calendarStore.updateConfig({ showWatermark: !val })
+const watermarkConfig = computed<WatermarkConfig>(() => calendarStore.config.watermark ?? DEFAULT_WATERMARK_CONFIG)
+const requiresWatermark = computed(() => authStore.tierLimits.watermark)
+const canCustomizeWatermark = computed(() => authStore.isPro)
+const canToggleWatermarkVisibility = computed(() => authStore.isPro && !requiresWatermark.value)
+const availableWatermarkPresets = computed(() => {
+  if (canCustomizeWatermark.value) return WATERMARK_PRESETS
+  return WATERMARK_PRESETS.filter((preset) =>
+    FREE_WATERMARK_PRESETS.includes(preset.value as WatermarkPositionPreset),
+  )
+})
+const brandKitLogoUrl = computed(() => authStore.user?.brandKit?.logo ?? null)
+const brandKitName = computed(() => authStore.user?.brandKit?.name ?? 'Brand kit')
+
+function updateWatermark(partial: Partial<WatermarkConfig>): void {
+  const current = watermarkConfig.value
+  const next: WatermarkConfig = {
+    ...current,
+    ...partial,
+    position: {
+      ...current.position,
+      ...(partial.position ?? {}),
+    },
+  }
+  calendarStore.updateConfig({ watermark: next })
+}
+
+const watermarkVisible = computed({
+  get: () => watermarkConfig.value.visible,
+  set: (val: boolean) => {
+    if (!canToggleWatermarkVisibility.value) return
+    updateWatermark({ visible: val })
+  },
+})
+
+const watermarkMode = computed(() => watermarkConfig.value.mode)
+
+const watermarkTextValue = computed({
+  get: () => watermarkConfig.value.text ?? '',
+  set: (val: string) => {
+    if (!canCustomizeWatermark.value) return
+    updateWatermark({ text: val })
+  },
+})
+
+const watermarkImageSrc = computed({
+  get: () => watermarkConfig.value.imageSrc ?? '',
+  set: (val: string) => {
+    if (!canCustomizeWatermark.value) return
+    updateWatermark({ imageSrc: val || undefined, imageId: undefined })
+  },
+})
+
+const watermarkSizePercent = computed({
+  get: () => Math.round(watermarkConfig.value.size * 100),
+  set: (val: number) => {
+    if (!canCustomizeWatermark.value) return
+    updateWatermark({ size: val / 100 })
+  },
+})
+
+const watermarkOpacityPercent = computed({
+  get: () => Math.round((watermarkConfig.value.opacity ?? 0.6) * 100),
+  set: (val: number) => {
+    if (!canCustomizeWatermark.value) return
+    updateWatermark({ opacity: val / 100 })
+  },
+})
+
+const watermarkPreset = computed(() => watermarkConfig.value.position.preset)
+
+const watermarkCustomX = computed({
+  get: () => Math.round(((watermarkConfig.value.position.coordinates?.x ?? 0.5) * 100)),
+  set: (val: number) => {
+    if (!canCustomizeWatermark.value) return
+    const y = watermarkConfig.value.position.coordinates?.y ?? 0.5
+    updateWatermark({
+      position: {
+        preset: 'custom',
+        coordinates: { x: val / 100, y },
+      },
+    })
+  },
+})
+
+const watermarkCustomY = computed({
+  get: () => Math.round(((watermarkConfig.value.position.coordinates?.y ?? 0.5) * 100)),
+  set: (val: number) => {
+    if (!canCustomizeWatermark.value) return
+    const x = watermarkConfig.value.position.coordinates?.x ?? 0.5
+    updateWatermark({
+      position: {
+        preset: 'custom',
+        coordinates: { x, y: val / 100 },
+      },
+    })
+  },
+})
+
+function setWatermarkMode(mode: WatermarkMode): void {
+  if (!canCustomizeWatermark.value || watermarkMode.value === mode) return
+  updateWatermark({ mode })
+}
+
+function selectWatermarkPreset(preset: WatermarkPositionPreset): void {
+  if (!canCustomizeWatermark.value && preset !== watermarkPreset.value) return
+  updateWatermark({
+    position: {
+      preset,
+      coordinates: preset === 'custom' ? watermarkConfig.value.position.coordinates : undefined,
+    },
+  })
+}
+
+function toggleWatermarkVisibility(): void {
+  if (!canToggleWatermarkVisibility.value) return
+  watermarkVisible.value = !watermarkVisible.value
+}
+
+function triggerWatermarkUpload(): void | undefined {
+  if (!canCustomizeWatermark.value) return
+  watermarkFileInput.value?.click()
+}
+
+function handleWatermarkFileChange(event: Event): void {
+  if (!canCustomizeWatermark.value) return
+  const target = event.target as HTMLInputElement
+  const file = target.files?.[0]
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = () => {
+    const result = reader.result
+    if (typeof result === 'string') {
+      updateWatermark({ mode: 'image', imageSrc: result, imageId: undefined })
     }
   }
-})
+  reader.readAsDataURL(file)
+  target.value = ''
+}
+
+function useBrandKitLogo(): void {
+  if (!canCustomizeWatermark.value || !brandKitLogoUrl.value) return
+  updateWatermark({ mode: 'image', imageSrc: brandKitLogoUrl.value, imageId: 'brand-kit-logo' })
+}
 
 const width = ref(744)
 const height = ref(1052)
@@ -416,7 +560,7 @@ watch([selectedPattern, patternColor, patternSpacing, patternOpacity], () => {
     <!-- Custom Dimensions -->
     <section class="space-y-3">
       <p class="text-[11px] font-semibold text-white/40 uppercase tracking-widest">Custom dimensions</p>
-      <div class="grid grid-cols-2 gap-3">
+      <div class="grid gap-3 grid-cols-1 sm:grid-cols-2">
         <div class="space-y-1">
           <label class="text-[10px] font-medium text-white/40 uppercase">Width ({{ selectedUnitAbbr }})</label>
           <input
@@ -473,7 +617,7 @@ watch([selectedPattern, patternColor, patternSpacing, patternOpacity], () => {
     <!-- Background pattern -->
     <section class="space-y-3">
       <p class="text-[11px] font-semibold text-white/40 uppercase tracking-widest">Background pattern</p>
-      <div class="grid grid-cols-4 gap-1.5">
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
         <button
           v-for="option in PATTERN_OPTIONS"
           :key="option.value"
@@ -506,7 +650,7 @@ watch([selectedPattern, patternColor, patternSpacing, patternOpacity], () => {
             </div>
           </label>
         </div>
-        <div class="grid grid-cols-2 gap-2">
+        <div class="grid gap-2 grid-cols-1 sm:grid-cols-2">
           <label class="space-y-1">
             <span class="text-[10px] text-white/40 uppercase">Spacing</span>
             <input
@@ -533,41 +677,209 @@ watch([selectedPattern, patternColor, patternSpacing, patternOpacity], () => {
       </div>
     </section>
 
-    <!-- Branding Section -->
-    <section class="pt-4 border-t border-white/10 space-y-3">
-      <div class="flex items-center justify-between">
-        <p class="text-[11px] font-semibold text-white/40 uppercase tracking-widest">Branding</p>
+    <!-- Watermark Controls -->
+    <section class="space-y-4 border-t border-white/10 pt-6">
+      <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+        <div>
+          <p class="text-[11px] font-semibold text-white/40 uppercase tracking-widest">Watermark</p>
+          <p class="text-[11px] text-white/60">Choose how credit or logos appear on your canvas and exports.</p>
+        </div>
         <AppTierBadge v-if="!authStore.isPro" tier="pro" size="sm" />
       </div>
-      
-      <div 
-        class="flex items-center justify-between rounded-lg border border-white/10 px-3 py-2 bg-white/5 transition-opacity"
-        :class="{ 'opacity-60 cursor-not-allowed': !authStore.isPro }"
-      >
-        <div>
-          <p class="text-xs font-medium text-white flex items-center gap-1.5">
-            Hide Watermark
-            <LockClosedIcon v-if="!authStore.isPro" class="w-3 h-3 text-white/40" />
-          </p>
-          <p class="text-[10px] text-white/40">Remove "Created with CalendarCreator"</p>
+
+      <div class="rounded-2xl border border-white/10 bg-white/5 divide-y divide-white/5">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 py-3">
+          <div>
+            <p class="text-xs font-medium text-white flex items-center gap-1.5">
+              Watermark visibility
+              <LockClosedIcon v-if="requiresWatermark" class="w-3 h-3 text-white/40" />
+            </p>
+            <p class="text-[10px] text-white/40">
+              {{ requiresWatermark ? 'Required on the Free tier' : 'Toggle watermark overlay on canvas and exports' }}
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            :aria-checked="watermarkVisible"
+            :disabled="!canToggleWatermarkVisibility"
+            class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none self-start sm:self-auto"
+            :class="[
+              watermarkVisible ? 'bg-primary-500' : 'bg-white/10',
+              !canToggleWatermarkVisibility ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
+            ]"
+            @click="toggleWatermarkVisibility()"
+          >
+            <span 
+              class="inline-block h-3 w-3 transform rounded-full bg-white transition-transform"
+              :class="watermarkVisible ? 'translate-x-5' : 'translate-x-1'"
+            />
+          </button>
         </div>
-        <button
-          type="button"
-          role="switch"
-          :aria-checked="hideWatermark"
-          :disabled="!authStore.isPro"
-          class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none"
-          :class="[
-            hideWatermark ? 'bg-primary-600' : 'bg-white/10',
-            !authStore.isPro ? 'cursor-not-allowed' : 'cursor-pointer'
-          ]"
-          @click="hideWatermark = !hideWatermark"
-        >
-          <span 
-            class="inline-block h-3 w-3 transform rounded-full bg-white transition-transform"
-            :class="hideWatermark ? 'translate-x-5' : 'translate-x-1'"
-          />
-        </button>
+
+        <div v-if="requiresWatermark" class="px-4 py-3 text-[11px] text-amber-100 bg-amber-500/10">
+          Free exports include the CalendarCreator watermark. Upgrade to unlock full customization.
+        </div>
+
+        <div class="space-y-4 px-4 py-4" :class="{ 'opacity-50 pointer-events-none': !canCustomizeWatermark }">
+          <div class="space-y-2">
+            <p class="text-[10px] font-semibold text-white/40 uppercase">Mode</p>
+            <div class="grid grid-cols-2 gap-2">
+              <button
+                v-for="option in WATERMARK_MODE_OPTIONS"
+                :key="option.id"
+                type="button"
+                class="rounded-xl border px-3 py-2 text-left transition-all"
+                :class="watermarkMode === option.id
+                  ? 'border-primary-500 bg-primary-500/10 text-white'
+                  : 'border-white/10 text-white/70 hover:border-white/30'"
+                @click="setWatermarkMode(option.id)"
+              >
+                <p class="text-xs font-semibold">{{ option.label }}</p>
+                <p class="text-[10px] text-white/40">{{ option.subtitle }}</p>
+              </button>
+            </div>
+          </div>
+
+          <div v-if="watermarkMode === 'text'" class="space-y-2">
+            <label class="text-[10px] font-semibold text-white/40 uppercase">Watermark text</label>
+            <textarea
+              v-model="watermarkTextValue"
+              rows="2"
+              class="control-glass resize-none"
+              placeholder="Created with CalendarCreator"
+            ></textarea>
+            <p class="text-[10px] text-white/40">Appears in a clean sans-serif font on top of your design.</p>
+          </div>
+
+          <div v-else class="space-y-3">
+            <label class="text-[10px] font-semibold text-white/40 uppercase">Watermark logo</label>
+            <div class="flex flex-col gap-3 md:flex-row">
+              <div class="flex-1">
+                <div class="aspect-3/2 rounded-xl border border-dashed border-white/20 bg-white/5 flex items-center justify-center overflow-hidden">
+                  <img
+                    v-if="watermarkImageSrc"
+                    :src="watermarkImageSrc"
+                    alt="Watermark preview"
+                    class="max-h-full max-w-full object-contain"
+                  />
+                  <div v-else class="text-[11px] text-white/50 text-center px-6">
+                    Upload or select a logo to use as your watermark.
+                  </div>
+                </div>
+              </div>
+              <div class="flex flex-col gap-2 text-[11px] text-white/80">
+                <button
+                  type="button"
+                  class="rounded-lg border border-white/20 px-3 py-2 text-left hover:border-primary-400 transition-colors"
+                  @click="triggerWatermarkUpload"
+                >
+                  Upload image
+                </button>
+                <button
+                  v-if="brandKitLogoUrl"
+                  type="button"
+                  class="rounded-lg border border-white/10 px-3 py-2 text-left hover:border-primary-400 transition-colors"
+                  @click="useBrandKitLogo"
+                >
+                  Use {{ brandKitName }} logo
+                </button>
+                <button
+                  v-if="watermarkImageSrc"
+                  type="button"
+                  class="rounded-lg border border-white/10 px-3 py-2 text-left text-red-200 hover:border-red-300 hover:text-red-100 transition-colors"
+                  @click="updateWatermark({ imageSrc: undefined, imageId: undefined })"
+                >
+                  Remove logo
+                </button>
+              </div>
+            </div>
+            <input
+              ref="watermarkFileInput"
+              type="file"
+              accept="image/*"
+              class="hidden"
+              @change="handleWatermarkFileChange"
+            />
+          </div>
+
+          <div class="grid gap-4 md:grid-cols-2">
+            <div>
+              <label class="text-[10px] font-semibold text-white/40 uppercase">Size</label>
+              <div class="flex items-center gap-3">
+                <input
+                  v-model.number="watermarkSizePercent"
+                  type="range"
+                  min="10"
+                  max="60"
+                  class="flex-1 accent-primary-500"
+                />
+                <span class="text-xs text-white/70 w-10 text-right">{{ watermarkSizePercent }}%</span>
+              </div>
+            </div>
+            <div>
+              <label class="text-[10px] font-semibold text-white/40 uppercase">Opacity</label>
+              <div class="flex items-center gap-3">
+                <input
+                  v-model.number="watermarkOpacityPercent"
+                  type="range"
+                  min="10"
+                  max="100"
+                  class="flex-1 accent-primary-500"
+                />
+                <span class="text-xs text-white/70 w-10 text-right">{{ watermarkOpacityPercent }}%</span>
+              </div>
+              <p class="text-[10px] text-white/40 mt-1">Free tier locks opacity at 60%.</p>
+            </div>
+          </div>
+
+          <div class="space-y-2">
+            <label class="text-[10px] font-semibold text-white/40 uppercase">Position</label>
+            <div class="grid grid-cols-3 gap-2">
+              <button
+                v-for="preset in availableWatermarkPresets"
+                :key="preset.value"
+                type="button"
+                class="rounded-lg border px-3 py-2 text-xs font-medium transition-all"
+                :class="watermarkPreset === preset.value
+                  ? 'border-primary-500 bg-primary-500/10 text-white'
+                  : 'border-white/10 text-white/60 hover:border-white/30'"
+                @click="selectWatermarkPreset(preset.value)"
+              >
+                {{ preset.label }}
+              </button>
+            </div>
+          </div>
+
+          <div v-if="watermarkPreset === 'custom'" class="grid gap-4 md:grid-cols-2">
+            <label class="space-y-1 text-[10px] font-semibold text-white/40 uppercase">
+              Horizontal offset
+              <div class="flex items-center gap-3">
+                <input
+                  v-model.number="watermarkCustomX"
+                  type="range"
+                  min="0"
+                  max="100"
+                  class="flex-1 accent-primary-500"
+                />
+                <span class="text-xs text-white/70 w-10 text-right">{{ watermarkCustomX }}%</span>
+              </div>
+            </label>
+            <label class="space-y-1 text-[10px] font-semibold text-white/40 uppercase">
+              Vertical offset
+              <div class="flex items-center gap-3">
+                <input
+                  v-model.number="watermarkCustomY"
+                  type="range"
+                  min="0"
+                  max="100"
+                  class="flex-1 accent-primary-500"
+                />
+                <span class="text-xs text-white/70 w-10 text-right">{{ watermarkCustomY }}%</span>
+              </div>
+            </label>
+          </div>
+        </div>
       </div>
     </section>
   </div>

@@ -1,4 +1,4 @@
-import type { LanguageCode, CountryCode } from './calendar.types'
+import type { LanguageCode, CountryCode, WatermarkConfig } from './calendar.types'
 
 export interface User {
   id: string
@@ -33,6 +33,7 @@ export interface BrandKit {
   logo?: string
   colors: BrandColors
   fonts: BrandFonts
+  watermark?: WatermarkConfig
   createdAt: string
   updatedAt: string
 }

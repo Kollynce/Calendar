@@ -1,3 +1,4 @@
+import { watch } from 'vue'
 import type { Ref } from 'vue'
 import type { Canvas } from 'fabric'
 import type { CanvasState } from '@/types'
@@ -7,15 +8,21 @@ type EnsureObjectIdentity = (obj: any) => void
 export function createHistoryModule(params: {
   canvas: Ref<Canvas | null>
   history: Ref<CanvasState[]>
-  historyIndex: Ref<number>
+  redoHistory: Ref<CanvasState[]>
   maxHistoryLength: number
   isDirty: Ref<boolean>
   ensureObjectIdentity: EnsureObjectIdentity
 }) {
-  const { canvas, history, historyIndex, maxHistoryLength, isDirty, ensureObjectIdentity } = params
+  const { canvas, history, redoHistory, maxHistoryLength, isDirty, ensureObjectIdentity } = params
 
-  function saveToHistory(): void {
-    if (!canvas.value) return
+  let historyProcessing = false
+  let pendingHistoryTimeout: ReturnType<typeof setTimeout> | null = null
+  let lastSnapshotSignature: string | null = null
+  let detachCanvasListeners: (() => void) | null = null
+  const afterLoadCallbacks = new Set<() => void>()
+
+  function serializeCanvasState(): CanvasState | null {
+    if (!canvas.value) return null
 
     const state = (canvas.value as any).toJSON([
       'id',
@@ -26,11 +33,11 @@ export function createHistoryModule(params: {
       'evented',
       'width',
       'height',
+      'backgroundColor',
     ]) as unknown as CanvasState
 
-    // Manually inject id and data properties from the actual objects
     const objects = canvas.value.getObjects() as any[]
-    
+
     function injectDataIntoJSON(fabricObj: any, jsonObj: any): void {
       if (fabricObj.id) {
         jsonObj.id = fabricObj.id
@@ -38,7 +45,7 @@ export function createHistoryModule(params: {
       if (fabricObj.data) {
         jsonObj.data = fabricObj.data
       }
-      
+
       if (fabricObj.type === 'group' && Array.isArray(fabricObj._objects) && Array.isArray(jsonObj.objects)) {
         for (let i = 0; i < fabricObj._objects.length; i++) {
           if (jsonObj.objects[i]) {
@@ -47,7 +54,7 @@ export function createHistoryModule(params: {
         }
       }
     }
-    
+
     if (Array.isArray(state.objects)) {
       for (let i = 0; i < objects.length; i++) {
         if (state.objects[i]) {
@@ -56,120 +63,222 @@ export function createHistoryModule(params: {
       }
     }
 
-    if (historyIndex.value < history.value.length - 1) {
-      history.value = history.value.slice(0, historyIndex.value + 1)
-    }
+    return state
+  }
+
+  function commitSnapshot(): void {
+    if (historyProcessing) return
+    const state = serializeCanvasState()
+    if (!state) return
+
+    const signature = JSON.stringify(state)
+    if (signature === lastSnapshotSignature) return
+
+    lastSnapshotSignature = signature
 
     history.value.push(state)
-
     if (history.value.length > maxHistoryLength) {
       history.value.shift()
-    } else {
-      historyIndex.value++
+    }
+
+    redoHistory.value = []
+    isDirty.value = true
+  }
+
+  function scheduleSnapshot(immediate = false): void {
+    if (historyProcessing) return
+    if (immediate) {
+      if (pendingHistoryTimeout) {
+        clearTimeout(pendingHistoryTimeout)
+        pendingHistoryTimeout = null
+      }
+      commitSnapshot()
+      return
+    }
+
+    if (pendingHistoryTimeout) {
+      clearTimeout(pendingHistoryTimeout)
+    }
+
+    pendingHistoryTimeout = setTimeout(() => {
+      pendingHistoryTimeout = null
+      commitSnapshot()
+    }, 150)
+  }
+
+  function ensureLastObjectIdentity(): void {
+    const objects = canvas.value?.getObjects()
+    const last = objects?.[objects.length - 1]
+    if (last) ensureObjectIdentity(last)
+  }
+
+  function handleObjectAdded(): void {
+    if (historyProcessing) return
+    ensureLastObjectIdentity()
+    scheduleSnapshot()
+  }
+
+  function handleObjectModified(event: any): void {
+    if (historyProcessing) return
+    if (event?.target) {
+      ensureObjectIdentity(event.target)
+    }
+    scheduleSnapshot()
+  }
+
+  function handleObjectRemoved(): void {
+    if (historyProcessing) return
+    scheduleSnapshot()
+  }
+
+  function handlePathCreated(event: any): void {
+    if (historyProcessing) return
+    ensureObjectIdentity(event?.path)
+    scheduleSnapshot()
+  }
+
+  function bindCanvasEvents(instance: Canvas): void {
+    const handlers = {
+      'object:added': handleObjectAdded,
+      'object:modified': handleObjectModified,
+      'object:removed': handleObjectRemoved,
+      'path:created': handlePathCreated,
+    } as const
+
+    Object.entries(handlers).forEach(([eventName, handler]) => {
+      instance.on(eventName as keyof typeof handlers, handler as any)
+    })
+
+    detachCanvasListeners = () => {
+      Object.entries(handlers).forEach(([eventName, handler]) => {
+        instance.off(eventName as keyof typeof handlers, handler as any)
+      })
     }
   }
 
-  async function loadCanvasState(state: CanvasState): Promise<void> {
+  watch(
+    canvas,
+    (next, prev) => {
+      if (prev) {
+        detachCanvasListeners?.()
+        detachCanvasListeners = null
+      }
+
+      if (next) {
+        bindCanvasEvents(next)
+      }
+    },
+    { immediate: true },
+  )
+
+  async function loadCanvasState(state: CanvasState, options: { markDirty?: boolean } = {}): Promise<void> {
     if (!canvas.value) return
 
-    console.log('[loadCanvasState] Loading canvas state with', state.objects?.length || 0, 'objects')
-    
-    // Clear the canvas first to prevent objects from previous projects persisting
-    canvas.value.clear()
-    
-    // Set background color from state
-    if (state.backgroundColor) {
-      canvas.value.backgroundColor = state.backgroundColor
-    }
-    
-    // Create a mapping of object data from the state before loading
-    const objectDataMap = new Map<string, any>()
-    
-    function extractDataFromState(stateObj: any, depth = 0): void {
-      console.log(`[extractDataFromState] ${' '.repeat(depth * 2)}Object type: ${stateObj.type}, id: ${stateObj.id}, has data: ${!!stateObj.data}`)
-      
-      if (stateObj.id && stateObj.data) {
-        objectDataMap.set(stateObj.id, stateObj.data)
-        console.log(`[extractDataFromState] ${' '.repeat(depth * 2)}Stored data for ${stateObj.id}`)
+    const { markDirty = false } = options
+    historyProcessing = true
+    try {
+      canvas.value.clear()
+      if (state.backgroundColor) {
+        canvas.value.backgroundColor = state.backgroundColor
       }
-      // Extract data from nested objects in groups
-      if (stateObj.type === 'group' && Array.isArray(stateObj.objects)) {
-        console.log(`[extractDataFromState] ${' '.repeat(depth * 2)}Group has ${stateObj.objects.length} children`)
-        stateObj.objects.forEach((child: any) => extractDataFromState(child, depth + 1))
-      }
-    }
-    
-    // Extract all data properties before loading
-    if (Array.isArray(state.objects)) {
-      console.log('[loadCanvasState] State has', state.objects.length, 'top-level objects')
-      state.objects.forEach((obj: any) => extractDataFromState(obj))
-    }
-    
-    console.log('[loadCanvasState] Extracted data for', objectDataMap.size, 'objects')
-    
-    await canvas.value.loadFromJSON(state)
-    
-    const objects = canvas.value.getObjects() as any[]
-    console.log('[loadCanvasState] After loadFromJSON, canvas has', objects.length, 'objects')
-    
-    // Process all objects, including nested objects within groups
-    function processObject(obj: any, depth = 0): void {
-      ensureObjectIdentity(obj)
-      
-      // Restore data property from our map
-      if (obj.id && objectDataMap.has(obj.id)) {
-        const data = objectDataMap.get(obj.id)
-        obj.set('data', data)
-        obj.data = data // Also set directly to ensure it's available
-        
-        const metadata = data?.elementMetadata
-        if (metadata) {
-          console.log(`[loadCanvasState] ${' '.repeat(depth * 2)}Restored metadata for ${obj.id}:`, metadata.kind)
+
+      const objectDataMap = new Map<string, any>()
+
+      function extractDataFromState(stateObj: any): void {
+        if (stateObj.id && stateObj.data) {
+          objectDataMap.set(stateObj.id, stateObj.data)
         }
-      } else if (obj.data) {
-        // Fallback: if data exists on the object, ensure it's set properly
-        obj.set('data', obj.data)
-        const metadata = obj.data?.elementMetadata
-        if (metadata) {
-          console.log(`[loadCanvasState] ${' '.repeat(depth * 2)}Found existing metadata for ${obj.id}:`, metadata.kind)
+        if (stateObj.type === 'group' && Array.isArray(stateObj.objects)) {
+          stateObj.objects.forEach((child: any) => extractDataFromState(child))
         }
       }
-      
-      // Process nested objects in groups
-      if (obj.type === 'group' && Array.isArray(obj._objects)) {
-        console.log(`[loadCanvasState] ${' '.repeat(depth * 2)}Processing group ${obj.id || 'unknown'} with ${obj._objects.length} children`)
-        obj._objects.forEach((child: any) => processObject(child, depth + 1))
+
+      if (Array.isArray(state.objects)) {
+        state.objects.forEach((obj: any) => extractDataFromState(obj))
       }
+
+      await canvas.value.loadFromJSON(state)
+
+      const objects = canvas.value.getObjects() as any[]
+
+      function processObject(obj: any): void {
+        ensureObjectIdentity(obj)
+
+        if (obj.id && objectDataMap.has(obj.id)) {
+          const data = objectDataMap.get(obj.id)
+          obj.set('data', data)
+          obj.data = data
+        } else if (obj.data) {
+          obj.set('data', obj.data)
+        }
+
+        if (obj.type === 'group' && Array.isArray(obj._objects)) {
+          obj._objects.forEach((child: any) => processObject(child))
+        }
+      }
+
+      objects.forEach((obj) => processObject(obj))
+      canvas.value.renderAll()
+    } finally {
+      historyProcessing = false
     }
-    
-    objects.forEach((obj) => processObject(obj))
-    canvas.value.renderAll()
-    
-    console.log('[loadCanvasState] Canvas state loaded successfully')
+
+    if (markDirty) {
+      isDirty.value = true
+    }
+
+    afterLoadCallbacks.forEach((cb) => {
+      try {
+        cb()
+      } catch (error) {
+        console.error('[history] afterLoad callback failed', error)
+      }
+    })
+  }
+
+  function saveToHistory(): void {
+    scheduleSnapshot(true)
   }
 
   function undo(): void {
     if (!canvas.value) return
-    if (historyIndex.value <= 0) return
+    if (history.value.length <= 1) return
 
-    historyIndex.value--
-    const state = history.value[historyIndex.value]
-    if (state) loadCanvasState(state)
+    const currentState = history.value.pop()
+    if (currentState) {
+      redoHistory.value.push(currentState)
+    }
+
+    const previousState = history.value[history.value.length - 1]
+    if (previousState) {
+      loadCanvasState(previousState, { markDirty: true })
+      lastSnapshotSignature = JSON.stringify(previousState)
+    }
   }
 
   function redo(): void {
     if (!canvas.value) return
-    if (historyIndex.value >= history.value.length - 1) return
+    if (redoHistory.value.length === 0) return
 
-    historyIndex.value++
-    const state = history.value[historyIndex.value]
-    if (state) loadCanvasState(state)
+    const nextState = redoHistory.value.pop()
+    if (!nextState) return
+
+    history.value.push(nextState)
+    if (history.value.length > maxHistoryLength) {
+      history.value.shift()
+    }
+
+    loadCanvasState(nextState, { markDirty: true })
+    lastSnapshotSignature = JSON.stringify(nextState)
   }
 
   function snapshotCanvasState(): void {
-    if (!canvas.value) return
     saveToHistory()
-    isDirty.value = true
+  }
+
+  function registerAfterLoadCallback(callback: () => void): () => void {
+    afterLoadCallbacks.add(callback)
+    return () => afterLoadCallbacks.delete(callback)
   }
 
   return {
@@ -178,5 +287,6 @@ export function createHistoryModule(params: {
     undo,
     redo,
     snapshotCanvasState,
+    registerAfterLoadCallback,
   }
 }

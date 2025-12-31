@@ -464,6 +464,7 @@ export function buildCalendarGridGraphics(
     subTargetCheck: false,
     hasControls: true,
     hoverCursor: 'move',
+    objectCaching: false,
   })
 }
 
@@ -831,6 +832,7 @@ export function buildWeekStripGraphics(
   return new Group(objects, {
     subTargetCheck: false,
     hoverCursor: 'move',
+    objectCaching: false,
   })
 }
 
@@ -1112,6 +1114,7 @@ export function buildDateCellGraphics(
   return new Group(objects, {
     subTargetCheck: false,
     hoverCursor: 'move',
+    objectCaching: false,
   })
 }
 
@@ -1246,6 +1249,7 @@ export function buildPlannerNoteGraphics(metadata: PlannerNoteMetadata): Group {
   return new Group(objects, {
     subTargetCheck: false,
     hoverCursor: 'move',
+    objectCaching: false,
   })
 }
 
@@ -1365,6 +1369,7 @@ export function buildScheduleGraphics(metadata: ScheduleMetadata): Group {
   return new Group(objects, {
     subTargetCheck: false,
     hoverCursor: 'move',
+    objectCaching: false,
   })
 }
 
@@ -1483,6 +1488,7 @@ export function buildChecklistGraphics(metadata: ChecklistMetadata): Group {
   return new Group(objects, {
     subTargetCheck: false,
     hoverCursor: 'move',
+    objectCaching: false,
   })
 }
 
@@ -1631,5 +1637,6 @@ export function buildCollageGraphics(metadata: CollageMetadata): Group {
   return new Group(objects, {
     subTargetCheck: false,
     hoverCursor: 'move',
+    objectCaching: false,
   })
 }

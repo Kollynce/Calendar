@@ -5,13 +5,14 @@ import { useAuthStore } from '@/stores'
 import { MenuItem } from '@headlessui/vue'
 import AppDropdownMenu from '@/components/ui/AppDropdownMenu.vue'
 import AppTierBadge from '@/components/ui/AppTierBadge.vue'
-import { 
-  Bars3Icon, 
-  XMarkIcon, 
-  BellIcon, 
+import {
+  Bars3Icon,
+  XMarkIcon,
+  BellIcon,
   UserCircleIcon,
-  ChevronDownIcon 
+  ChevronDownIcon
 } from '@heroicons/vue/24/outline'
+import { SparklesIcon } from '@heroicons/vue/24/solid'
 
 const authStore = useAuthStore()
 const isMobileMenuOpen = ref(false)

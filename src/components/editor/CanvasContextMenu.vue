@@ -31,6 +31,7 @@ const editorStore = useEditorStore()
 
 const isVisible = ref(false)
 const position = ref({ x: 0, y: 0 })
+const suppressNextOutsideClick = ref(false)
 
 const hasSelection = computed(() => editorStore.hasSelection)
 const selectedCount = computed(() => editorStore.selectedObjects.length)
@@ -185,6 +186,10 @@ const menuItems = computed<MenuItem[]>(() => {
 function show(x: number, y: number) {
   position.value = { x, y }
   isVisible.value = true
+  suppressNextOutsideClick.value = true
+  requestAnimationFrame(() => {
+    suppressNextOutsideClick.value = false
+  })
 }
 
 function hide() {
@@ -198,6 +203,9 @@ function handleItemClick(item: MenuItem) {
 }
 
 function handleClickOutside(e: MouseEvent) {
+  if (suppressNextOutsideClick.value) {
+    return
+  }
   const target = e.target as HTMLElement
   if (!target.closest('.context-menu')) {
     hide()

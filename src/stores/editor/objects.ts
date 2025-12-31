@@ -349,6 +349,8 @@ export function createObjectsModule(params: {
       borderScaleFactor: options.borderScaleFactor ?? 1,
       padding: options.padding ?? 0,
       hoverCursor: options.hoverCursor ?? 'pointer',
+      objectCaching: false,
+      noScaleCache: false,
       ...other,
     })
 
@@ -406,6 +408,7 @@ export function createObjectsModule(params: {
           borderColor: other.borderColor ?? '#2563eb',
           transparentCorners: other.transparentCorners ?? false,
           cornerSize: other.cornerSize ?? 8,
+          objectCaching: false,
         })
       case 'ellipse':
         return new Ellipse({
@@ -422,6 +425,7 @@ export function createObjectsModule(params: {
           borderColor: other.borderColor ?? '#2563eb',
           transparentCorners: other.transparentCorners ?? false,
           cornerSize: other.cornerSize ?? 8,
+          objectCaching: false,
         })
       case 'triangle':
         return new Triangle({
@@ -438,6 +442,7 @@ export function createObjectsModule(params: {
           borderColor: other.borderColor ?? '#2563eb',
           transparentCorners: other.transparentCorners ?? false,
           cornerSize: other.cornerSize ?? 8,
+          objectCaching: false,
         })
       case 'arrow':
         return createArrowObject(id, {
@@ -463,6 +468,7 @@ export function createObjectsModule(params: {
           borderColor: other.borderColor ?? '#2563eb',
           transparentCorners: other.transparentCorners ?? false,
           cornerSize: other.cornerSize ?? 8,
+          objectCaching: false,
         })
       default:
         return new Rect({
@@ -481,6 +487,7 @@ export function createObjectsModule(params: {
           borderColor: other.borderColor ?? '#2563eb',
           transparentCorners: other.transparentCorners ?? false,
           cornerSize: other.cornerSize ?? 8,
+          objectCaching: false,
         })
     }
   }

@@ -56,8 +56,21 @@
     50% { box-shadow: 0 0 20px var(--color-primary-500 / 0.6); }
   }
 
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-20px); }
+  }
+
+  @keyframes spin-slow {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
   --animate-fade-in-up: fade-in-up 0.6s ease-out forwards;
   --animate-pulse-glow: pulse-glow 2s infinite;
+  --animate-float: float 6s ease-in-out infinite;
+  --animate-float-delayed: float 6s ease-in-out 3s infinite;
+  --animate-spin-slow: spin-slow 12s linear infinite;
 }
 
 /* Global Reset & Base Styles */
@@ -76,7 +89,34 @@ h1, h2, h3, h4, h5, h6 {
   @apply tracking-tight;
 }
 
-/* Glassmorphism Utilities */
+/* Premium Utilities */
+@utility badge-premium {
+  @apply inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border border-gray-200 dark:border-gray-800 shadow-xl text-[10px] font-black uppercase tracking-[0.3em] text-primary-600 dark:text-primary-400;
+}
+
+@utility badge-premium-dark {
+  @apply inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 backdrop-blur-md border border-white/10 shadow-2xl text-[10px] font-black uppercase tracking-[0.3em] text-primary-400;
+}
+
+@utility bg-noise {
+  background-image: url('https://grainy-gradients.vercel.app/noise.svg');
+  @apply opacity-20 mix-blend-overlay;
+}
+
+@utility bg-grid-pattern {
+  background-image: linear-gradient(to right, #80808012 1px, transparent 1px), linear-gradient(to bottom, #80808012 1px, transparent 1px);
+  background-size: 40px 40px;
+  mask-image: radial-gradient(ellipse 60% 50% at 50% 0%, #000 70%, transparent 100%);
+}
+
+@utility font-display {
+  font-family: var(--font-display);
+}
+
+@utility font-body {
+  font-family: var(--font-body);
+}
+
 @utility glass {
   @apply backdrop-blur-md bg-white/70 dark:bg-gray-900/70 border border-white/20 dark:border-gray-800/50;
 }

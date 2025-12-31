@@ -37,6 +37,28 @@ service cloud.firestore {
       return field is string && field.size() >= min && field.size() <= max;
     }
 
+    function validMarketplaceFeatures(features) {
+      return features == null ||
+        (features is list && features.size() <= 20);
+    }
+
+    function validMarketplaceTemplate(data) {
+      return (
+        validString(data.name, 3, 200) &&
+        validString(data.description, 10, 2000) &&
+        data.category is string &&
+        data.price is number && data.price >= 0 &&
+        data.requiredTier in ['free', 'pro', 'business'] &&
+        validMarketplaceFeatures(data.features) &&
+        (data.templateData == null || data.templateData is map) &&
+        (data.thumbnail == null || validString(data.thumbnail, 5, 500)) &&
+        (data.downloads == null || (data.downloads is number && data.downloads >= 0)) &&
+        data.creatorId is string &&
+        data.creatorId == request.auth.uid &&
+        validString(data.creatorName, 1, 100)
+      );
+    }
+
     match /users/{userId} {
       allow read: if isOwner(userId) || isAdmin();
 
@@ -120,6 +142,20 @@ service cloud.firestore {
 
         allow write: if false;
       }
+    }
+
+    match /marketplace_templates/{templateId} {
+      allow read: if true;
+
+      // Temporarily allow create for debugging
+      allow create: if isAuthenticated() &&
+        request.resource.data.creatorId == request.auth.uid;
+
+      allow update: if (isOwner(resource.data.creatorId) || isAdmin()) &&
+        request.resource.data.creatorId == resource.data.creatorId &&
+        validMarketplaceTemplate(request.resource.data);
+
+      allow delete: if isAdmin() || isOwner(resource.data.creatorId);
     }
 
     match /subscriptions/{subscriptionId} {

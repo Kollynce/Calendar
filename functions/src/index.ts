@@ -1,9 +1,21 @@
 import * as admin from 'firebase-admin'
 import * as logger from 'firebase-functions/logger'
-import * as functionsV1 from 'firebase-functions'
+import * as functionsV1 from 'firebase-functions/v1'
 import PDFDocument from 'pdfkit'
 import { randomUUID } from 'crypto'
 import Holidays from 'date-holidays'
+
+const legacyRuntimeConfig = (() => {
+  const namespace = functionsV1 as unknown as { config?: () => Record<string, unknown> }
+  if (typeof namespace.config === 'function') {
+    try {
+      return namespace.config()
+    } catch {
+      return undefined
+    }
+  }
+  return undefined
+})() as Record<string, any> | undefined
 
 admin.initializeApp()
 
@@ -59,7 +71,7 @@ function getAdminEmail(): string {
   const fromEnv = normalizeEmail(process.env.ADMIN_EMAIL)
   if (fromEnv) return fromEnv
 
-  const fromConfig = normalizeEmail(functionsV1.config()?.app?.admin_email)
+  const fromConfig = normalizeEmail((legacyRuntimeConfig as any)?.app?.admin_email)
   return fromConfig
 }
 
@@ -87,21 +99,21 @@ function getEnv(name: string): string {
 
 function getPaypalMode(): 'sandbox' | 'live' {
   const fromEnv = getEnv('PAYPAL_MODE')
-  const fromConfig = String(functionsV1.config()?.paypal?.mode || '').trim()
+  const fromConfig = String((legacyRuntimeConfig as any)?.paypal?.mode || '').trim()
   const mode = (fromEnv || fromConfig || 'sandbox').toLowerCase()
   return mode === 'live' ? 'live' : 'sandbox'
 }
 
 function getPaypalClientId(): string {
-  return getEnv('PAYPAL_CLIENT_ID') || String(functionsV1.config()?.paypal?.client_id || '').trim()
+  return getEnv('PAYPAL_CLIENT_ID') || String((legacyRuntimeConfig as any)?.paypal?.client_id || '').trim()
 }
 
 function getPaypalClientSecret(): string {
-  return getEnv('PAYPAL_CLIENT_SECRET') || String(functionsV1.config()?.paypal?.client_secret || '').trim()
+  return getEnv('PAYPAL_CLIENT_SECRET') || String((legacyRuntimeConfig as any)?.paypal?.client_secret || '').trim()
 }
 
 function getPaypalWebhookId(): string {
-  return getEnv('PAYPAL_WEBHOOK_ID') || String(functionsV1.config()?.paypal?.webhook_id || '').trim()
+  return getEnv('PAYPAL_WEBHOOK_ID') || String((legacyRuntimeConfig as any)?.paypal?.webhook_id || '').trim()
 }
 
 function getPaypalApiBaseUrl(): string {
@@ -109,7 +121,8 @@ function getPaypalApiBaseUrl(): string {
 }
 
 function getPlanIdEnv(key: string): string {
-  return getEnv(key) || String((functionsV1.config()?.paypal || {})[key.toLowerCase()] || '').trim()
+  const paypalConfig = ((legacyRuntimeConfig as any)?.paypal as Record<string, unknown>) || {}
+  return getEnv(key) || String(paypalConfig[key.toLowerCase()] || '').trim()
 }
 
 function mapPaypalPlanIdToTier(planId: string): SubscriptionTier | null {

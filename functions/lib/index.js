@@ -39,10 +39,22 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.paypalWebhook = exports.registerPayPalSubscription = exports.provisionUser = exports.retryExportJob = exports.processExportJobRetry = exports.processExportJob = exports.createExportJob = void 0;
 const admin = __importStar(require("firebase-admin"));
 const logger = __importStar(require("firebase-functions/logger"));
-const functionsV1 = __importStar(require("firebase-functions"));
+const functionsV1 = __importStar(require("firebase-functions/v1"));
 const pdfkit_1 = __importDefault(require("pdfkit"));
 const crypto_1 = require("crypto");
 const date_holidays_1 = __importDefault(require("date-holidays"));
+const legacyRuntimeConfig = (() => {
+    const namespace = functionsV1;
+    if (typeof namespace.config === 'function') {
+        try {
+            return namespace.config();
+        }
+        catch {
+            return undefined;
+        }
+    }
+    return undefined;
+})();
 admin.initializeApp();
 function normalizeEmail(value) {
     return (value || '').trim().toLowerCase();
@@ -58,7 +70,7 @@ function getAdminEmail() {
     const fromEnv = normalizeEmail(process.env.ADMIN_EMAIL);
     if (fromEnv)
         return fromEnv;
-    const fromConfig = normalizeEmail(functionsV1.config()?.app?.admin_email);
+    const fromConfig = normalizeEmail(legacyRuntimeConfig?.app?.admin_email);
     return fromConfig;
 }
 function getEnv(name) {
@@ -66,24 +78,25 @@ function getEnv(name) {
 }
 function getPaypalMode() {
     const fromEnv = getEnv('PAYPAL_MODE');
-    const fromConfig = String(functionsV1.config()?.paypal?.mode || '').trim();
+    const fromConfig = String(legacyRuntimeConfig?.paypal?.mode || '').trim();
     const mode = (fromEnv || fromConfig || 'sandbox').toLowerCase();
     return mode === 'live' ? 'live' : 'sandbox';
 }
 function getPaypalClientId() {
-    return getEnv('PAYPAL_CLIENT_ID') || String(functionsV1.config()?.paypal?.client_id || '').trim();
+    return getEnv('PAYPAL_CLIENT_ID') || String(legacyRuntimeConfig?.paypal?.client_id || '').trim();
 }
 function getPaypalClientSecret() {
-    return getEnv('PAYPAL_CLIENT_SECRET') || String(functionsV1.config()?.paypal?.client_secret || '').trim();
+    return getEnv('PAYPAL_CLIENT_SECRET') || String(legacyRuntimeConfig?.paypal?.client_secret || '').trim();
 }
 function getPaypalWebhookId() {
-    return getEnv('PAYPAL_WEBHOOK_ID') || String(functionsV1.config()?.paypal?.webhook_id || '').trim();
+    return getEnv('PAYPAL_WEBHOOK_ID') || String(legacyRuntimeConfig?.paypal?.webhook_id || '').trim();
 }
 function getPaypalApiBaseUrl() {
     return getPaypalMode() === 'live' ? 'https://api-m.paypal.com' : 'https://api-m.sandbox.paypal.com';
 }
 function getPlanIdEnv(key) {
-    return getEnv(key) || String((functionsV1.config()?.paypal || {})[key.toLowerCase()] || '').trim();
+    const paypalConfig = legacyRuntimeConfig?.paypal || {};
+    return getEnv(key) || String(paypalConfig[key.toLowerCase()] || '').trim();
 }
 function mapPaypalPlanIdToTier(planId) {
     const id = String(planId || '').trim();

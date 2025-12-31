@@ -60,8 +60,8 @@ const plans = [
     <!-- High-End Background Architecture -->
     <div class="absolute inset-0 pointer-events-none overflow-hidden">
       <!-- Modern Grid Pattern -->
-      <div class="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 dark:opacity-40 mix-blend-overlay"></div>
-      <div class="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-size-[40px_40px] mask-[radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] opacity-20"></div>
+      <div class="absolute inset-0 bg-noise opacity-20 dark:opacity-40"></div>
+      <div class="absolute inset-0 bg-grid-pattern opacity-20"></div>
       
       <!-- Mesh Glows -->
       <div class="absolute -top-[10%] left-1/2 -translate-x-1/2 w-[1200px] h-[800px] bg-linear-to-b from-primary-500/20 to-transparent blur-[140px] rounded-full opacity-40"></div>
@@ -72,15 +72,15 @@ const plans = [
     <div class="mx-auto max-w-7xl px-6 lg:px-8 relative z-10">
       <!-- Header -->
       <div class="mx-auto max-w-3xl text-center mb-20 lg:mb-32">
-        <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border border-gray-200 dark:border-gray-800 shadow-xl text-[10px] font-black uppercase tracking-[0.3em] text-primary-600 dark:text-primary-400 mb-10 animate-fade-in-up">
+        <div class="badge-premium mb-10 animate-fade-in-up">
           <SparklesIcon class="w-3.5 h-3.5" />
           Subscription Plans
         </div>
-        <h2 class="text-7xl font-display font-black tracking-tighter text-gray-900 dark:text-white leading-[0.95] mb-10 animate-fade-in-up" style="animation-delay: 0.1s">
+        <h2 class="text-5xl sm:text-7xl font-display font-black tracking-tighter text-gray-900 dark:text-white leading-[0.95] mb-10 animate-fade-in-up" style="animation-delay: 0.1s">
           Simple, Transparent <br/>
           <span class="text-transparent bg-clip-text bg-linear-to-r from-primary-500 via-blue-500 to-indigo-600">Enterprise Pricing.</span>
         </h2>
-        <p class="text-xl lg:text-2xl leading-relaxed text-gray-500 dark:text-gray-400 max-w-2xl mx-auto animate-fade-in-up font-medium" style="animation-delay: 0.2s">
+        <p class="text-lg sm:text-xl lg:text-2xl leading-relaxed text-gray-500 dark:text-gray-400 max-w-2xl mx-auto animate-fade-in-up font-medium" style="animation-delay: 0.2s">
           Choose the plan that's right for your creative scale. Start for free, upgrade as you grow.
         </p>
       </div>

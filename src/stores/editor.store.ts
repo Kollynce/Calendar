@@ -7,6 +7,7 @@ import type {
   CanvasObject,
   CanvasElementMetadata,
   Holiday,
+  WatermarkConfig,
 } from '@/types'
 import { mergeTemplateOptions } from '@/config/editor-defaults'
 import { holidayService } from '@/services/calendar/holiday.service'
@@ -63,7 +64,7 @@ export const useEditorStore = defineStore('editor', () => {
 
   // History for undo/redo
   const history = ref<CanvasState[]>([])
-  const historyIndex = ref(-1)
+  const redoHistory = ref<CanvasState[]>([])
   const maxHistoryLength = 50
 
   // UI State
@@ -72,12 +73,38 @@ export const useEditorStore = defineStore('editor', () => {
   const showSafeZone = ref(false)
   const snapToGrid = ref(true)
   const gridSize = ref(10)
+  const touchPreferences = ref({
+    fingerPanPriority: false,
+  })
 
   const loading = ref(false)
   const saving = ref(false)
   const isDirty = ref(false)
   const authStore = useAuthStore()
   const calendarStore = useCalendarStore()
+
+  let lastCalendarWatermarkJSON: string | null = JSON.stringify(calendarStore.config.watermark ?? null)
+
+  function cloneWatermarkConfig(config: WatermarkConfig | undefined): WatermarkConfig | undefined {
+    if (!config) return undefined
+    return JSON.parse(JSON.stringify(config)) as WatermarkConfig
+  }
+
+  watch(
+    () => calendarStore.config.watermark,
+    (next) => {
+      const serialized = JSON.stringify(next ?? null)
+      if (serialized === lastCalendarWatermarkJSON) return
+      lastCalendarWatermarkJSON = serialized
+
+      if (!project.value) return
+      project.value.config.watermark = cloneWatermarkConfig(next)
+      if (typeof next?.visible === 'boolean') {
+        project.value.config.showWatermark = next.visible
+      }
+    },
+    { deep: true },
+  )
 
   const objectIdentityHelper = createObjectIdentityHelper({ generateObjectId })
   const { ensureObjectIdentity, getLayerNameForMetadata } = objectIdentityHelper
@@ -86,19 +113,19 @@ export const useEditorStore = defineStore('editor', () => {
   const historyModule = createHistoryModule({
     canvas,
     history,
-    historyIndex,
+    redoHistory,
     maxHistoryLength,
     isDirty,
     ensureObjectIdentity,
   })
 
-  const { saveToHistory, loadCanvasState, undo, redo, snapshotCanvasState } = historyModule
+  const { saveToHistory, loadCanvasState, undo, redo, snapshotCanvasState, registerAfterLoadCallback } = historyModule
 
   const projectModule = createProjectModule({
     project,
     canvas,
     history,
-    historyIndex,
+    redoHistory,
     selectedObjectIds,
     clipboard,
     loading,
@@ -134,6 +161,7 @@ export const useEditorStore = defineStore('editor', () => {
     normalizeCanvasSize,
     loadCanvasState,
     saveToHistory,
+    registerAfterLoadCallback,
     ensureObjectIdentity,
     rebuildElementWithMetadata,
   })
@@ -643,7 +671,7 @@ export const useEditorStore = defineStore('editor', () => {
     }
     queuedHistorySaveTimeout = setTimeout(() => {
       queuedHistorySaveTimeout = null
-      saveToHistory()
+      snapshotCanvasState()
     }, 250)
   }
 
@@ -659,8 +687,8 @@ export const useEditorStore = defineStore('editor', () => {
 
   const hasSelection = computed(() => selectedObjectIds.value.length > 0)
 
-  const canUndo = computed(() => historyIndex.value > 0)
-  const canRedo = computed(() => historyIndex.value < history.value.length - 1)
+  const canUndo = computed(() => history.value.length > 1)
+  const canRedo = computed(() => redoHistory.value.length > 0)
 
   const canvasSize = computed(() => {
     if (!project.value) return { width: 0, height: 0 }
@@ -675,6 +703,15 @@ export const useEditorStore = defineStore('editor', () => {
   // ═══════════════════════════════════════════════════════════════
   // ═══════════════════════════════════════════════════════════════
 
+  function toggleFingerPanPriority(nextValue?: boolean) {
+    const targetValue =
+      typeof nextValue === 'boolean' ? nextValue : !touchPreferences.value.fingerPanPriority
+    touchPreferences.value = {
+      ...touchPreferences.value,
+      fingerPanPriority: targetValue,
+    }
+  }
+
   return {
     // State
     project,
@@ -684,12 +721,13 @@ export const useEditorStore = defineStore('editor', () => {
     zoom,
     panOffset,
     history,
-    historyIndex,
+    redoHistory,
     showGrid,
     showRulers,
     showSafeZone,
     snapToGrid,
     gridSize,
+    touchPreferences,
     loading,
     saving,
     isDirty,
@@ -764,6 +802,7 @@ export const useEditorStore = defineStore('editor', () => {
     getBackgroundPattern,
     updateTemplateOptions,
     getHolidaysForCalendarYear,
+    toggleFingerPanPriority,
     // Metadata-aware helpers
     getActiveElementMetadata,
     updateActiveElementMetadata,

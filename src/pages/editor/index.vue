@@ -280,10 +280,22 @@ async function handlePublishToMarketplace(productData: any) {
   try {
     if (!editorStore.project) return
 
+    // Debug authentication state
+    console.log('[handlePublishToMarketplace] Auth state:', {
+      isAuthenticated: authStore.isAuthenticated,
+      userId: authStore.user?.id,
+      userDisplayName: authStore.user?.displayName,
+      firebaseUser: authStore.firebaseUser?.uid,
+    })
+
+    if (!authStore.isAuthenticated || !authStore.user?.id) {
+      throw new Error('User not authenticated or missing user ID')
+    }
+
     const product: MarketplaceProduct = {
       ...productData,
-      creatorId: authStore.user?.id || '',
-      creatorName: authStore.user?.displayName || 'Admin',
+      creatorId: authStore.user.id,
+      creatorName: authStore.user.displayName || 'Admin',
       thumbnail: editorStore.project.thumbnail,
       templateData: {
         config: editorStore.project.config,
@@ -291,6 +303,8 @@ async function handlePublishToMarketplace(productData: any) {
       },
       downloads: 0,
     }
+
+    console.log('[handlePublishToMarketplace] Publishing product:', product)
 
     await marketplaceService.publishTemplate(product)
     

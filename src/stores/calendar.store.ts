@@ -5,6 +5,7 @@ import { holidayService } from '@/services/calendar/holiday.service'
 import { customHolidaysService } from '@/services/calendar/custom-holidays.service'
 import { calendarGeneratorService } from '@/services/calendar/generator.service'
 import { localizationService } from '@/services/calendar/localization.service'
+import { DEFAULT_WATERMARK_CONFIG, normalizeWatermarkConfig } from '@/config/watermark-defaults'
 import type {
   CalendarConfig,
   CalendarYear,
@@ -30,6 +31,8 @@ export const useCalendarStore = defineStore('calendar', () => {
     showCustomHolidays: true,
     showWeekNumbers: false,
     currentMonth: new Date().getMonth() + 1,
+    showWatermark: true,
+    watermark: { ...DEFAULT_WATERMARK_CONFIG },
   })
 
   const calendarData = ref<CalendarYear | null>(null)
@@ -119,7 +122,22 @@ export const useCalendarStore = defineStore('calendar', () => {
    * Update configuration
    */
   function updateConfig(updates: Partial<CalendarConfig>): void {
-    config.value = { ...config.value, ...updates }
+    const next: CalendarConfig = {
+      ...config.value,
+      ...updates,
+    }
+
+    if (updates.watermark) {
+      next.watermark = normalizeWatermarkConfig(updates.watermark, config.value.watermark)
+    } else if (!next.watermark) {
+      next.watermark = { ...DEFAULT_WATERMARK_CONFIG }
+    }
+
+    if (next.watermark) {
+      next.showWatermark = next.watermark.visible
+    }
+
+    config.value = next
   }
 
   /**

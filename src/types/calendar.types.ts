@@ -10,6 +10,7 @@ export interface CalendarConfig {
   showWeekNumbers: boolean
   currentMonth?: number // For monthly view navigation
   showWatermark?: boolean
+  watermark?: WatermarkConfig
   templateOptions?: TemplateOptions
 }
 
@@ -28,6 +29,33 @@ export type CalendarLayout =
   | 'monthly'
   | 'weekly'
   | 'daily'
+
+export type WatermarkPositionPreset =
+  | 'top-left'
+  | 'top-right'
+  | 'bottom-left'
+  | 'bottom-right'
+  | 'center'
+  | 'custom'
+
+export type WatermarkMode = 'text' | 'image'
+
+export interface WatermarkConfig {
+  visible: boolean
+  mode: WatermarkMode
+  text?: string
+  imageId?: string
+  imageSrc?: string
+  position: {
+    preset: WatermarkPositionPreset
+    coordinates?: {
+      x: number
+      y: number
+    }
+  }
+  size: number // normalized width multiplier (0–1)
+  opacity: number // 0–1
+}
 
 export type WeekDay = 0 | 1 | 2 | 3 | 4 | 5 | 6
 

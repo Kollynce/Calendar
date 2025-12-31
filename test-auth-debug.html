@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auth Debug</title>
+</head>
+<body>
+    <h1>Authentication Debug</h1>
+    <div id="auth-info"></div>
+    
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js'
+        import { getAuth, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js'
+        import { getFirestore, doc, getDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDLQIXzx3ixx4Z32EJuUz0OFrkCw5X5m0A",
+            authDomain: "calendardesigners.firebaseapp.com",
+            projectId: "calendardesigners",
+            storageBucket: "calendardesigners.firebasestorage.app",
+            messagingSenderId: "28378963724",
+            appId: "1:28378963724:web:4a59127137149fe730f329",
+            measurementId: "G-EJZWHC9L5J"
+        }
+
+        const app = initializeApp(firebaseConfig)
+        const auth = getAuth(app)
+        const db = getFirestore(app)
+
+        const authInfo = document.getElementById('auth-info')
+
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                authInfo.innerHTML = `
+                    <h2>✅ User Authenticated</h2>
+                    <p><strong>UID:</strong> ${user.uid}</p>
+                    <p><strong>Email:</strong> ${user.email}</p>
+                    <p><strong>Display Name:</strong> ${user.displayName}</p>
+                    <p><strong>Is Anonymous:</strong> ${user.isAnonymous}</p>
+                    <hr>
+                    <h3>Token Claims:</h3>
+                    <div id="token-claims">Loading...</div>
+                    <hr>
+                    <h3>User Document:</h3>
+                    <div id="user-doc">Loading...</div>
+                `
+
+                try {
+                    const tokenResult = await user.getIdTokenResult()
+                    document.getElementById('token-claims').innerHTML = `
+                        <pre>${JSON.stringify(tokenResult.claims, null, 2)}</pre>
+                    `
+                } catch (e) {
+                    document.getElementById('token-claims').innerHTML = `<p style="color: red;">Error: ${e.message}</p>`
+                }
+
+                try {
+                    const userDoc = await getDoc(doc(db, 'users', user.uid))
+                    if (userDoc.exists()) {
+                        document.getElementById('user-doc').innerHTML = `
+                            <pre>${JSON.stringify(userDoc.data(), null, 2)}</pre>
+                        `
+                    } else {
+                        document.getElementById('user-doc').innerHTML = `<p style="color: orange;">User document does not exist</p>`
+                    }
+                } catch (e) {
+                    document.getElementById('user-doc').innerHTML = `<p style="color: red;">Error: ${e.message}</p>`
+                }
+            } else {
+                authInfo.innerHTML = `
+                    <h2>❌ No User Authenticated</h2>
+                    <p>Please sign in to test authentication.</p>
+                `
+            }
+        })
+    </script>
+</body>
+</html>

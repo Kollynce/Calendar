@@ -1,6 +1,7 @@
 import type { Ref } from 'vue'
 import type { Canvas } from 'fabric'
-import type { CalendarConfig, CanvasState, Project, TemplateOptions } from '@/types'
+import type { CalendarConfig, CanvasState, Project, TemplateOptions, WatermarkConfig } from '@/types'
+import { DEFAULT_WATERMARK_CONFIG, normalizeWatermarkConfig } from '@/config/watermark-defaults'
 
 type MergeTemplateOptions = (options?: Partial<TemplateOptions>) => TemplateOptions
 
@@ -27,7 +28,7 @@ export function createProjectModule(params: {
   project: Ref<Project | null>
   canvas: Ref<Canvas | null>
   history: Ref<CanvasState[]>
-  historyIndex: Ref<number>
+  redoHistory: Ref<CanvasState[]>
   selectedObjectIds: Ref<string[]>
   clipboard: Ref<unknown | null>
   loading: Ref<boolean>
@@ -48,7 +49,7 @@ export function createProjectModule(params: {
     project,
     canvas,
     history,
-    historyIndex,
+    redoHistory,
     selectedObjectIds,
     clipboard,
     loading,
@@ -67,6 +68,21 @@ export function createProjectModule(params: {
     return mergeTemplateOptions(options)
   }
 
+  function ensureWatermarkConfig(config: CalendarConfig): WatermarkConfig {
+    const visible = config.showWatermark === false ? false : true
+    const fallback: WatermarkConfig = {
+      ...DEFAULT_WATERMARK_CONFIG,
+      visible,
+    }
+    const incoming: Partial<WatermarkConfig> | undefined = config.watermark
+      ? { ...config.watermark }
+      : { visible }
+    const next = normalizeWatermarkConfig(incoming, fallback)
+    config.showWatermark = next.visible
+    config.watermark = next
+    return next
+  }
+
   function syncCalendarStoreConfig(next: CalendarConfig): void {
     calendarStore.updateConfig({
       year: next.year,
@@ -77,12 +93,14 @@ export function createProjectModule(params: {
       showHolidays: next.showHolidays,
       showCustomHolidays: next.showCustomHolidays,
       showWeekNumbers: next.showWeekNumbers,
+      watermark: next.watermark,
     })
     calendarStore.generateCalendar()
   }
 
   function createNewProject(config: CalendarConfig): void {
     config.templateOptions = ensureTemplateOptions(config.templateOptions)
+    ensureWatermarkConfig(config)
 
     const normalized = normalizeCanvasSize(null)
     project.value = {
@@ -104,7 +122,7 @@ export function createProjectModule(params: {
     }
 
     history.value = []
-    historyIndex.value = -1
+    redoHistory.value = []
     isDirty.value = false
 
     selectedObjectIds.value = []
@@ -176,12 +194,13 @@ export function createProjectModule(params: {
     }
 
     history.value = []
-    historyIndex.value = -1
+    redoHistory.value = []
     isDirty.value = false
 
     selectedObjectIds.value = []
     clipboard.value = null
 
+    ensureWatermarkConfig(project.value.config)
     syncCalendarStoreConfig(project.value.config)
   }
 

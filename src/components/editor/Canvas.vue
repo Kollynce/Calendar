@@ -2,9 +2,14 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useEditorStore } from '@/stores/editor.store'
+import { useDeviceDetection } from '@/composables/useDeviceDetection'
+import { useTouchGestures } from '@/composables/useTouchGestures'
 import EditorRulers from './EditorRulers.vue'
 import CanvasContextMenu from './CanvasContextMenu.vue'
 import KeyboardShortcutsPanel from './KeyboardShortcutsPanel.vue'
+import TouchActionBar from './TouchActionBar.vue'
+import FloatingSelectionToolbar from './FloatingSelectionToolbar.vue'
+import TouchNudgeControls from './TouchNudgeControls.vue'
 
 const props = defineProps<{
   canvasRef: HTMLCanvasElement | null
@@ -15,7 +20,10 @@ const emit = defineEmits<{
 }>()
 
 const editorStore = useEditorStore()
-const { zoom, canvasSize, showRulers } = storeToRefs(editorStore)
+const { zoom, canvasSize, showRulers, touchPreferences } = storeToRefs(editorStore)
+
+// Device detection for touch UI
+const { needsTouchUI } = useDeviceDetection()
 
 // Refs
 const viewportRef = ref<HTMLDivElement | null>(null)
@@ -34,6 +42,141 @@ const lastPointerPos = ref({ x: 0, y: 0 })
 
 // Local pan offset for CSS transform (canvas moves, not objects)
 const panOffset = ref({ x: 0, y: 0 })
+const stylusIsActive = ref(false)
+const prefersFingerPan = computed(() => touchPreferences.value.fingerPanPriority)
+
+// Touch gesture state
+const isTouchPanning = ref(false)
+let latestTouchCount = 0
+let panInertiaFrame: number | null = null
+const lastPanDelta = { x: 0, y: 0 }
+const PAN_INERTIA_FRICTION = 0.9
+const PAN_INERTIA_STOP_THRESHOLD = 0.2
+
+function resetPanDelta() {
+  lastPanDelta.x = 0
+  lastPanDelta.y = 0
+}
+
+function stopPanInertia() {
+  if (panInertiaFrame !== null) {
+    cancelAnimationFrame(panInertiaFrame)
+    panInertiaFrame = null
+  }
+}
+
+function startPanInertia() {
+  stopPanInertia()
+  const velocity = { x: lastPanDelta.x, y: lastPanDelta.y }
+  const hasVelocity =
+    Math.abs(velocity.x) > PAN_INERTIA_STOP_THRESHOLD || Math.abs(velocity.y) > PAN_INERTIA_STOP_THRESHOLD
+  if (!hasVelocity) {
+    resetPanDelta()
+    return
+  }
+
+  const step = () => {
+    velocity.x *= PAN_INERTIA_FRICTION
+    velocity.y *= PAN_INERTIA_FRICTION
+
+    const stillMoving =
+      Math.abs(velocity.x) > PAN_INERTIA_STOP_THRESHOLD || Math.abs(velocity.y) > PAN_INERTIA_STOP_THRESHOLD
+    if (!stillMoving) {
+      stopPanInertia()
+      resetPanDelta()
+      return
+    }
+
+    applyPanOffset(panOffset.value.x + velocity.x, panOffset.value.y + velocity.y)
+    panInertiaFrame = requestAnimationFrame(step)
+  }
+
+  panInertiaFrame = requestAnimationFrame(step)
+}
+
+// Setup touch gestures
+const touchState = useTouchGestures(viewportRef, {
+  onPinchZoom: (scale, centerX, centerY) => {
+    if (!editorStore.canvas) return
+    stopPanInertia()
+    
+    const rect = viewportRef.value?.getBoundingClientRect()
+    if (!rect) return
+    
+    const cursorX = centerX - rect.left - (showRulers.value ? RULER_SIZE : 0)
+    const cursorY = centerY - rect.top - (showRulers.value ? RULER_SIZE : 0)
+    
+    const currentZoom = zoom.value
+    let newZoom = currentZoom * scale
+    newZoom = Math.min(Math.max(newZoom, editorStore.MIN_ZOOM), editorStore.MAX_ZOOM)
+    
+    const zoomRatio = newZoom / currentZoom
+    const newPanX = cursorX - (cursorX - panOffset.value.x) * zoomRatio
+    const newPanY = cursorY - (cursorY - panOffset.value.y) * zoomRatio
+    
+    applyPanOffset(newPanX, newPanY, newZoom)
+    editorStore.setZoom(newZoom)
+  },
+  onPan: (deltaX, deltaY) => {
+    if (isTouchPanning.value) {
+      lastPanDelta.x = deltaX
+      lastPanDelta.y = deltaY
+      applyPanOffset(panOffset.value.x + deltaX, panOffset.value.y + deltaY)
+    } else {
+      resetPanDelta()
+    }
+  },
+  onPanStart: () => {
+    stopPanInertia()
+    const hasActiveSelection = (editorStore.canvas?.getActiveObjects?.() ?? []).length > 0
+    const forceFingerPan = prefersFingerPan.value && !stylusIsActive.value
+    const shouldPan = forceFingerPan || latestTouchCount >= 2 || !hasActiveSelection
+    isTouchPanning.value = shouldPan
+    if (shouldPan && editorStore.canvas) {
+      editorStore.canvas.selection = false
+    }
+    if (!shouldPan) {
+      resetPanDelta()
+    }
+  },
+  onPanEnd: () => {
+    const wasPanning = isTouchPanning.value
+    isTouchPanning.value = false
+    if (editorStore.canvas) {
+      editorStore.canvas.selection = true
+    }
+    if (wasPanning) {
+      startPanInertia()
+    } else {
+      resetPanDelta()
+    }
+  },
+  onLongPress: (x, y) => {
+    contextMenuRef.value?.show(x, y)
+  },
+  onDoubleTap: () => {
+    const activeObject = editorStore.canvas?.getActiveObject() as any
+    if (activeObject?.type === 'i-text' || activeObject?.type === 'textbox') {
+      activeObject.enterEditing?.()
+      editorStore.canvas?.renderAll()
+    }
+  },
+})
+let gestureTouchCountStop = watch(
+  () => touchState.touchCount.value,
+  (value) => {
+    latestTouchCount = value
+  },
+  { immediate: true },
+)
+
+let stylusWatchStop = watch(
+  () => touchState.isStylus.value,
+  (value) => {
+    stylusIsActive.value = value
+  },
+  { immediate: true },
+)
 
 // Zoom presets
 const zoomPresets = [
@@ -71,9 +214,51 @@ const canvasTransformStyle = computed(() => {
     transform: `translate(${x}px, ${y}px) scale(${scale})`,
     transformOrigin: '0 0',
     width: `${artboardWidth.value}px`,
-    height: `${artboardHeight.value}px`
+    height: `${artboardHeight.value}px`,
+    imageRendering: 'crisp-edges' as const
   }
 })
+
+const PAN_OVERSCROLL = 160
+
+function clampAxis(value: number, viewportSize: number, contentSize: number): number {
+  if (viewportSize <= 0) return value
+  if (contentSize <= viewportSize) {
+    const centered = (viewportSize - contentSize) / 2
+    return Math.min(centered + PAN_OVERSCROLL, Math.max(centered - PAN_OVERSCROLL, value))
+  }
+  const min = viewportSize - contentSize - PAN_OVERSCROLL
+  const max = PAN_OVERSCROLL
+  if (min > max) {
+    return (min + max) / 2
+  }
+  return Math.min(max, Math.max(min, value))
+}
+
+function clampPanOffset(nextX: number, nextY: number, scale = zoom.value) {
+  const rulerOffset = showRulers.value ? RULER_SIZE : 0
+  const viewportWidth = Math.max(0, viewportDimensions.value.width - rulerOffset)
+  const viewportHeight = Math.max(0, viewportDimensions.value.height - rulerOffset)
+  const scaledWidth = artboardWidth.value * scale
+  const scaledHeight = artboardHeight.value * scale
+
+  return {
+    x: clampAxis(nextX, viewportWidth, scaledWidth),
+    y: clampAxis(nextY, viewportHeight, scaledHeight),
+  }
+}
+
+function applyPanOffset(nextX: number, nextY: number, scale = zoom.value) {
+  panOffset.value = clampPanOffset(nextX, nextY, scale)
+}
+
+watch(
+  [() => viewportDimensions.value.width, () => viewportDimensions.value.height, () => zoom.value],
+  () => {
+    const clamped = clampPanOffset(panOffset.value.x, panOffset.value.y)
+    panOffset.value = clamped
+  },
+)
 
 // Methods - Using CSS transforms for Adobe-like canvas movement
 function handleWheel(e: WheelEvent) {
@@ -104,7 +289,7 @@ function handleWheel(e: WheelEvent) {
     const newPanX = cursorX - (cursorX - panOffset.value.x) * zoomRatio
     const newPanY = cursorY - (cursorY - panOffset.value.y) * zoomRatio
     
-    panOffset.value = { x: newPanX, y: newPanY }
+    applyPanOffset(newPanX, newPanY, newZoom)
     editorStore.setZoom(newZoom)
     return
   }
@@ -112,24 +297,19 @@ function handleWheel(e: WheelEvent) {
   if (e.shiftKey) {
     // Shift + scroll mimics horizontal pan (Figma-like)
     const horizontalDelta = e.deltaY || e.deltaX
-    panOffset.value = {
-      x: panOffset.value.x - horizontalDelta,
-      y: panOffset.value.y,
-    }
+    applyPanOffset(panOffset.value.x - horizontalDelta, panOffset.value.y)
     return
   }
   
   // Regular scroll = pan the canvas (move the entire canvas element)
-  panOffset.value = {
-    x: panOffset.value.x - e.deltaX,
-    y: panOffset.value.y - e.deltaY
-  }
+  applyPanOffset(panOffset.value.x - e.deltaX, panOffset.value.y - e.deltaY)
 }
 
 function handleMouseDown(e: MouseEvent) {
   // Middle mouse button or space + left click = start panning
   if (e.button === 1 || (isSpacePressed.value && e.button === 0)) {
     e.preventDefault()
+    stopPanInertia()
     isPanning.value = true
     lastPointerPos.value = { x: e.clientX, y: e.clientY }
     
@@ -147,18 +327,14 @@ function handleContextMenu(e: MouseEvent) {
 }
 
 function handleMouseMove(e: MouseEvent) {
-  if (isPanning.value) {
-    const deltaX = e.clientX - lastPointerPos.value.x
-    const deltaY = e.clientY - lastPointerPos.value.y
-    
-    // Move the canvas using CSS transform
-    panOffset.value = {
-      x: panOffset.value.x + deltaX,
-      y: panOffset.value.y + deltaY
-    }
-    
-    lastPointerPos.value = { x: e.clientX, y: e.clientY }
-  }
+  if (!isPanning.value) return
+  e.preventDefault()
+  
+  const deltaX = e.clientX - lastPointerPos.value.x
+  const deltaY = e.clientY - lastPointerPos.value.y
+  lastPointerPos.value = { x: e.clientX, y: e.clientY }
+  
+  applyPanOffset(panOffset.value.x + deltaX, panOffset.value.y + deltaY)
 }
 
 function handleMouseUp() {
@@ -440,10 +616,7 @@ function fitToScreen() {
   // Center the canvas using CSS transform
   const scaledWidth = artboardWidth.value * newZoom
   const scaledHeight = artboardHeight.value * newZoom
-  panOffset.value = {
-    x: (viewportWidth - scaledWidth) / 2,
-    y: (viewportHeight - scaledHeight) / 2
-  }
+  applyPanOffset((viewportWidth - scaledWidth) / 2, (viewportHeight - scaledHeight) / 2, newZoom)
 }
 
 function centerArtboard() {
@@ -455,10 +628,7 @@ function centerArtboard() {
   const scaledWidth = artboardWidth.value * zoom.value
   const scaledHeight = artboardHeight.value * zoom.value
   
-  panOffset.value = {
-    x: (viewportWidth - scaledWidth) / 2,
-    y: (viewportHeight - scaledHeight) / 2
-  }
+  applyPanOffset((viewportWidth - scaledWidth) / 2, (viewportHeight - scaledHeight) / 2)
 }
 
 function fitToWidth() {
@@ -527,10 +697,7 @@ function zoomToSelection(): void {
   const viewportCenterX = (viewportRef.value.clientWidth - rulerOffset) / 2
   const viewportCenterY = (viewportRef.value.clientHeight - rulerOffset) / 2
 
-  panOffset.value = {
-    x: viewportCenterX - centerX * clampedZoom,
-    y: viewportCenterY - centerY * clampedZoom,
-  }
+  applyPanOffset(viewportCenterX - centerX * clampedZoom, viewportCenterY - centerY * clampedZoom, clampedZoom)
 }
 
 // Initialize
@@ -609,6 +776,13 @@ onBeforeUnmount(() => {
   if (viewportRef.value && (viewportRef.value as any)._parentResizeObserver) {
     ;(viewportRef.value as any)._parentResizeObserver.disconnect()
   }
+  if (gestureTouchCountStop) {
+    gestureTouchCountStop()
+  }
+  if (stylusWatchStop) {
+    stylusWatchStop()
+  }
+  stopPanInertia()
 })
 
 // Watch for canvas size changes
@@ -684,12 +858,21 @@ defineExpose({
     </div>
     
     <!-- Bottom Toolbar -->
-    <div class="toolbar h-10 bg-[#2d2d2d] border-t border-[#3d3d3d] flex items-center justify-between px-3 shrink-0">
+    <div 
+      class="toolbar bg-[#2d2d2d] border-t border-[#3d3d3d] flex items-center justify-between px-3 shrink-0 transition-all"
+      :class="needsTouchUI ? 'h-14' : 'h-10'"
+    >
       <!-- Left: Navigation info -->
       <div class="flex items-center gap-3 text-[11px] text-gray-400">
         <span>{{ artboardWidth }} × {{ artboardHeight }} px</span>
-        <span class="text-gray-600">|</span>
-        <span>Pan: <kbd class="px-1 py-0.5 bg-[#3d3d3d] rounded text-[10px]">Space</kbd> + Drag</span>
+        <template v-if="!needsTouchUI">
+          <span class="text-gray-600">|</span>
+          <span>Pan: <kbd class="px-1 py-0.5 bg-[#3d3d3d] rounded text-[10px]">Space</kbd> + Drag</span>
+        </template>
+        <template v-else>
+          <span class="text-gray-600">|</span>
+          <span>Pinch to zoom • 2-finger pan</span>
+        </template>
       </div>
       
       <!-- Center: Zoom controls -->
@@ -782,6 +965,16 @@ defineExpose({
     
     <!-- Context Menu -->
     <CanvasContextMenu ref="contextMenuRef" />
+    
+    <!-- Touch UI Components -->
+    <TouchActionBar v-if="needsTouchUI" />
+    <FloatingSelectionToolbar 
+      v-if="needsTouchUI"
+      :zoom="zoom"
+      :pan-offset="panOffset"
+      @show-more-actions="(x, y) => contextMenuRef?.show(x, y)"
+    />
+    <TouchNudgeControls v-if="needsTouchUI" />
   </div>
 </template>
 
