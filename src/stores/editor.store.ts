@@ -106,6 +106,16 @@ export const useEditorStore = defineStore('editor', () => {
     { deep: true },
   )
 
+  watch(
+    () => calendarStore.config.year,
+    (nextYear) => {
+      if (!project.value) return
+      const year = Number(nextYear)
+      if (!Number.isFinite(year)) return
+      project.value.config.year = year
+    },
+  )
+
   const objectIdentityHelper = createObjectIdentityHelper({ generateObjectId })
   const { ensureObjectIdentity, getLayerNameForMetadata } = objectIdentityHelper
   const { getArrowParts, refreshArrowGroupGeometry } = objectIdentityHelper

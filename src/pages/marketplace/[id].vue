@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores'
 import MarketplaceLayout from '@/layouts/MarketplaceLayout.vue'
@@ -16,47 +16,61 @@ import {
 } from '@heroicons/vue/24/outline'
 import { StarIcon as StarSolidIcon } from '@heroicons/vue/24/solid'
 import type { SubscriptionTier } from '@/types'
+import { marketplaceService, type MarketplaceProduct } from '@/services/marketplace.service'
 
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 
-// Mock data fetching based on ID
-const templates = [
-  { 
-    id: '1', 
-    name: 'Modern Wall Calendar', 
-    creator: 'Design Studio', 
-    price: 0, 
-    downloads: 1250, 
-    requiredTier: 'free' as const,
-    description: 'A clean, contemporary wall calendar design with ample space for notes and photos. Perfect for home or office use.',
-    features: ['12 Months', 'A4 & Letter Size', 'High Resolution', 'Customizable Colors', 'Holiday Support']
-  },
-  { 
-    id: '2', 
-    name: 'Corporate Desk Calendar', 
-    creator: 'Pro Templates', 
-    price: 999, 
-    downloads: 450, 
-    requiredTier: 'business' as const,
-    description: 'Professional desk calendar tailored for corporate environments. Includes project tracking zones and quarterly overviews.',
-    features: ['Professional Layout', 'Quarterly Views', 'Project Zones', 'Brand Kit Ready', 'Print-ready PDF']
-  },
-  { 
-    id: '3', 
-    name: 'Minimalist Monthly', 
-    creator: 'Clean Designs', 
-    price: 499, 
-    downloads: 890, 
-    requiredTier: 'pro' as const,
-    description: 'Strip away the noise with this minimalist monthly planner. Focus on what matters most with an elegant, white-space driven design.',
-    features: ['Minimalist Aesthetic', 'Monthly Focus', 'Portrait Layout', 'Typographic Polish', 'Dark Mode Optimized']
-  }
-]
+const template = ref<MarketplaceProduct | null>(null)
+const relatedTemplates = ref<MarketplaceProduct[]>([])
+const loading = ref(true)
+const loadError = ref<string | null>(null)
 
-const template = computed(() => {
-  return templates.find(t => t.id === route.params.id) || templates[0]
+const defaultFeatures = ['12 Months', 'A4 & Letter Size', 'High Resolution', 'Customizable Colors', 'Holiday Support']
+
+async function loadTemplate(id?: string | string[]) {
+  if (!id || typeof id !== 'string') {
+    loadError.value = 'Template not found'
+    template.value = null
+    relatedTemplates.value = []
+    loading.value = false
+    return
+  }
+
+  loading.value = true
+  loadError.value = null
+  try {
+    const fetched = await marketplaceService.getTemplateById(id)
+    if (!fetched) {
+      loadError.value = 'Template not found'
+      template.value = null
+      relatedTemplates.value = []
+      return
+    }
+
+    template.value = fetched
+    const related = await marketplaceService.listTemplatesByCreator(fetched.creatorId, 4)
+    relatedTemplates.value = related.filter(r => r.id !== fetched.id)
+  } catch (error) {
+    console.error('[MarketplaceDetail] Failed to load template', error)
+    loadError.value = 'Unable to load template details right now. Please try again shortly.'
+  } finally {
+    loading.value = false
+  }
+}
+
+watch(() => route.params.id, (id) => {
+  loadTemplate(id)
+}, { immediate: true })
+
+const templateTier = computed(() => (template.value?.requiredTier || 'free') as SubscriptionTier)
+const featureList = computed(() => template.value?.features?.length ? template.value.features : defaultFeatures)
+const galleryImages = computed(() => {
+  if (template.value?.thumbnail) {
+    return [template.value.thumbnail]
+  }
+  return []
 })
 
 const isIncluded = computed(() => {
@@ -75,18 +89,46 @@ const buttonText = computed(() => {
 function handleAction() {
   if (!template.value) return
   if (isIncluded.value) {
-    // Logic to add to user's templates
     router.push('/dashboard/projects')
   } else {
-    // Logic for payment flow
     alert('Redirecting to payment...')
   }
+}
+
+function viewRelatedTemplate(id: string) {
+  router.push(`/marketplace/${id}`)
 }
 </script>
 
 <template>
   <MarketplaceLayout>
-    <div v-if="template" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 lg:py-20">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 lg:py-20">
+      <div v-if="loading" class="space-y-12">
+        <div class="animate-pulse h-[400px] rounded-[2.5rem] bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-800"></div>
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div class="lg:col-span-2 space-y-4">
+            <div class="h-6 bg-gray-100 dark:bg-gray-800 rounded"></div>
+            <div class="h-4 bg-gray-100 dark:bg-gray-800 rounded w-1/2"></div>
+            <div class="h-32 bg-gray-100 dark:bg-gray-800 rounded"></div>
+          </div>
+          <div class="space-y-4">
+            <div class="h-12 bg-gray-100 dark:bg-gray-800 rounded"></div>
+            <div class="h-12 bg-gray-100 dark:bg-gray-800 rounded"></div>
+          </div>
+        </div>
+      </div>
+
+      <div
+        v-else-if="loadError"
+        class="bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900 rounded-3xl p-10 text-center"
+      >
+        <h3 class="text-2xl font-display font-bold text-red-600 dark:text-red-200">Unable to load template</h3>
+        <p class="mt-4 text-red-500 dark:text-red-300">{{ loadError }}</p>
+        <AppButton class="mt-6" variant="primary" @click="loadTemplate(route.params.id)">Try again</AppButton>
+      </div>
+
+      <div v-else-if="template" class="space-y-20">
+        <div class="max-w-7xl">
       <!-- Breadcrumbs / Back -->
       <nav class="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-gray-400 mb-8">
         <button @click="router.push('/marketplace')" class="hover:text-primary-600 transition-colors">Marketplace</button>
@@ -98,8 +140,15 @@ function handleAction() {
         <!-- Left: Preview Gallery -->
         <div class="lg:col-span-7 space-y-8">
           <div class="relative aspect-4/3 bg-white dark:bg-gray-900 rounded-[2.5rem] border border-gray-200 dark:border-gray-800 shadow-2xl shadow-gray-200/50 dark:shadow-none overflow-hidden group">
-            <div class="absolute inset-0 bg-linear-to-br from-primary-500/5 to-transparent"></div>
-            <div class="absolute inset-0 flex items-center justify-center">
+            <div v-if="galleryImages.length" class="absolute inset-0">
+              <img 
+                :src="galleryImages[0]"
+                :alt="template.name"
+                class="w-full h-full object-cover"
+                loading="lazy"
+              />
+            </div>
+            <div v-else class="absolute inset-0 flex items-center justify-center">
               <svg class="w-48 h-48 text-gray-100 dark:text-gray-800 group-hover:scale-110 transition-transform duration-1000" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="0.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
@@ -107,7 +156,7 @@ function handleAction() {
             
             <!-- Floating Badges -->
             <div class="absolute top-8 left-8 flex flex-col gap-3">
-              <AppTierBadge :tier="template.requiredTier" size="md" class="shadow-xl" />
+              <AppTierBadge :tier="templateTier" size="md" class="shadow-xl" />
             </div>
 
             <div class="absolute bottom-8 right-8 flex gap-3">
@@ -119,27 +168,43 @@ function handleAction() {
               </button>
             </div>
           </div>
-          
           <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6">
-            <div v-for="i in 4" :key="i" class="aspect-square bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-gray-100 dark:border-gray-800 cursor-pointer hover:border-primary-500 transition-all hover:scale-[1.02]"></div>
+            <template v-if="galleryImages.length">
+              <div
+                v-for="(image, index) in galleryImages"
+                :key="`thumb-${index}`"
+                class="aspect-square bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-gray-100 dark:border-gray-800 overflow-hidden cursor-pointer hover:border-primary-500 transition-all hover:scale-[1.02]"
+              >
+                <img :src="image" :alt="`${template.name} preview ${index + 1}`" class="w-full h-full object-cover" loading="lazy" />
+              </div>
+            </template>
+            <div
+              v-else
+              v-for="i in 4"
+              :key="`placeholder-${i}`"
+              class="aspect-square bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-gray-100 dark:border-gray-800 cursor-pointer hover:border-primary-500 transition-all hover:scale-[1.02]"
+            ></div>
           </div>
         </div>
 
         <!-- Right: Purchase Sidebar -->
         <div class="lg:col-span-5 flex flex-col gap-10">
           <div class="space-y-6">
-            <div class="space-y-2">
-              <div class="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-primary-600 dark:text-primary-400">
-                <StarSolidIcon class="w-3 h-3 text-amber-400" />
-                4.9 Rating • Premium Asset
+              <div class="space-y-3">
+                <div class="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-primary-600 dark:text-primary-400">
+                  <StarSolidIcon class="w-3 h-3 text-amber-400" />
+                  4.9 Rating • Premium Asset
+                </div>
+                <h1 class="text-4xl lg:text-5xl font-display font-black text-gray-900 dark:text-white leading-[1.1] tracking-tight">
+                  {{ template.name }}
+                </h1>
+                <p class="text-lg text-gray-500 dark:text-gray-400 leading-relaxed pt-2">
+                  Created by <span class="font-bold text-gray-900 dark:text-white">{{ template.creatorName }}</span>
+                </p>
+                <p class="text-sm text-gray-400">
+                  {{ template.downloads.toLocaleString() }} downloads
+                </p>
               </div>
-              <h1 class="text-4xl lg:text-5xl font-display font-black text-gray-900 dark:text-white leading-[1.1] tracking-tight">
-                {{ template.name }}
-              </h1>
-              <p class="text-lg text-gray-500 dark:text-gray-400 leading-relaxed pt-2">
-                Created by <span class="font-bold text-gray-900 dark:text-white">{{ template.creator }}</span>
-              </p>
-            </div>
 
             <!-- Pricing Box -->
             <div class="rounded-4xl bg-gray-900 dark:bg-black p-8 text-white relative overflow-hidden shadow-2xl shadow-primary-500/10">
@@ -197,7 +262,11 @@ function handleAction() {
               <div class="space-y-4">
                 <h3 class="text-xs font-black text-gray-400 uppercase tracking-[0.2em]">Key Features</h3>
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div v-for="feature in template.features" :key="feature" class="flex items-center gap-3 text-sm text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800/50 p-3 rounded-xl border border-gray-100 dark:border-gray-800">
+                  <div
+                    v-for="feature in featureList"
+                    :key="feature"
+                    class="flex items-center gap-3 text-sm text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800/50 p-3 rounded-xl border border-gray-100 dark:border-gray-800"
+                  >
                     <div class="w-5 h-5 rounded-full bg-green-500/10 flex items-center justify-center shrink-0">
                       <CheckIcon class="w-3 h-3 text-green-500" />
                     </div>
@@ -217,30 +286,51 @@ function handleAction() {
         </div>
       </div>
 
-      <!-- More from creator -->
-      <section class="mt-32 border-t border-gray-100 dark:border-gray-800 pt-20">
-        <div class="flex items-center justify-between mb-12">
-          <div class="space-y-1">
-            <h2 class="text-3xl font-display font-black text-gray-900 dark:text-white leading-tight">More from {{ template.creator }}</h2>
-            <p class="text-sm text-gray-500">Discover other premium designs by this creator.</p>
-          </div>
-          <AppButton variant="secondary" class="text-[10px] font-black uppercase tracking-widest px-6">View Profile</AppButton>
-        </div>
-        
-        <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-8">
-          <div v-for="i in 4" :key="i" class="group cursor-pointer">
-            <div class="aspect-4/3 bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-gray-100 dark:border-gray-800 overflow-hidden relative group-hover:ring-2 group-hover:ring-primary-500/50 transition-all duration-300">
-               <div class="absolute inset-0 flex items-center justify-center opacity-10">
-                 <StarIcon class="w-12 h-12" />
-               </div>
+        <!-- More from creator -->
+        <section class="border-t border-gray-100 dark:border-gray-800 pt-20">
+          <div class="flex items-center justify-between mb-12">
+            <div class="space-y-1">
+              <h2 class="text-3xl font-display font-black text-gray-900 dark:text-white leading-tight">
+                More from {{ template.creatorName }}
+              </h2>
+              <p class="text-sm text-gray-500">Discover other premium designs by this creator.</p>
             </div>
-            <div class="mt-4 space-y-1">
-              <p class="text-[10px] font-black text-primary-600 uppercase tracking-widest">Wall Calendars</p>
-              <h4 class="font-bold text-gray-900 dark:text-white group-hover:text-primary-600 transition-colors">Alternative Layout {{ i }}</h4>
+            <AppButton variant="secondary" class="text-[10px] font-black uppercase tracking-widest px-6">View Profile</AppButton>
+          </div>
+
+          <div v-if="relatedTemplates.length" class="grid sm:grid-cols-2 lg:grid-cols-4 gap-8">
+            <div
+              v-for="related in relatedTemplates"
+              :key="related.id"
+              class="group cursor-pointer"
+              @click="viewRelatedTemplate(related.id!)"
+            >
+              <div class="aspect-4/3 bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-gray-100 dark:border-gray-800 overflow-hidden relative group-hover:ring-2 group-hover:ring-primary-500/50 transition-all duration-300">
+                <img
+                  v-if="related.thumbnail"
+                  :src="related.thumbnail"
+                  :alt="related.name"
+                  class="w-full h-full object-cover"
+                  loading="lazy"
+                />
+                <div v-else class="absolute inset-0 flex items-center justify-center opacity-10">
+                  <StarIcon class="w-12 h-12" />
+                </div>
+              </div>
+              <div class="mt-4 space-y-1">
+                <p class="text-[10px] font-black text-primary-600 uppercase tracking-widest">{{ related.category }}</p>
+                <h4 class="font-bold text-gray-900 dark:text-white group-hover:text-primary-600 transition-colors">
+                  {{ related.name }}
+                </h4>
+              </div>
             </div>
           </div>
+          <div v-else class="rounded-3xl border border-dashed border-gray-200 dark:border-gray-800 p-10 text-center text-sm text-gray-500 dark:text-gray-400">
+            No other templates from this creator yet.
+          </div>
+        </section>
         </div>
-      </section>
+      </div>
     </div>
   </MarketplaceLayout>
 </template>

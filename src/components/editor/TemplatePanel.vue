@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import type { CalendarTemplate } from '@/data/templates/calendar-templates'
-import { PhotoIcon, DocumentTextIcon } from '@heroicons/vue/24/outline'
-import { StarIcon as StarSolidIcon } from '@heroicons/vue/24/solid'
+import type { MarketplaceProduct } from '@/services/marketplace.service'
+import { PhotoIcon, DocumentTextIcon, LockClosedIcon, ArrowDownTrayIcon } from '@heroicons/vue/24/outline'
+import { StarIcon as StarSolidIcon, FireIcon } from '@heroicons/vue/24/solid'
 import AppTierBadge from '@/components/ui/AppTierBadge.vue'
 import AppCard from '@/components/ui/AppCard.vue'
 import { useAuthStore } from '@/stores'
+import { useRouter } from 'vue-router'
 
 const props = defineProps<{
   categories: { id: string; name: string; icon: string }[]
@@ -15,6 +17,7 @@ const props = defineProps<{
 }>()
 
 const authStore = useAuthStore()
+const router = useRouter()
 
 const emit = defineEmits<{
   (e: 'update:selectedCategory', value: string): void
@@ -25,20 +28,50 @@ function selectCategory(id: string) {
   emit('update:selectedCategory', id)
 }
 
+function getMarketplaceProduct(template: CalendarTemplate): MarketplaceProduct | undefined {
+  return (template as any)._marketplaceProduct
+}
+
+function getTier(template: CalendarTemplate): 'free' | 'pro' | 'business' {
+  const product = getMarketplaceProduct(template)
+  if (product) return product.requiredTier
+  return template.requiredTier || 'free'
+}
+
 function isLocked(template: CalendarTemplate): boolean {
-  if (!template.requiredTier) return false
-  if (template.requiredTier === 'pro') return !authStore.isPro
-  if (template.requiredTier === 'business') return !authStore.isBusiness
+  const tier = getTier(template)
+  if (tier === 'free') return false
+  if (tier === 'pro') return !authStore.isPro
+  if (tier === 'business') return !authStore.isBusiness
   return false
 }
 
 function apply(template: CalendarTemplate) {
-  if (isLocked(template)) return
+  if (isLocked(template)) {
+    // Redirect to pricing/upgrade page
+    router.push('/settings/billing')
+    return
+  }
   emit('apply', template)
 }
 
 function renderStars(rating: number) {
   return Math.round(rating)
+}
+
+function getDownloads(template: CalendarTemplate): number {
+  const product = getMarketplaceProduct(template)
+  return product?.downloads || 0
+}
+
+function isPopular(template: CalendarTemplate): boolean {
+  const product = getMarketplaceProduct(template)
+  return product?.isPopular || template.popular || false
+}
+
+function isNew(template: CalendarTemplate): boolean {
+  const product = getMarketplaceProduct(template)
+  return product?.isNew || false
 }
 </script>
 
@@ -100,6 +133,20 @@ function renderStars(rating: number) {
             <!-- Compact badges -->
             <div class="absolute top-1 left-1 flex gap-0.5 z-20">
               <span
+                v-if="isPopular(template)"
+                class="px-1 py-0.5 rounded bg-amber-500 flex items-center justify-center text-[7px] text-white font-bold"
+                title="Popular"
+              >
+                <FireIcon class="w-2.5 h-2.5 mr-0.5" />
+              </span>
+              <span
+                v-if="isNew(template)"
+                class="px-1 py-0.5 rounded bg-green-500 text-[7px] text-white font-bold"
+                title="New"
+              >
+                NEW
+              </span>
+              <span
                 v-if="template.preview.hasPhotoArea"
                 class="w-4 h-4 rounded bg-black/50 flex items-center justify-center backdrop-blur"
                 title="Has photo area"
@@ -115,9 +162,13 @@ function renderStars(rating: number) {
               </span>
             </div>
 
-            <!-- Tier Badge -->
-            <div v-if="isLocked(template)" class="absolute top-1 right-1 z-20">
-              <AppTierBadge :tier="template.requiredTier" size="sm" />
+            <!-- Tier Badge / Lock -->
+            <div class="absolute top-1 right-1 z-20">
+              <div v-if="isLocked(template)" class="flex items-center gap-0.5">
+                <LockClosedIcon class="w-3 h-3 text-white drop-shadow" />
+                <AppTierBadge :tier="getTier(template)" size="sm" />
+              </div>
+              <AppTierBadge v-else-if="getTier(template) !== 'free'" :tier="getTier(template)" size="sm" />
             </div>
 
             <!-- Hover overlay -->
@@ -146,10 +197,10 @@ function renderStars(rating: number) {
                 class="w-2.5 h-2.5 text-amber-400"
               />
             </div>
-            <span
-              v-if="template.popular"
-              class="ml-auto text-[7px] bg-primary-100 dark:bg-primary-900/50 text-primary-600 dark:text-primary-300 px-1 py-0.5 rounded font-semibold uppercase"
-            >★</span>
+            <div v-if="getDownloads(template) > 0" class="flex items-center gap-0.5 ml-auto text-[8px] text-gray-400">
+              <ArrowDownTrayIcon class="w-2.5 h-2.5" />
+              {{ getDownloads(template) }}
+            </div>
           </div>
         </div>
       </AppCard>

@@ -3,26 +3,47 @@ import { ref, computed } from 'vue'
 import { pdfExportService } from '@/services/export/pdf.service'
 import { imageExportService } from '@/services/export/image.service'
 import { exportJobsService } from '@/services/export/export-jobs.service'
-import { renderTemplateOnCanvas } from '@/services/editor/template-renderer'
-import {
-  calendarTemplates,
-  type CalendarTemplate,
-  buildTemplateInstance,
-  resolveTemplateOptions,
-} from '@/data/templates/calendar-templates'
+import { calendarTemplates, type CalendarTemplate } from '@/data/templates/calendar-templates'
 import { useEditorStore } from './editor.store'
 import { useAuthStore } from './auth.store'
+import { useCalendarStore } from './calendar.store'
 import { isFeatureEnabled } from '@/config/features'
+import { buildCalendarGridGraphics } from '@/stores/editor/graphics-builders'
 import type { 
   ExportConfig, 
   ExportFormat, 
   ExportJob,
 } from '@/types'
+import type { CanvasElementMetadata } from '@/types'
 import { QUALITY_DPI } from '@/types/export.types'
 
 export const useExportStore = defineStore('export', () => {
   const editorStore = useEditorStore()
   const authStore = useAuthStore()
+  const calendarStore = useCalendarStore()
+
+  function canvasHasEmbeddedWatermark(): boolean {
+    const canvas = editorStore.canvas
+    if (!canvas) return false
+    const objects = (canvas.getObjects?.() ?? []) as any[]
+
+    return objects.some((obj) => {
+      if (!obj) return false
+      if (obj?.data?.watermark) return true
+
+      const name = String(obj?.name ?? '').toLowerCase()
+      if (name.includes('watermark')) return true
+
+      if (obj?.type === 'textbox') {
+        const text = String(obj?.text ?? '').toLowerCase()
+        if (text.includes('calendarcreator')) return true
+        if (text.includes('calendar creator')) return true
+        if (text.includes('created with calendarcreator')) return true
+      }
+
+      return false
+    })
+  }
 
   // ═══════════════════════════════════════════════════════════════
   // STATE
@@ -220,7 +241,7 @@ export const useExportStore = defineStore('export', () => {
       progress.value = 80
 
       // Add watermark if needed
-      if (needsWatermark.value && format !== 'svg') {
+      if (needsWatermark.value && format !== 'svg' && format !== 'pdf' && !canvasHasEmbeddedWatermark()) {
         blob = await addWatermark(blob, format)
       }
 
@@ -332,22 +353,30 @@ export const useExportStore = defineStore('export', () => {
     return template
   }
 
-  function buildCustomizedTemplate(template: CalendarTemplate): CalendarTemplate {
-    const projectOptions = editorStore.project?.config.templateOptions
-    const resolvedOptions = resolveTemplateOptions(template, projectOptions || {})
-    return buildTemplateInstance(template, resolvedOptions)
-  }
-
   async function exportAsYearPDF(months?: number[]): Promise<Blob> {
     if (!editorStore.canvas || !editorStore.project) throw new Error('Canvas not found')
 
-    const year = editorStore.project.config.year ?? new Date().getFullYear()
-    const baseTemplate = getTemplateForExport()
-    const template = buildCustomizedTemplate(baseTemplate)
+    const year =
+      editorStore.project.config.year ??
+      calendarStore.config.year ??
+      new Date().getFullYear()
+
+    const baseTemplate = (() => {
+      try {
+        return getTemplateForExport()
+      } catch {
+        return null
+      }
+    })()
 
     const exportConfig: ExportConfig = {
       ...config.value,
-      orientation: baseTemplate.config.layout === 'landscape' ? 'landscape' : 'portrait',
+      orientation:
+        baseTemplate?.config.layout === 'landscape'
+          ? 'landscape'
+          : baseTemplate?.config.layout === 'portrait'
+            ? 'portrait'
+            : config.value.orientation,
     }
 
     const originalState = editorStore.getCanvasState()
@@ -365,12 +394,80 @@ export const useExportStore = defineStore('export', () => {
         statusText.value = `Rendering month ${i + 1}/${total}…`
         progress.value = 20 + Math.round((i / total) * 60)
         await yieldToUI()
-        await renderTemplateOnCanvas(
-          editorStore.canvas,
-          template,
-          { year, month },
-          { preserveUserObjects },
-        )
+
+        // Use the current canvas design as the base for every month.
+        // Then update calendar grid metadata to the target month/year.
+        await editorStore.canvas.loadFromJSON(originalState).then(() => {
+          editorStore.canvas?.renderAll()
+        })
+
+        // Optionally strip user objects when the user wants template-only output.
+        if (!preserveUserObjects) {
+          const objects = editorStore.canvas.getObjects() as any[]
+          objects.forEach((obj) => {
+            const kind = (obj as any)?.data?.elementMetadata?.kind as string | undefined
+            const keep = kind === 'calendar-grid' || kind === 'week-strip' || kind === 'date-cell'
+            if (!keep) {
+              try {
+                editorStore.canvas?.remove(obj)
+              } catch {
+                // ignore
+              }
+            }
+          })
+        }
+
+        // Rebuild calendar grid objects so the visuals match the existing design,
+        // without generating extra title textboxes outside the grid.
+        const objects = editorStore.canvas.getObjects() as any[]
+        objects.forEach((obj, idx) => {
+          const metadata = (obj as any)?.data?.elementMetadata as CanvasElementMetadata | undefined
+          if (!metadata || metadata.kind !== 'calendar-grid') return
+
+          const nextMeta = {
+            ...metadata,
+            year,
+            month,
+          }
+
+          const rebuilt = buildCalendarGridGraphics(nextMeta as any, editorStore.getHolidaysForCalendarYear)
+
+          // Preserve transform/style from the existing object.
+          const left = (obj as any).left ?? 0
+          const top = (obj as any).top ?? 0
+          rebuilt.set({
+            left,
+            top,
+            scaleX: (obj as any).scaleX ?? 1,
+            scaleY: (obj as any).scaleY ?? 1,
+            angle: (obj as any).angle ?? 0,
+            originX: (obj as any).originX ?? 'left',
+            originY: (obj as any).originY ?? 'top',
+            skewX: (obj as any).skewX ?? 0,
+            skewY: (obj as any).skewY ?? 0,
+            flipX: (obj as any).flipX ?? false,
+            flipY: (obj as any).flipY ?? false,
+            opacity: (obj as any).opacity ?? 1,
+            selectable: (obj as any).selectable ?? false,
+            evented: (obj as any).evented ?? false,
+          })
+
+          ;(rebuilt as any).id = (obj as any).id
+          ;(rebuilt as any).name = (obj as any).name
+          rebuilt.set('data', {
+            ...((obj as any).data ?? {}),
+            elementMetadata: nextMeta,
+          })
+
+          try {
+            editorStore.canvas?.remove(obj)
+            editorStore.canvas?.add(rebuilt as any)
+            ;(editorStore.canvas as any)?.moveTo?.(rebuilt as any, idx)
+          } catch {
+            // ignore
+          }
+        })
+        editorStore.canvas.renderAll()
 
         statusText.value = `Generating PDF page ${i + 1}/${total}…`
         await yieldToUI()

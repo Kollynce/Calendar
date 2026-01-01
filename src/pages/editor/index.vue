@@ -5,14 +5,6 @@ import { useEditorStore } from '@/stores/editor.store'
 import { useCalendarStore } from '@/stores/calendar.store'
 import { useAuthStore } from '@/stores/auth.store'
 import { storeToRefs } from 'pinia'
-import {
-  calendarTemplates,
-  templateCategories,
-  type CalendarTemplate,
-  buildTemplateInstance,
-  getTemplateDefaultOptions,
-  resolveTemplateOptions,
-} from '@/data/templates/calendar-templates'
 import { 
   ArrowLeftIcon, 
   ArrowDownTrayIcon, 
@@ -26,7 +18,6 @@ import {
   TrashIcon,
 } from '@heroicons/vue/24/outline'
 import ExportModal from '@/components/export/ExportModal.vue'
-// import TypographyProperties from '@/components/editor/properties/TypographyProperties.vue'
 import CalendarConfigPanel from '@/components/editor/CalendarConfigPanel.vue'
 import EditorLayers from '@/components/editor/EditorLayers.vue'
 import TemplatePanel from '@/components/editor/TemplatePanel.vue'
@@ -46,7 +37,7 @@ import {
   TransitionRoot,
 } from '@headlessui/vue'
 import { MegaphoneIcon } from '@heroicons/vue/24/outline'
-import { renderTemplateOnCanvas, generateTemplateThumbnail } from '@/services/editor/template-renderer'
+import { useTemplates } from './composables/useTemplates'
 import { marketplaceService, type MarketplaceProduct } from '@/services/marketplace.service'
 import { getPresetByCanvasSize } from '@/config/canvas-presets'
 import {
@@ -57,16 +48,7 @@ import {
   type UploadCategory,
 } from '@/services/storage/user-uploads.service'
 import type {
-  // CanvasElementMetadata,
-  // CalendarGridMetadata,
   TemplateOptions,
-  // WeekStripMetadata,
-  // DateCellMetadata,
-  // PlannerNoteMetadata,
-  // PlannerPatternVariant,
-  // PlannerHeaderStyle,
-  // ScheduleMetadata,
-  // ChecklistMetadata,
 } from '@/types'
 import { DEFAULT_TEMPLATE_OPTIONS } from '@/config/editor-defaults'
 
@@ -109,10 +91,26 @@ const activeUploadList = computed(() =>
   })),
 )
 const isAuthenticated = computed(() => !!authStore.user?.id)
-const selectedTemplateCategory = ref('all')
-const templateThumbnails = ref<Record<string, string>>({})
-const thumbnailsLoading = ref(false)
-const activeTemplateId = ref<string | null>(null)
+
+// Use the useTemplates composable for template management
+const {
+  selectedTemplateCategory,
+  templateThumbnails,
+  thumbnailsLoading,
+  filteredTemplates,
+  activeTemplate,
+  templateSupportsPhoto,
+  templateSupportsNotes,
+  allTemplates,
+  templateCategories,
+  applyTemplate,
+  loadTemplateThumbnails,
+  resetTemplateOverrides,
+  renderTemplateWithOverrides,
+} = useTemplates(
+  () => calendarStore.currentMonthData?.month || new Date().getMonth(),
+  () => ({ width: canvasSize.value.width, height: canvasSize.value.height })
+)
 
 // Panel visibility state for Adobe-style collapsible UI
 const isRightSidebarVisible = ref(true)
@@ -292,15 +290,19 @@ async function handlePublishToMarketplace(productData: any) {
       throw new Error('User not authenticated or missing user ID')
     }
 
+    const canvasState = editorStore.getCanvasState() ?? editorStore.project.canvas ?? null
+
     const product: MarketplaceProduct = {
       ...productData,
       creatorId: authStore.user.id,
       creatorName: authStore.user.displayName || 'Admin',
       thumbnail: editorStore.project.thumbnail,
+      sourceProjectId: editorStore.project.id,
       templateData: {
         config: editorStore.project.config,
-        canvas: editorStore.project.canvas,
       },
+      canvasState,
+      canvasObjects: canvasState?.objects ?? [],
       downloads: 0,
     }
 
@@ -370,9 +372,7 @@ const canvasOrientation = computed(() => {
 })
 
 const canvasPreset = computed(() => getPresetByCanvasSize(canvasSize.value.width, canvasSize.value.height))
-const activeMonth = computed(() => {
-  return calendarStore.config.currentMonth ?? editorStore.project?.config.currentMonth ?? 1
-})
+
 
 const canvasSizeLabel = computed(() => {
   const presetLabel = canvasPreset.value?.label
@@ -392,67 +392,6 @@ const tools = [
   { id: 'text', name: 'Text', icon: DocumentTextIcon },
   { id: 'calendar', name: 'Calendar', icon: CalendarDaysIcon },
 ]
-
-function getCanvasSizeForTemplate(template: CalendarTemplate) {
-  return template.config.layout === 'landscape'
-    ? PAPER_SIZES.landscape
-    : PAPER_SIZES.portrait
-}
-
-interface RenderOptions {
-  recordHistory?: boolean
-}
-
-async function renderTemplateWithOverrides(
-  template: CalendarTemplate,
-  options: RenderOptions = {},
-) {
-  const { recordHistory = true } = options
-
-  if (!editorStore.canvas) return
-
-  const customizedTemplate = buildTemplateInstance(template, templateOverrides.value)
-
-  let renderWidth = canvasSize.value.width
-  let renderHeight = canvasSize.value.height
-  const targetSize = getCanvasSizeForTemplate(customizedTemplate)
-
-  const needsOrientationSwitch =
-    !renderWidth ||
-    !renderHeight ||
-    (customizedTemplate.config.layout === 'landscape' && renderWidth <= renderHeight) ||
-    (customizedTemplate.config.layout === 'portrait' && renderWidth >= renderHeight)
-
-  if (needsOrientationSwitch) {
-    renderWidth = targetSize.width
-    renderHeight = targetSize.height
-    editorStore.setCanvasSize(renderWidth, renderHeight)
-    await nextTick()
-    editorStore.canvas?.calcOffset()
-  }
-
-  await renderTemplateOnCanvas(
-    editorStore.canvas,
-    customizedTemplate,
-    {
-      year: editorStore.project?.config.year ?? new Date().getFullYear(),
-      month: activeMonth.value,
-      canvasWidth: renderWidth ?? PAPER_SIZES.portrait.width,
-      canvasHeight: renderHeight ?? PAPER_SIZES.portrait.height,
-      getHolidaysForYear: editorStore.getHolidaysForCalendarYear,
-    },
-    { preserveUserObjects: true },
-  )
-
-  if (recordHistory) {
-    editorStore.snapshotCanvasState()
-  }
-}
-
-function resetTemplateOverrides() {
-  if (!activeTemplate.value) return
-  templateOverrides.value = getTemplateDefaultOptions(activeTemplate.value)
-}
 
 watch(
   templateOverrides,
@@ -475,56 +414,6 @@ onBeforeUnmount(() => {
   }
 })
 
-// Filtered templates based on category
-const filteredTemplates = computed(() => {
-  if (selectedTemplateCategory.value === 'all') return calendarTemplates
-  return calendarTemplates.filter((t) => t.category === selectedTemplateCategory.value)
-})
-
-const activeTemplate = computed(() => {
-  if (!activeTemplateId.value) return null
-  return calendarTemplates.find((t) => t.id === activeTemplateId.value) || null
-})
-
-async function syncTemplateUiFromProject(): Promise<void> {
-  const templateId = editorStore.project?.templateId
-  if (!templateId) return
-
-  const template = calendarTemplates.find((t) => t.id === templateId) || null
-  if (!template) return
-
-  isApplyingTemplate.value = true
-  isSyncingTemplateUiFromProject.value = true
-  activeTemplateId.value = template.id
-
-  const projectOptions = editorStore.project?.config.templateOptions
-  templateOverrides.value = resolveTemplateOptions(template, projectOptions || {})
-
-  await nextTick()
-  isSyncingTemplateUiFromProject.value = false
-  isApplyingTemplate.value = false
-}
-
-watch(
-  () => editorStore.project?.templateId,
-  (next, prev) => {
-    if (isApplyingTemplate.value) return
-    if (!next || next === prev) return
-    void syncTemplateUiFromProject()
-  },
-  { immediate: true },
-)
-
-watch(
-  () => editorStore.project?.config.templateOptions,
-  () => {
-    if (isApplyingTemplate.value) return
-    if (!editorStore.project?.templateId) return
-    void syncTemplateUiFromProject()
-  },
-  { deep: true },
-)
-
 watch(
   () => calendarStore.config.currentMonth,
   (month) => {
@@ -534,9 +423,6 @@ watch(
   { immediate: true },
 )
 
-const templateSupportsPhoto = computed(() => !!activeTemplate.value?.preview.photoPosition)
-const templateSupportsNotes = computed(() => !!activeTemplate.value?.preview.notesPosition)
-
 watch(
   () => selectedObjects.value.length,
   (len) => {
@@ -544,303 +430,6 @@ watch(
   },
   { immediate: true },
 )
-
-// Computed
-// const selectedObject = computed(() => selectedObjects.value[0])
-
-// const objectType = computed(() => {
-//   if (!selectedObject.value) return null
-//   return selectedObject.value.type
-// })
-
-// // Text properties (two-way binding with canvas)
-// const textContent = computed({
-//   get: () => (selectedObject.value as any)?.text || '',
-//   set: (value) => editorStore.updateObjectProperty('text', value),
-// })
-
-// // Shape properties
-// const fillColor = computed({
-//   get: () => (selectedObject.value as any)?.fill || '#3b82f6',
-//   set: (value) => editorStore.updateObjectProperty('fill', value),
-// })
-
-// const strokeColor = computed({
-//   get: () => (selectedObject.value as any)?.stroke || '',
-//   set: (value) => editorStore.updateObjectProperty('stroke', value),
-// })
-
-// const strokeWidth = computed({
-//   get: () => (selectedObject.value as any)?.strokeWidth || 0,
-//   set: (value) => editorStore.updateObjectProperty('strokeWidth', value),
-// })
-
-// const cornerRadius = computed({
-//   get: () => (selectedObject.value as any)?.rx || 0,
-//   set: (value) => {
-//     editorStore.updateObjectProperty('rx', value)
-//     editorStore.updateObjectProperty('ry', value)
-//   },
-// })
-
-// const isArrow = computed(() => {
-//   const obj: any = selectedObject.value as any
-//   if (!obj) return false
-//   if (obj.type === 'group' && obj?.data?.shapeKind === 'arrow') return true
-//   if (obj.type !== 'group') return false
-//   const parts = (obj?._objects ?? []).map((o: any) => o?.data?.arrowPart).filter(Boolean)
-//   return parts.includes('line') && (parts.includes('startHead') || parts.includes('endHead'))
-// })
-
-// const isLineOrArrow = computed(() => {
-//   const obj: any = selectedObject.value as any
-//   return obj?.type === 'line' || isArrow.value
-// })
-
-// const lineStrokeColor = computed({
-//   get: () => {
-//     const obj: any = selectedObject.value as any
-//     if (isArrow.value) return obj?.data?.arrowOptions?.stroke ?? '#000000'
-//     return obj?.stroke ?? '#000000'
-//   },
-//   set: (value) => editorStore.updateObjectProperty('stroke', value),
-// })
-
-// const lineStrokeWidth = computed({
-//   get: () => {
-//     const obj: any = selectedObject.value as any
-//     if (isArrow.value) return Number(obj?.data?.arrowOptions?.strokeWidth ?? 2) || 2
-//     return Number(obj?.strokeWidth ?? 0) || 0
-//   },
-//   set: (value) => editorStore.updateObjectProperty('strokeWidth', Number(value) || 0),
-// })
-
-// const lineCap = computed({
-//   get: () => {
-//     const obj: any = selectedObject.value as any
-//     const line = isArrow.value ? obj?._objects?.find((o: any) => o?.data?.arrowPart === 'line') : obj
-//     return line?.strokeLineCap ?? 'butt'
-//   },
-//   set: (value) => editorStore.updateObjectProperty('strokeLineCap', value),
-// })
-
-// const lineJoin = computed({
-//   get: () => {
-//     const obj: any = selectedObject.value as any
-//     const line = isArrow.value ? obj?._objects?.find((o: any) => o?.data?.arrowPart === 'line') : obj
-//     return line?.strokeLineJoin ?? 'miter'
-//   },
-//   set: (value) => editorStore.updateObjectProperty('strokeLineJoin', value),
-// })
-
-// const dashStyle = computed({
-//   get: () => {
-//     const obj: any = selectedObject.value as any
-//     const line = isArrow.value ? obj?._objects?.find((o: any) => o?.data?.arrowPart === 'line') : obj
-//     const dash = line?.strokeDashArray
-//     if (!dash || dash.length === 0) return 'solid'
-//     const key = JSON.stringify(dash)
-//     if (key === JSON.stringify([10, 8])) return 'dashed'
-//     if (key === JSON.stringify([2, 6])) return 'dotted'
-//     if (key === JSON.stringify([20, 10, 6, 10])) return 'dash-dot'
-//     return 'solid'
-//   },
-//   set: (value) => {
-//     if (value === 'solid') editorStore.updateObjectProperty('strokeDashArray', undefined)
-//     else if (value === 'dashed') editorStore.updateObjectProperty('strokeDashArray', [10, 8])
-//     else if (value === 'dotted') editorStore.updateObjectProperty('strokeDashArray', [2, 6])
-//     else if (value === 'dash-dot') editorStore.updateObjectProperty('strokeDashArray', [20, 10, 6, 10])
-//   },
-// })
-
-// const arrowEnds = computed({
-//   get: () => {
-//     const obj: any = selectedObject.value as any
-//     return obj?.data?.arrowOptions?.arrowEnds ?? 'end'
-//   },
-//   set: (value) => editorStore.updateObjectProperty('arrowEnds', value),
-// })
-
-// const arrowHeadStyle = computed({
-//   get: () => {
-//     const obj: any = selectedObject.value as any
-//     return obj?.data?.arrowOptions?.arrowHeadStyle ?? 'filled'
-//   },
-//   set: (value) => editorStore.updateObjectProperty('arrowHeadStyle', value),
-// })
-
-// const arrowHeadLength = computed({
-//   get: () => {
-//     const obj: any = selectedObject.value as any
-//     return Number(obj?.data?.arrowOptions?.arrowHeadLength ?? 18) || 18
-//   },
-//   set: (value) => editorStore.updateObjectProperty('arrowHeadLength', Math.max(4, Number(value) || 4)),
-// })
-
-// const arrowHeadWidth = computed({
-//   get: () => {
-//     const obj: any = selectedObject.value as any
-//     return Number(obj?.data?.arrowOptions?.arrowHeadWidth ?? 14) || 14
-//   },
-//   set: (value) => editorStore.updateObjectProperty('arrowHeadWidth', Math.max(4, Number(value) || 4)),
-// })
-
-// const opacity = computed({
-//   get: () => ((selectedObject.value as any)?.opacity || 1) * 100,
-//   set: (value) => editorStore.updateObjectProperty('opacity', value / 100),
-// })
-
-// const positionX = computed({
-//   get: () => Math.round(((selectedObject.value as any)?.left ?? 0) as number),
-//   set: (value) => editorStore.updateObjectProperty('left', Number(value) || 0),
-// })
-
-// const positionY = computed({
-//   get: () => Math.round(((selectedObject.value as any)?.top ?? 0) as number),
-//   set: (value) => editorStore.updateObjectProperty('top', Number(value) || 0),
-// })
-
-// const elementMetadata = computed<CanvasElementMetadata | null>(() => {
-//   // Ensure this recomputes on selection changes (Fabric active object isn't reactive).
-//   void selectedObjects.value
-//   return editorStore.getActiveElementMetadata()
-// })
-
-// const calendarMetadata = computed<CalendarGridMetadata | null>(() =>
-//   elementMetadata.value?.kind === 'calendar-grid' ? elementMetadata.value : null,
-// )
-
-// const weekStripMetadata = computed<WeekStripMetadata | null>(() =>
-//   elementMetadata.value?.kind === 'week-strip' ? elementMetadata.value : null,
-// )
-
-// const dateCellMetadata = computed<DateCellMetadata | null>(() =>
-//   elementMetadata.value?.kind === 'date-cell' ? elementMetadata.value : null,
-// )
-
-// const scheduleMetadata = computed<ScheduleMetadata | null>(() =>
-//   elementMetadata.value?.kind === 'schedule' ? elementMetadata.value : null,
-// )
-
-// const checklistMetadata = computed<ChecklistMetadata | null>(() =>
-//   elementMetadata.value?.kind === 'checklist' ? elementMetadata.value : null,
-// )
-
-// const plannerNoteMetadata = computed<PlannerNoteMetadata | null>(() =>
-//   elementMetadata.value?.kind === 'planner-note' ? elementMetadata.value : null,
-// )
-
-// function updateScheduleMetadata(updater: (draft: ScheduleMetadata) => void) {
-//   editorStore.updateSelectedElementMetadata((metadata) => {
-//     if (metadata.kind !== 'schedule') return null
-//     updater(metadata)
-//     return metadata
-//   })
-// }
-
-// function updateChecklistMetadata(updater: (draft: ChecklistMetadata) => void) {
-//   editorStore.updateSelectedElementMetadata((metadata) => {
-//     if (metadata.kind !== 'checklist') return null
-//     updater(metadata)
-//     return metadata
-//   })
-// }
-
-// function updatePlannerMetadata(updater: (draft: PlannerNoteMetadata) => void) {
-//   editorStore.updateSelectedElementMetadata((metadata) => {
-//     if (metadata.kind !== 'planner-note') return null
-//     updater(metadata)
-//     return metadata
-//   })
-// }
-
-// function updateCalendarMetadata(updater: (draft: CalendarGridMetadata) => void) {
-//   editorStore.updateSelectedElementMetadata((metadata) => {
-//     if (metadata.kind !== 'calendar-grid') return null
-//     updater(metadata)
-//     return metadata
-//   })
-// }
-
-// function updateWeekStripMetadata(updater: (draft: WeekStripMetadata) => void) {
-//   editorStore.updateSelectedElementMetadata((metadata) => {
-//     if (metadata.kind !== 'week-strip') return null
-//     updater(metadata)
-//     return metadata
-//   })
-// }
-
-// function updateDateCellMetadata(updater: (draft: DateCellMetadata) => void) {
-//   editorStore.updateSelectedElementMetadata((metadata) => {
-//     if (metadata.kind !== 'date-cell') return null
-//     updater(metadata)
-//     return metadata
-//   })
-// }
-
-
-// const elementSize = computed(() => {
-//   const meta = elementMetadata.value as any
-//   if (!meta || !meta.size) return null
-//   return meta.size as { width: number; height: number }
-// })
-
-// function updateElementSize(next: { width: number; height: number }) {
-//   editorStore.updateSelectedElementMetadata((metadata) => {
-//     const draft: any = metadata as any
-//     if (!draft.size) return null
-//     draft.size.width = Math.max(10, Number(next.width) || draft.size.width)
-//     draft.size.height = Math.max(10, Number(next.height) || draft.size.height)
-//     return metadata
-//   })
-// }
-
-// const objectWidth = computed({
-//   get: () => {
-//     if (!selectedObject.value) return 0
-//     return Math.round(selectedObject.value.getScaledWidth())
-//   },
-//   set: (value) => {
-//     if (!selectedObject.value) return
-//     const target = Math.max(1, Number(value) || 1)
-//     const base = (selectedObject.value as any).width || selectedObject.value.getScaledWidth() || 1
-//     const nextScale = target / base
-//     editorStore.updateObjectProperty('scaleX', nextScale)
-//   },
-// })
-
-// const objectHeight = computed({
-//   get: () => {
-//     if (!selectedObject.value) return 0
-//     return Math.round(selectedObject.value.getScaledHeight())
-//   },
-//   set: (value) => {
-//     if (!selectedObject.value) return
-//     const target = Math.max(1, Number(value) || 1)
-//     const base = (selectedObject.value as any).height || selectedObject.value.getScaledHeight() || 1
-//     const nextScale = target / base
-//     editorStore.updateObjectProperty('scaleY', nextScale)
-//   },
-// })
-
-// const scheduleIntervalOptions: { value: ScheduleMetadata['intervalMinutes']; label: string }[] = [
-//   { value: 30, label: '30 min' },
-//   { value: 60, label: '60 min' },
-// ]
-
-// const headerStyleOptions: { value: PlannerHeaderStyle; label: string }[] = [
-//   { value: 'none', label: 'None' },
-//   { value: 'minimal', label: 'Minimal' },
-//   { value: 'tint', label: 'Tint' },
-//   { value: 'filled', label: 'Filled' },
-// ]
-
-// const plannerPatternOptions: { value: PlannerPatternVariant; label: string }[] = [
-//   { value: 'hero', label: 'Hero Banner' },
-//   { value: 'ruled', label: 'Ruled Lines' },
-//   { value: 'grid', label: 'Grid' },
-//   { value: 'dot', label: 'Dot Grid' },
-// ]
 
 const projectName = computed({
   get: () => editorStore.project?.name || 'Untitled Calendar',
@@ -997,296 +586,6 @@ onBeforeUnmount(() => {
   editorStore.destroyCanvas()
 })
 
-// Template Functions
-async function applyTemplate(template: CalendarTemplate) {
-  if (template.presetId) {
-    await applyPlannerPreset(template.presetId)
-    return
-  }
-  if (!editorStore.canvas) return
-  isApplyingTemplate.value = true
-  activeTemplateId.value = template.id
-  editorStore.setProjectTemplateId(template.id)
-  templateOverrides.value = getTemplateDefaultOptions(template)
-
-  editorStore.updateTemplateOptions({ ...templateOverrides.value })
-
-  await renderTemplateWithOverrides(template)
-  await nextTick()
-  isApplyingTemplate.value = false
-}
-
-async function loadTemplateThumbnails() {
-  thumbnailsLoading.value = true
-  const entries = await Promise.all(
-    calendarTemplates.map(async (template) => {
-      if (template.presetId === 'daily-pastel') {
-        return [template.id, buildPlannerPresetThumbnail('pastel')] as const
-      }
-      if (template.presetId === 'daily-minimal') {
-        return [template.id, buildPlannerPresetThumbnail('minimal')] as const
-      }
-      const dataUrl = await generateTemplateThumbnail(template, { multiplier: 0.28 })
-      return [template.id, dataUrl] as const
-    })
-  )
-  templateThumbnails.value = Object.fromEntries(entries)
-  thumbnailsLoading.value = false
-}
-
-function buildPlannerPresetThumbnail(variant: 'pastel' | 'minimal'): string {
-  const accentA = variant === 'pastel' ? '#a855f7' : '#f59e0b'
-  const accentB = variant === 'pastel' ? '#ec4899' : '#84cc16'
-  const stroke = '#e2e8f0'
-  const bg = '#ffffff'
-
-  const focusLines = Array.from({ length: 9 })
-    .map((_, i) => {
-      const y = 150 + i * 22
-      return `<rect x="68" y="${y}" width="150" height="2" fill="#e5e7eb"/>`
-    })
-    .join('')
-
-  const todoRows = Array.from({ length: 6 })
-    .map((_, i) => {
-      const y = 282 + i * 20
-      return `
-        <rect x="258" y="${y}" width="10" height="10" rx="3" fill="none" stroke="${accentA}" stroke-width="2"/>
-        <rect x="276" y="${y + 4}" width="44" height="2" fill="#e5e7eb"/>
-      `
-    })
-    .join('')
-
-  const svg = `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="360" height="480" viewBox="0 0 360 480">
-  <rect x="0" y="0" width="360" height="480" fill="#f8fafc"/>
-  <rect x="26" y="22" width="308" height="436" rx="18" ry="18" fill="${bg}" stroke="${stroke}" stroke-width="2"/>
-
-  <text x="52" y="68" font-family="Inter, Arial" font-size="22" font-weight="700" fill="#111827">Daily Planner</text>
-  <rect x="232" y="56" width="78" height="10" rx="5" fill="#cbd5e1" opacity="0.85"/>
-
-  <rect x="52" y="98" width="182" height="260" rx="16" fill="#ffffff" stroke="${stroke}" stroke-width="2"/>
-  <rect x="52" y="112" width="182" height="8" fill="${accentA}" opacity="0.9"/>
-  <text x="68" y="132" font-family="Inter, Arial" font-size="12" font-weight="700" fill="#111827">Today's Focus</text>
-  ${focusLines}
-
-  <rect x="246" y="98" width="84" height="120" rx="16" fill="#ffffff" stroke="${stroke}" stroke-width="2"/>
-  <rect x="246" y="112" width="84" height="8" fill="${accentB}" opacity="0.9"/>
-  <text x="258" y="132" font-family="Inter, Arial" font-size="12" font-weight="700" fill="#111827">Top Priority</text>
-
-  <rect x="246" y="234" width="84" height="170" rx="16" fill="#ffffff" stroke="${stroke}" stroke-width="2"/>
-  <rect x="246" y="248" width="84" height="18" rx="9" fill="${accentA}" opacity="0.18"/>
-  <text x="258" y="262" font-family="Inter, Arial" font-size="12" font-weight="700" fill="#111827">To-Do</text>
-  ${todoRows}
-
-  <rect x="246" y="416" width="84" height="28" rx="14" fill="#ffffff" stroke="${stroke}" stroke-width="2" opacity="0.0"/>
-</svg>`
-
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
-}
-
-async function applyPlannerPreset(presetId: 'daily-pastel' | 'daily-minimal') {
-  if (!editorStore.canvas) return
-
-  editorStore.setCanvasSize(PAPER_SIZES.portrait.width, PAPER_SIZES.portrait.height)
-  await nextTick()
-  editorStore.setZoom(1)
-  await nextTick()
-  editorStore.canvas.calcOffset()
-
-  editorStore.canvas.clear()
-  editorStore.canvas.backgroundColor = '#ffffff'
-
-  if (presetId === 'daily-pastel') {
-    editorStore.addObject('text', {
-      content: 'Today is a good day!',
-      x: 372,
-      y: 54,
-      fontSize: 34,
-      fontFamily: 'Outfit',
-      fontWeight: 700,
-      textAlign: 'center',
-      originX: 'center',
-      color: '#1f2937',
-    })
-    editorStore.addObject('text', {
-      content: 'Daily Planner',
-      x: 372,
-      y: 96,
-      fontSize: 18,
-      fontFamily: 'Inter',
-      fontWeight: 600,
-      textAlign: 'center',
-      originX: 'center',
-      color: '#ec4899',
-    })
-
-    editorStore.addObject('text', {
-      content: 'Date:',
-      x: 540,
-      y: 140,
-      fontSize: 12,
-      fontFamily: 'Inter',
-      fontWeight: 700,
-      color: '#6b7280',
-    })
-    editorStore.addObject('shape', {
-      x: 580,
-      y: 156,
-      width: 120,
-      stroke: '#cbd5e1',
-      strokeWidth: 2,
-      shapeType: 'line',
-    })
-
-    editorStore.addObject('schedule', {
-      x: 60,
-      y: 170,
-      width: 380,
-      height: 650,
-      title: 'Schedule',
-      accentColor: '#a855f7',
-      startHour: 6,
-      endHour: 20,
-      intervalMinutes: 60,
-    })
-
-    editorStore.addObject('notes-panel', {
-      x: 468,
-      y: 170,
-      width: 216,
-      height: 180,
-      pattern: 'ruled',
-      title: 'Grateful for',
-      accentColor: '#60a5fa',
-    })
-
-    editorStore.addObject('checklist', {
-      x: 468,
-      y: 376,
-      width: 216,
-      height: 440,
-      title: 'To Do',
-      accentColor: '#ec4899',
-      rows: 8,
-      showCheckboxes: true,
-    })
-
-    editorStore.addObject('notes-panel', {
-      x: 60,
-      y: 850,
-      width: 624,
-      height: 160,
-      pattern: 'grid',
-      title: 'Important',
-      accentColor: '#93c5fd',
-    })
-  }
-
-  if (presetId === 'daily-minimal') {
-    editorStore.addObject('text', {
-      content: 'Daily Planner',
-      x: 60,
-      y: 54,
-      fontSize: 46,
-      fontFamily: 'Outfit',
-      fontWeight: 700,
-      textAlign: 'left',
-      originX: 'left',
-      color: '#111827',
-    })
-
-    editorStore.addObject('text', {
-      content: 'Date:',
-      x: 520,
-      y: 70,
-      fontSize: 12,
-      fontFamily: 'Inter',
-      fontWeight: 700,
-      textAlign: 'left',
-      originX: 'left',
-      color: '#6b7280',
-    })
-    editorStore.addObject('shape', {
-      x: 560,
-      y: 88,
-      width: 140,
-      stroke: '#cbd5e1',
-      strokeWidth: 2,
-      shapeType: 'line',
-    })
-
-    editorStore.addObject('notes-panel', {
-      x: 60,
-      y: 140,
-      width: 380,
-      height: 740,
-      pattern: 'ruled',
-      title: "Today's Focus",
-      accentColor: '#f59e0b',
-    })
-
-    editorStore.addObject('notes-panel', {
-      x: 468,
-      y: 140,
-      width: 216,
-      height: 240,
-      pattern: 'dot',
-      title: 'Top Priority',
-      accentColor: '#84cc16',
-    })
-
-    editorStore.addObject('checklist', {
-      x: 468,
-      y: 406,
-      width: 216,
-      height: 300,
-      title: 'To-Do List',
-      accentColor: '#f59e0b',
-      rows: 6,
-      showCheckboxes: true,
-    })
-
-    editorStore.addObject('notes-panel', {
-      x: 468,
-      y: 730,
-      width: 216,
-      height: 240,
-      pattern: 'ruled',
-      title: 'Notes',
-      accentColor: '#94a3b8',
-    })
-
-    // Simple mood row (editable shapes)
-    editorStore.addObject('text', {
-      content: 'Mood:',
-      x: 468,
-      y: 1006,
-      fontSize: 12,
-      fontFamily: 'Inter',
-      fontWeight: 700,
-      textAlign: 'left',
-      originX: 'left',
-      color: '#6b7280',
-    })
-    for (let i = 0; i < 5; i++) {
-      editorStore.addObject('shape', {
-        x: 520 + i * 32,
-        y: 1000,
-        radius: 10,
-        fill: '#f3f4f6',
-        stroke: '#cbd5e1',
-        strokeWidth: 2,
-        shapeType: 'circle',
-      })
-    }
-  }
-
-  await nextTick()
-  editorStore.canvas.calcOffset()
-  editorStore.canvas.renderAll()
-  editorStore.snapshotCanvasState()
-}
 
 // Upload handling
 function resetUploadError() {
@@ -1684,7 +983,7 @@ function handleDistribute(axis: 'horizontal' | 'vertical') {
                   :thumbnails="templateThumbnails"
                   :loading="thumbnailsLoading"
                   @update:selected-category="selectedTemplateCategory = $event"
-                  @apply="applyTemplate"
+                  @apply="(template) => applyTemplate(template)"
                 />
               </div>
 
@@ -2182,7 +1481,7 @@ function handleDistribute(axis: 'horizontal' | 'vertical') {
       :template="{ 
         name: editorStore.project?.name,
         description: editorStore.project?.description,
-        category: editorStore.project?.templateId ? calendarTemplates.find(t => t.id === editorStore.project?.templateId)?.category : 'monthly'
+        category: editorStore.project?.templateId ? allTemplates.find(t => t.id === editorStore.project?.templateId)?.category : 'monthly'
       }"
       :thumbnail="editorStore.project?.thumbnail"
       @close="isMarketplaceWizardOpen = false"

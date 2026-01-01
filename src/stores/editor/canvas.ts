@@ -225,12 +225,34 @@ export function createCanvasModule(params: {
     if (!canvas.value) return
     const config = getEffectiveWatermarkConfig()
 
+    const existingWatermarks = (canvas.value.getObjects() as any[]).filter(
+      (obj) => obj?.id === 'watermark-layer' || obj?.data?.watermark,
+    )
+
+    if (existingWatermarks.length > 1) {
+      existingWatermarks.slice(1).forEach((obj) => {
+        try {
+          canvas.value?.remove(obj)
+        } catch {
+          // ignore
+        }
+      })
+    }
+
+    if (!watermarkGroup.value && existingWatermarks.length === 1) {
+      watermarkGroup.value = existingWatermarks[0]
+    }
+
     if (!config) {
-      if (watermarkGroup.value) {
-        canvas.value.remove(watermarkGroup.value as any)
-        watermarkGroup.value = null
-        canvas.value.requestRenderAll()
-      }
+      existingWatermarks.forEach((obj) => {
+        try {
+          canvas.value?.remove(obj)
+        } catch {
+          // ignore
+        }
+      })
+      watermarkGroup.value = null
+      canvas.value.requestRenderAll()
       return
     }
 

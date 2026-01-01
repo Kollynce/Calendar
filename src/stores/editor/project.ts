@@ -253,6 +253,11 @@ export function createProjectModule(params: {
       }
     }
     
+    // Remove watermark objects before persisting/snapshotting
+    if (Array.isArray(json.objects)) {
+      json.objects = json.objects.filter((obj: any) => !obj?.data?.watermark)
+    }
+
     // Log what we're saving
     console.log('[getCanvasState] Serialized', json.objects?.length || 0, 'objects')
     if (json.objects?.[0]) {

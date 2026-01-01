@@ -63,6 +63,12 @@ service firebase.storage {
       allow write: if isAuthenticated() && isValidImage();
     }
 
+    match /marketplace-thumbnails/{creatorId}/{fileName} {
+      allow read: if true;
+      allow write: if (isOwner(creatorId) || isAdmin()) && isValidImage();
+      allow delete: if isOwner(creatorId) || isAdmin();
+    }
+
     match /exports/{userId}/{exportId}/{fileName} {
       allow read: if isOwner(userId);
       allow write: if isOwner(userId) && (isValidImage() || isValidPDF());

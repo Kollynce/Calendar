@@ -51,7 +51,7 @@ service cloud.firestore {
         data.requiredTier in ['free', 'pro', 'business'] &&
         validMarketplaceFeatures(data.features) &&
         (data.templateData == null || data.templateData is map) &&
-        (data.thumbnail == null || validString(data.thumbnail, 5, 500)) &&
+        (data.thumbnail == null || validString(data.thumbnail, 5, 100000)) &&
         (data.downloads == null || (data.downloads is number && data.downloads >= 0)) &&
         data.creatorId is string &&
         data.creatorId == request.auth.uid &&

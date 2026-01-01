@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores'
 import MarketplaceLayout from '@/layouts/MarketplaceLayout.vue'
 import AppTierBadge from '@/components/ui/AppTierBadge.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppCard from '@/components/ui/AppCard.vue'
+import { marketplaceService, type MarketplaceProduct } from '@/services/marketplace.service'
 import { 
   MagnifyingGlassIcon,
   Squares2X2Icon,
@@ -28,15 +29,6 @@ const selectedCategory = ref('All')
 const selectedTier = ref('All')
 const sortBy = ref('popular')
 
-const categories = [
-  { name: 'All', count: 250 },
-  { name: 'Wall Calendars', count: 42 },
-  { name: 'Desk Calendars', count: 38 },
-  { name: 'Planners', count: 65 },
-  { name: 'Minimalist', count: 24 },
-  { name: 'Corporate', count: 45 },
-  { name: 'Artistic', count: 36 }
-]
 const tiers = [
   { name: 'All', label: 'All Access' },
   { name: 'Free', label: 'Free Templates' },
@@ -44,19 +36,66 @@ const tiers = [
   { name: 'Business', label: 'Business Tier' }
 ]
 
-const templates = ref([
-  { id: '1', name: 'Modern Wall Calendar', creator: 'Design Studio', price: 0, downloads: 1250, requiredTier: 'free' as const, category: 'Wall Calendars', isPopular: true, isNew: false, rating: 4.8 },
-  { id: '2', name: 'Corporate Desk Calendar', creator: 'Pro Templates', price: 999, downloads: 450, requiredTier: 'business' as const, category: 'Corporate', isPopular: false, isNew: true, rating: 4.5 },
-  { id: '3', name: 'Minimalist Monthly', creator: 'Clean Designs', price: 499, downloads: 890, requiredTier: 'pro' as const, category: 'Minimalist', isPopular: true, isNew: false, rating: 4.9 },
-  { id: '4', name: 'Photo Calendar', creator: 'Creative Hub', price: 0, downloads: 2100, requiredTier: 'free' as const, category: 'Artistic', isPopular: true, isNew: false, rating: 4.7 },
-  { id: '5', name: 'Artistic Yearly', creator: 'Studio Archi', price: 1499, downloads: 320, requiredTier: 'business' as const, category: 'Artistic', isPopular: false, isNew: true, rating: 4.6 },
-  { id: '6', name: 'Education Planner', creator: 'Teachly', price: 299, downloads: 1100, requiredTier: 'pro' as const, category: 'Planners', isPopular: true, isNew: false, rating: 4.4 },
-])
+type MarketplaceTemplate = Omit<MarketplaceProduct, 'id' | 'category'> & {
+  id: string
+  category: string
+  rating?: number
+}
+
+const templates = ref<MarketplaceTemplate[]>([])
+const loadingTemplates = ref(true)
+const loadError = ref<string | null>(null)
+
+function formatCategory(category?: string) {
+  if (!category) return 'Uncategorized'
+  return category
+    .split(/[-_ ]+/)
+    .filter(Boolean)
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ')
+}
+
+async function loadTemplates() {
+  loadingTemplates.value = true
+  loadError.value = null
+  try {
+    const products = await marketplaceService.listTemplates()
+    templates.value = products.map(product => ({
+      rating: 4.8,
+      ...product,
+      id: product.id || crypto.randomUUID(),
+      category: formatCategory(product.category),
+    }))
+  } catch (error) {
+    console.error('[MarketplacePage] Failed to load templates', error)
+    loadError.value = 'Unable to load marketplace templates. Please try again shortly.'
+  } finally {
+    loadingTemplates.value = false
+  }
+}
+
+onMounted(loadTemplates)
+
+const isInitialLoading = computed(() => loadingTemplates.value && templates.value.length === 0)
+
+const categories = computed(() => {
+  const counts = new Map<string, number>()
+  templates.value.forEach(template => {
+    const label = formatCategory(template.category)
+    counts.set(label, (counts.get(label) || 0) + 1)
+  })
+
+  const list = Array.from(counts.entries())
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+
+  return [{ name: 'All', count: templates.value.length }, ...list]
+})
 
 const filteredTemplates = computed(() => {
   let result = templates.value.filter(t => {
     const matchesSearch = t.name.toLowerCase().includes(searchQuery.value.toLowerCase()) || 
-                         t.creator.toLowerCase().includes(searchQuery.value.toLowerCase())
+                         t.creatorName.toLowerCase().includes(searchQuery.value.toLowerCase())
     const matchesCategory = selectedCategory.value === 'All' || t.category === selectedCategory.value
     const matchesTier = selectedTier.value === 'All' || t.requiredTier === selectedTier.value.toLowerCase()
     return matchesSearch && matchesCategory && matchesTier
@@ -386,91 +425,142 @@ function viewDetails(id: string) {
             </div>
           </div>
 
-          <!-- Professional Grid -->
-          <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-x-8 gap-y-12">
-            <AppCard
-              v-for="template in filteredTemplates"
-              :key="template.id"
-              @click="viewDetails(template.id)"
-              variant="flat"
-              hover="ring"
-              interactive
+          <!-- Loading State -->
+          <div v-if="isInitialLoading" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-x-8 gap-y-12" aria-busy="true">
+            <div 
+              v-for="i in 6" 
+              :key="`skeleton-${i}`"
+              class="rounded-3xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 p-6 animate-pulse space-y-6"
             >
-              <template #image>
-                <div class="relative aspect-4/3 bg-gray-50 dark:bg-gray-800/50 rounded-2xl overflow-hidden ring-1 ring-gray-200 dark:ring-gray-800 transition-all duration-500 group-hover:ring-primary-500/50">
-                  <div class="absolute inset-0 flex items-center justify-center opacity-10 dark:opacity-20 group-hover:scale-110 transition-transform duration-700">
-                    <Squares2X2Icon class="w-24 h-24 text-gray-400" />
-                  </div>
-                  
-                  <!-- Pricing Badge -->
-                  <div class="absolute bottom-4 left-4 z-20">
-                    <div class="bg-white dark:bg-gray-900 px-3 py-1.5 rounded-lg shadow-xl border border-gray-100 dark:border-gray-800 flex flex-col">
-                      <span 
-                        class="text-xs font-black tracking-tight leading-none"
-                        :class="isIncluded(template) ? 'text-primary-600 dark:text-primary-400' : 'text-gray-900 dark:text-white'"
-                      >
-                        {{ getDisplayPrice(template) }}
-                      </span>
-                      <span v-if="isIncluded(template) && template.price > 0" class="text-[8px] text-gray-400 line-through font-medium mt-0.5">
-                        ${{ (template.price / 100).toFixed(2) }}
-                      </span>
-                    </div>
-                  </div>
-
-                  <!-- Tier Badge -->
-                  <div class="absolute top-4 right-4 z-20">
-                    <AppTierBadge :tier="template.requiredTier" size="sm" class="shadow-lg" />
-                  </div>
-
-                  <!-- Featured Badge -->
-                  <div class="absolute top-4 left-4 z-20 flex flex-col gap-2">
-                    <span v-if="template.isPopular" class="bg-amber-500 text-white text-[8px] font-black px-2 py-1 rounded shadow-lg uppercase tracking-widest flex items-center gap-1">
-                      <FireIcon class="w-3 h-3" /> Popular
-                    </span>
-                    <span v-if="template.isNew" class="bg-green-500 text-white text-[8px] font-black px-2 py-1 rounded shadow-lg uppercase tracking-widest">New</span>
-                  </div>
-
-                  <!-- Action Hover Overlay -->
-                  <div class="absolute inset-0 bg-gray-950/0 group-hover:bg-gray-950/20 transition-all duration-500 z-10 flex items-center justify-center">
-                    <div class="scale-90 opacity-0 group-hover:scale-100 group-hover:opacity-100 transition-all duration-500">
-                      <div class="bg-white text-gray-900 px-6 py-2.5 rounded-full font-black uppercase tracking-widest text-[9px] shadow-2xl">View Layout</div>
-                    </div>
-                  </div>
-                </div>
-              </template>
-
-              <div class="space-y-1">
-                <div class="flex items-center justify-between text-[10px] font-black uppercase tracking-[0.15em] text-primary-600 dark:text-primary-400">
-                  {{ template.category }}
-                  <div class="flex items-center gap-1">
-                    <StarSolidIcon class="w-3 h-3 text-amber-400" />
-                    <span class="text-gray-900 dark:text-white font-bold">{{ template.rating }}</span>
-                  </div>
-                </div>
-                <h3 class="text-lg font-display font-bold text-gray-900 dark:text-white group-hover:text-primary-600 transition-colors duration-300">
-                  {{ template.name }}
-                </h3>
-                <div class="flex items-center justify-between pt-2">
-                  <p class="text-xs text-gray-500">by <span class="font-bold text-gray-700 dark:text-gray-300">{{ template.creator }}</span></p>
-                  <div class="flex items-center gap-1.5 text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                    <ArrowDownTrayIcon class="w-3 h-3" />
-                    {{ template.downloads.toLocaleString() }}
-                  </div>
-                </div>
+              <div class="aspect-4/3 rounded-2xl bg-gray-100 dark:bg-gray-800"></div>
+              <div class="h-3 w-24 rounded-full bg-gray-100 dark:bg-gray-800"></div>
+              <div class="h-4 w-3/4 rounded-full bg-gray-100 dark:bg-gray-800"></div>
+              <div class="flex items-center justify-between">
+                <div class="h-3 w-20 rounded-full bg-gray-100 dark:bg-gray-800"></div>
+                <div class="h-3 w-12 rounded-full bg-gray-100 dark:bg-gray-800"></div>
               </div>
-            </AppCard>
+            </div>
           </div>
 
-          <!-- Empty State -->
-          <div v-if="filteredTemplates.length === 0" class="flex flex-col items-center justify-center py-32 text-center bg-gray-50 dark:bg-gray-900/50 rounded-3xl border-2 border-dashed border-gray-200 dark:border-gray-800">
-            <div class="w-20 h-20 rounded-full bg-white dark:bg-gray-800 shadow-xl flex items-center justify-center mb-8">
-              <MagnifyingGlassIcon class="w-8 h-8 text-gray-300 dark:text-gray-600" />
+          <!-- Error State -->
+          <div 
+            v-else-if="loadError" 
+            class="flex flex-col items-center justify-center py-32 text-center bg-red-50 dark:bg-red-900/20 rounded-3xl border border-red-100 dark:border-red-900"
+          >
+            <div class="w-16 h-16 rounded-full bg-red-100 dark:bg-red-900/40 text-red-500 flex items-center justify-center mb-6">
+              <XMarkIcon class="w-8 h-8" />
             </div>
-            <h3 class="text-xl font-display font-bold text-gray-900 dark:text-white">No results found</h3>
-            <p class="text-gray-500 dark:text-gray-400 mt-3 max-w-xs mx-auto text-sm">
-              We couldn't find any templates matching your current criteria.
+            <h3 class="text-xl font-display font-bold text-red-600 dark:text-red-300">Unable to load templates</h3>
+            <p class="text-red-500 dark:text-red-200 mt-3 max-w-sm mx-auto text-sm">
+              {{ loadError }}
             </p>
-            <button @click="searchQuery = ''; selectedCategory = 'All'; selectedTier = 'All'" class="mt-8 text-sm font-black text-primary-600 uppercase tracking-widest hover:underline">Clear all filters</button>
+            <AppButton 
+              variant="primary" 
+              class="mt-6"
+              :disabled="loadingTemplates"
+              @click="loadTemplates"
+            >
+              Try Again
+            </AppButton>
+          </div>
+
+          <!-- Data Grid -->
+          <div v-else>
+            <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-x-8 gap-y-12">
+              <AppCard
+                v-for="template in filteredTemplates"
+                :key="template.id"
+                @click="viewDetails(template.id)"
+                variant="flat"
+                hover="ring"
+                interactive
+              >
+                <template #image>
+                  <div class="relative aspect-4/3 bg-gray-50 dark:bg-gray-800/50 rounded-2xl overflow-hidden ring-1 ring-gray-200 dark:ring-gray-800 transition-all duration-500 group-hover:ring-primary-500/50">
+                    <img 
+                      v-if="template.thumbnail" 
+                      :src="template.thumbnail" 
+                      :alt="template.name"
+                      class="absolute inset-0 w-full h-full object-cover"
+                      loading="lazy"
+                    />
+                    <div 
+                      v-else 
+                      class="absolute inset-0 flex items-center justify-center opacity-10 dark:opacity-20 group-hover:scale-110 transition-transform duration-700"
+                    >
+                      <Squares2X2Icon class="w-24 h-24 text-gray-400" />
+                    </div>
+                    
+                    <!-- Pricing Badge -->
+                    <div class="absolute bottom-4 left-4 z-20">
+                      <div class="bg-white dark:bg-gray-900 px-3 py-1.5 rounded-lg shadow-xl border border-gray-100 dark:border-gray-800 flex flex-col">
+                        <span 
+                          class="text-xs font-black tracking-tight leading-none"
+                          :class="isIncluded(template) ? 'text-primary-600 dark:text-primary-400' : 'text-gray-900 dark:text-white'"
+                        >
+                          {{ getDisplayPrice(template) }}
+                        </span>
+                        <span v-if="isIncluded(template) && template.price > 0" class="text-[8px] text-gray-400 line-through font-medium mt-0.5">
+                          ${{ (template.price / 100).toFixed(2) }}
+                        </span>
+                      </div>
+                    </div>
+
+                    <!-- Tier Badge -->
+                    <div class="absolute top-4 right-4 z-20">
+                      <AppTierBadge :tier="template.requiredTier" size="sm" class="shadow-lg" />
+                    </div>
+
+                    <!-- Featured Badge -->
+                    <div class="absolute top-4 left-4 z-20 flex flex-col gap-2">
+                      <span v-if="template.isPopular" class="bg-amber-500 text-white text-[8px] font-black px-2 py-1 rounded shadow-lg uppercase tracking-widest flex items-center gap-1">
+                        <FireIcon class="w-3 h-3" /> Popular
+                      </span>
+                      <span v-if="template.isNew" class="bg-green-500 text-white text-[8px] font-black px-2 py-1 rounded shadow-lg uppercase tracking-widest">New</span>
+                    </div>
+
+                    <!-- Action Hover Overlay -->
+                    <div class="absolute inset-0 bg-gray-950/0 group-hover:bg-gray-950/20 transition-all duration-500 z-10 flex items-center justify-center">
+                      <div class="scale-90 opacity-0 group-hover:scale-100 group-hover:opacity-100 transition-all duration-500">
+                        <div class="bg-white text-gray-900 px-6 py-2.5 rounded-full font-black uppercase tracking-widest text-[9px] shadow-2xl">View Layout</div>
+                      </div>
+                    </div>
+                  </div>
+                </template>
+
+                <div class="space-y-1">
+                  <div class="flex items-center justify-between text-[10px] font-black uppercase tracking-[0.15em] text-primary-600 dark:text-primary-400">
+                    {{ template.category }}
+                    <div class="flex items-center gap-1">
+                      <StarSolidIcon class="w-3 h-3 text-amber-400" />
+                      <span class="text-gray-900 dark:text-white font-bold">{{ template.rating }}</span>
+                    </div>
+                  </div>
+                  <h3 class="text-lg font-display font-bold text-gray-900 dark:text-white group-hover:text-primary-600 transition-colors duration-300">
+                    {{ template.name }}
+                  </h3>
+                  <div class="flex items-center justify-between pt-2">
+                    <p class="text-xs text-gray-500">by <span class="font-bold text-gray-700 dark:text-gray-300">{{ template.creatorName || 'Unknown Creator' }}</span></p>
+                    <div class="flex items-center gap-1.5 text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                      <ArrowDownTrayIcon class="w-3 h-3" />
+                      {{ template.downloads.toLocaleString() }}
+                    </div>
+                  </div>
+                </div>
+              </AppCard>
+            </div>
+
+            <!-- Empty State -->
+            <div v-if="filteredTemplates.length === 0" class="flex flex-col items-center justify-center py-32 text-center bg-gray-50 dark:bg-gray-900/50 rounded-3xl border-2 border-dashed border-gray-200 dark:border-gray-800">
+              <div class="w-20 h-20 rounded-full bg-white dark:bg-gray-800 shadow-xl flex items-center justify-center mb-8">
+                <MagnifyingGlassIcon class="w-8 h-8 text-gray-300 dark:text-gray-600" />
+              </div>
+              <h3 class="text-xl font-display font-bold text-gray-900 dark:text-white">No results found</h3>
+              <p class="text-gray-500 dark:text-gray-400 mt-3 max-w-xs mx-auto text-sm">
+                We couldn't find any templates matching your current criteria.
+              </p>
+              <button @click="searchQuery = ''; selectedCategory = 'All'; selectedTier = 'All'" class="mt-8 text-sm font-black text-primary-600 uppercase tracking-widest hover:underline">Clear all filters</button>
+            </div>
           </div>
         </div>
       </div>

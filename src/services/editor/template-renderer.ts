@@ -48,19 +48,13 @@ export async function renderTemplateOnCanvas(
   const shouldPreserve =
     behavior.preserveUserObjects === true && canvas instanceof Canvas
 
-  const preservedObjects = shouldPreserve
-    ? canvas
-        .getObjects()
-        .filter((obj) => !(obj as any).data?.templateObject)
-    : []
+  populateCanvas(canvas, layout, template, options, { preserveUserObjects: shouldPreserve })
 
-  populateCanvas(canvas, layout, template, options)
-
-  if (shouldPreserve && preservedObjects.length) {
-    preservedObjects.forEach((obj) => canvas.add(obj))
+  if (typeof (canvas as any).requestRenderAll === 'function') {
+    ;(canvas as any).requestRenderAll()
+  } else {
+    canvas.renderAll()
   }
-
-  canvas.renderAll()
 
   return { layout }
 }
@@ -90,10 +84,31 @@ function populateCanvas(
   layout: TemplateLayout,
   template: CalendarTemplate,
   options: TemplateRenderOptions,
+  behavior: TemplateRenderBehavior,
 ): void {
-  canvas.clear()
-  canvas.setWidth(layout.canvas.width)
-  canvas.setHeight(layout.canvas.height)
+  if (behavior.preserveUserObjects && canvas instanceof Canvas) {
+    const toRemove = canvas.getObjects().filter((obj) => {
+      const data = (obj as any)?.data as any
+      if (data?.watermark) return false
+      if (data?.templateObject) return true
+
+      const kind = data?.elementMetadata?.kind as string | undefined
+      return kind === 'calendar-grid' || kind === 'week-strip' || kind === 'date-cell'
+    })
+    toRemove.forEach((obj) => canvas.remove(obj))
+  } else {
+    canvas.clear()
+  }
+
+  const currentWidth = (canvas as any).getWidth?.() ?? (canvas as any).width
+  const currentHeight = (canvas as any).getHeight?.() ?? (canvas as any).height
+
+  if (currentWidth !== layout.canvas.width) {
+    canvas.setWidth(layout.canvas.width)
+  }
+  if (currentHeight !== layout.canvas.height) {
+    canvas.setHeight(layout.canvas.height)
+  }
   canvas.backgroundColor = layout.canvas.backgroundColor
 
   const objects: FabricObject[] = []
