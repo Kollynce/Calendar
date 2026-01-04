@@ -12,8 +12,95 @@ import {
 } from 'firebase/auth'
 import { doc, getDoc, onSnapshot, setDoc, type Unsubscribe } from 'firebase/firestore'
 import { auth, db } from '@/config/firebase'
-import type { User, SubscriptionTier } from '@/types'
+import type { User, SubscriptionTier, BrandKit } from '@/types'
 import { TIER_LIMITS } from '@/config/constants'
+
+const EMPTY_USER_STATS = {
+  storageUsed: 0,
+  activeDays: [] as string[],
+  projectCount: 0,
+  templateCount: 0,
+  totalDownloads: 0,
+}
+
+function stripUndefined<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => stripUndefined(entry))
+      .filter((entry) => entry !== undefined) as unknown as T
+  }
+
+  if (value && typeof value === 'object') {
+    const result: Record<string, any> = {}
+    Object.entries(value as Record<string, any>).forEach(([key, val]) => {
+      if (val === undefined) return
+      result[key] = stripUndefined(val)
+    })
+    return result as T
+  }
+
+  return value
+}
+
+function sanitizeBrandKits(kits: BrandKit[] = []): BrandKit[] {
+  const seen = new Set<string>()
+  const normalized: BrandKit[] = []
+  kits.forEach((kit) => {
+    if (!kit || !kit.id || seen.has(kit.id)) return
+    const cleaned = stripUndefined<BrandKit>({ ...kit })
+    seen.add(kit.id)
+    normalized.push(cleaned)
+  })
+  return normalized
+}
+
+function resolveDefaultBrandKitId(
+  kits: BrandKit[],
+  preferredId?: string | null,
+): string | null {
+  if (!kits.length) return null
+  if (preferredId && kits.some((kit) => kit.id === preferredId)) {
+    return preferredId
+  }
+  return kits[0]?.id ?? null
+}
+
+function findBrandKitById(kits: BrandKit[], id?: string | null): BrandKit | null {
+  if (!id) return null
+  return kits.find((kit) => kit.id === id) ?? null
+}
+
+function normalizeBrandKitState(user: User): User {
+  const kits = sanitizeBrandKits([
+    ...(Array.isArray(user.brandKits) ? user.brandKits : []),
+    ...(user.brandKit ? [user.brandKit] : []),
+  ])
+
+  const defaultId = resolveDefaultBrandKitId(kits, user.defaultBrandKitId)
+  const legacyKit = findBrandKitById(kits, defaultId)
+
+  return {
+    ...user,
+    brandKits: kits,
+    defaultBrandKitId: defaultId,
+    brandKit: legacyKit ?? null,
+  }
+}
+
+function mapUserDoc(id: string, data: Record<string, any>): User {
+  const stats = {
+    ...EMPTY_USER_STATS,
+    ...(data.stats || {}),
+  }
+
+  const mapped = {
+    id,
+    ...data,
+    stats,
+  } as User
+
+  return normalizeBrandKitState(mapped)
+}
 
 export const useAuthStore = defineStore('auth', () => {
   // State
@@ -32,7 +119,8 @@ export const useAuthStore = defineStore('auth', () => {
     const tokenSubscription = customClaims.value?.subscription as string
     return tokenSubscription || user.value?.subscription || 'free'
   })
-  const isPro = computed(() => ['pro', 'business', 'enterprise'].includes(subscriptionTier.value))
+  const isAdminRole = computed(() => user.value?.role === 'admin')
+  const isPro = computed(() => isAdminRole.value || ['pro', 'business', 'enterprise'].includes(subscriptionTier.value))
   const isBusiness = computed(() => ['business', 'enterprise'].includes(subscriptionTier.value))
   const tierLimits = computed(() => TIER_LIMITS[subscriptionTier.value as SubscriptionTier])
 
@@ -50,10 +138,26 @@ export const useAuthStore = defineStore('auth', () => {
     const limit = tierLimits.value?.projects ?? 0
     return projectCount < limit
   })
+  const brandKits = computed<BrandKit[]>(() => {
+    if (!user.value) return []
+    if (Array.isArray(user.value.brandKits) && user.value.brandKits.length) {
+      return user.value.brandKits
+    }
+    if (user.value.brandKit) return [user.value.brandKit]
+    return []
+  })
+  const brandKitUsageCount = computed(() => brandKits.value.length)
+  const defaultBrandKit = computed<BrandKit | null>(() => {
+    const kits = brandKits.value
+    if (!kits.length) return null
+    const preferredId = user.value?.defaultBrandKitId ?? null
+    return findBrandKitById(kits, preferredId) ?? kits[0] ?? null
+  })
   const canCreateMoreBrandKits = computed(() => {
-    const currentKits = user.value?.brandKit ? 1 : 0
+    if (isAdminRole.value) return true
     const limit = tierLimits.value?.brandKits ?? 0
-    return currentKits < limit
+    if (!Number.isFinite(limit)) return true
+    return brandKitUsageCount.value < limit
   })
 
   // Demo mode users for testing
@@ -162,18 +266,7 @@ export const useAuthStore = defineStore('auth', () => {
           unsubscribeUserDoc = onSnapshot(doc(db, 'users', fbUser.uid), (snap) => {
             if (!snap.exists()) return
             const data = snap.data()
-            user.value = { 
-              id: fbUser.uid, 
-              ...data,
-              stats: {
-                storageUsed: 0,
-                activeDays: [],
-                projectCount: 0,
-                templateCount: 0,
-                totalDownloads: 0,
-                ...(data.stats || {})
-              }
-            } as User
+            user.value = mapUserDoc(fbUser.uid, data)
           })
         } else {
           user.value = null
@@ -194,18 +287,7 @@ export const useAuthStore = defineStore('auth', () => {
     const userDoc = await getDoc(doc(db, 'users', uid))
     if (!userDoc.exists()) return null
     const data = userDoc.data()
-    return { 
-      id: uid, 
-      ...data,
-      stats: {
-        storageUsed: 0,
-        activeDays: [],
-        projectCount: 0,
-        templateCount: 0,
-        totalDownloads: 0,
-        ...(data.stats || {})
-      }
-    } as User
+    return mapUserDoc(uid, data)
   }
 
   async function waitForUserProfile(uid: string): Promise<User | null> {
@@ -263,7 +345,7 @@ export const useAuthStore = defineStore('auth', () => {
 
     const existing = await getDoc(doc(db, 'users', uid))
     if (existing.exists()) {
-      user.value = { id: uid, ...existing.data() } as User
+      user.value = mapUserDoc(uid, existing.data() as Record<string, any>)
       return
     }
 
@@ -306,7 +388,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
 
     await setDoc(doc(db, 'users', uid), newUser)
-    user.value = { id: uid, ...newUser } as User
+    user.value = mapUserDoc(uid, newUser)
   }
 
   async function updateLastLogin(uid: string): Promise<void> {
@@ -473,11 +555,77 @@ export const useAuthStore = defineStore('auth', () => {
       }
       
       await setDoc(doc(db, 'users', user.value.id), updateData, { merge: true })
-      user.value = { ...user.value, ...updateData }
+      user.value = normalizeBrandKitState({ ...user.value, ...updateData } as User)
     } catch (e: any) {
       error.value = e.message
       throw e
     }
+  }
+
+  /**
+   * Brand kit helpers/actions
+   */
+  async function persistBrandKitState(
+    nextKits: BrandKit[],
+    preferredDefaultId?: string | null,
+  ): Promise<void> {
+    if (!user.value) return
+    const sanitized = sanitizeBrandKits(nextKits)
+    const defaultId = resolveDefaultBrandKitId(
+      sanitized,
+      preferredDefaultId ?? user.value.defaultBrandKitId ?? null,
+    )
+    const defaultKit = findBrandKitById(sanitized, defaultId)
+
+    await updateProfile({
+      brandKits: sanitized,
+      defaultBrandKitId: defaultId,
+      brandKit: defaultKit ?? null,
+    })
+  }
+
+  async function createBrandKit(kit: BrandKit): Promise<void> {
+    if (!user.value) return
+    const now = new Date().toISOString()
+    const kitWithMeta: BrandKit = {
+      ...kit,
+      createdAt: kit.createdAt ?? now,
+      updatedAt: now,
+    }
+    await persistBrandKitState([...brandKits.value, kitWithMeta], kitWithMeta.id)
+  }
+
+  async function updateBrandKit(kitId: string, updates: Partial<BrandKit>): Promise<void> {
+    if (!user.value) return
+    const nextKits = brandKits.value.map((kit) =>
+      kit.id === kitId
+        ? {
+            ...kit,
+            ...updates,
+            updatedAt: new Date().toISOString(),
+          }
+        : kit,
+    )
+    await persistBrandKitState(nextKits)
+  }
+
+  async function deleteBrandKit(kitId: string): Promise<void> {
+    if (!user.value) return
+    const nextKits = brandKits.value.filter((kit) => kit.id !== kitId)
+    const nextDefault =
+      user.value.defaultBrandKitId === kitId ? null : user.value.defaultBrandKitId ?? null
+    await persistBrandKitState(nextKits, nextDefault)
+  }
+
+  async function setDefaultBrandKit(kitId: string): Promise<void> {
+    if (!user.value) return
+    if (!brandKits.value.some((kit) => kit.id === kitId)) return
+    await persistBrandKitState(brandKits.value, kitId)
+  }
+
+  async function touchBrandKitUsage(kitId: string): Promise<void> {
+    if (!brandKits.value.some((kit) => kit.id === kitId)) return
+    await updateBrandKit(kitId, { lastUsedAt: new Date().toISOString() })
   }
 
   /**
@@ -524,6 +672,9 @@ export const useAuthStore = defineStore('auth', () => {
     canUseAnalytics,
     canCreateMoreProjects,
     canCreateMoreBrandKits,
+    brandKits,
+    brandKitUsageCount,
+    defaultBrandKit,
     // Actions
     initialize,
     signIn,
@@ -532,5 +683,10 @@ export const useAuthStore = defineStore('auth', () => {
     resetPassword,
     logout,
     updateProfile,
+    createBrandKit,
+    updateBrandKit,
+    deleteBrandKit,
+    setDefaultBrandKit,
+    touchBrandKitUsage,
   }
 })

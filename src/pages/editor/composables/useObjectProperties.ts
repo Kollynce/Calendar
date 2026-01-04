@@ -11,6 +11,7 @@ import type {
   PlannerHeaderStyle,
   ScheduleMetadata,
   ChecklistMetadata,
+  TableMetadata,
 } from '@/types'
 import type { Ref } from 'vue'
 
@@ -258,6 +259,10 @@ export function useObjectProperties(alignTarget: Ref<'canvas' | 'selection'>) {
     elementMetadata.value?.kind === 'planner-note' ? elementMetadata.value : null,
   )
 
+  const tableMetadata = computed<TableMetadata | null>(() =>
+    elementMetadata.value?.kind === 'table' ? elementMetadata.value : null,
+  )
+
   const elementSize = computed(() => {
     const meta = elementMetadata.value as any
     if (!meta || !meta.size) return null
@@ -308,6 +313,14 @@ export function useObjectProperties(alignTarget: Ref<'canvas' | 'selection'>) {
   function updateDateCellMetadata(updater: (draft: DateCellMetadata) => void) {
     editorStore.updateSelectedElementMetadata((metadata) => {
       if (metadata.kind !== 'date-cell') return null
+      updater(metadata)
+      return metadata
+    })
+  }
+
+  function updateTableMetadata(updater: (draft: TableMetadata) => void) {
+    editorStore.updateSelectedElementMetadata((metadata) => {
+      if (metadata.kind !== 'table') return null
       updater(metadata)
       return metadata
     })
@@ -373,6 +386,7 @@ export function useObjectProperties(alignTarget: Ref<'canvas' | 'selection'>) {
     scheduleMetadata,
     checklistMetadata,
     plannerNoteMetadata,
+    tableMetadata,
     elementSize,
     // Metadata update functions
     updateScheduleMetadata,
@@ -381,6 +395,7 @@ export function useObjectProperties(alignTarget: Ref<'canvas' | 'selection'>) {
     updateCalendarMetadata,
     updateWeekStripMetadata,
     updateDateCellMetadata,
+    updateTableMetadata,
     updateElementSize,
     // Watchers
     setupAlignTargetWatcher,

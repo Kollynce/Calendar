@@ -10,6 +10,7 @@ import WeekStripProperties from '../properties/WeekStripProperties.vue'
 import DateCellProperties from '../properties/DateCellProperties.vue'
 import CollageProperties from '../properties/CollageProperties.vue'
 import CanvasProperties from '../properties/CanvasProperties.vue'
+import TableProperties from '../properties/TableProperties.vue'
 import AppTierBadge from '@/components/ui/AppTierBadge.vue'
 import { useAuthStore } from '@/stores'
 import type {
@@ -22,6 +23,7 @@ import type {
   PlannerNoteMetadata,
   CollageMetadata,
   PlannerHeaderStyle,
+  TableMetadata,
 } from '@/types'
 
 const props = defineProps<{
@@ -283,6 +285,10 @@ const collageMetadata = computed<CollageMetadata | null>(() =>
   elementMetadata.value?.kind === 'collage' ? elementMetadata.value : null,
 )
 
+const tableMetadata = computed<TableMetadata | null>(() =>
+  elementMetadata.value?.kind === 'table' ? elementMetadata.value : null,
+)
+
 function updateCalendarMetadata(updater: (draft: CalendarGridMetadata) => void) {
   editorStore.updateSelectedElementMetadata((metadata) => {
     if (metadata.kind !== 'calendar-grid') return null
@@ -335,6 +341,14 @@ function updateCollageMetadata(updates: Partial<CollageMetadata>) {
   editorStore.updateActiveElementMetadata(updates)
 }
 
+function updateTableMetadata(updater: (draft: TableMetadata) => void) {
+  editorStore.updateSelectedElementMetadata((metadata) => {
+    if (metadata.kind !== 'table') return null
+    updater(metadata as TableMetadata)
+    return metadata
+  })
+}
+
 const localAlignTarget = computed({
   get: () => props.alignTarget,
   set: (value) => emit('update:alignTarget', value),
@@ -355,8 +369,8 @@ const headerStyleOptions = [
 ]
 
 const patternVariantOptions = [
-  { value: 'lines', label: 'Lines' },
-  { value: 'dots', label: 'Dots' },
+  { value: 'ruled', label: 'Lines' },
+  { value: 'dot', label: 'Dots' },
   { value: 'grid', label: 'Grid' },
   { value: 'none', label: 'None' },
 ]
@@ -442,6 +456,9 @@ const patternVariantOptions = [
 
     <!-- Date Cell Properties -->
     <DateCellProperties v-if="dateCellMetadata" :date-cell-metadata="dateCellMetadata" :update-date-cell-metadata="updateDateCellMetadata" />
+
+    <!-- Table Properties -->
+    <TableProperties v-if="tableMetadata" :table-metadata="tableMetadata" :update-table-metadata="updateTableMetadata" />
 
     <!-- Collage Properties -->
     <template v-if="collageMetadata">
@@ -658,6 +675,28 @@ const patternVariantOptions = [
             />
           </div>
         </div>
+        <div class="flex flex-wrap items-center gap-4 text-xs text-white/80">
+          <label class="flex items-center gap-2">
+            <input 
+              type="checkbox" 
+              class="accent-primary-400" 
+              :checked="scheduleMetadata.showBackground !== false" 
+              :disabled="!isPro"
+              @change="updateScheduleMetadata((draft) => { draft.showBackground = ($event.target as HTMLInputElement).checked })" 
+            />
+            <span>Show background</span>
+          </label>
+          <label class="flex items-center gap-2">
+            <input 
+              type="checkbox" 
+              class="accent-primary-400" 
+              :checked="scheduleMetadata.showBorder !== false" 
+              :disabled="!isPro"
+              @change="updateScheduleMetadata((draft) => { draft.showBorder = ($event.target as HTMLInputElement).checked })" 
+            />
+            <span>Show border</span>
+          </label>
+        </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="text-xs font-medium text-white/60 mb-1.5 block">Radius</label>
@@ -767,7 +806,7 @@ const patternVariantOptions = [
         </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="text-xs font-medium text-white/60 mb-1.5 block">Background</label>
+            <label class="text-xs text-white/60 font-medium mb-1.5 block">Background</label>
             <ColorPicker 
               :model-value="checklistMetadata.backgroundColor ?? '#ffffff'" 
               :disabled="!isPro"
@@ -780,6 +819,54 @@ const patternVariantOptions = [
               :model-value="checklistMetadata.borderColor ?? '#e2e8f0'" 
               :disabled="!isPro"
               @update:modelValue="(c) => updateChecklistMetadata((draft) => { draft.borderColor = c })" 
+            />
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-4 text-xs text-white/80">
+          <label class="flex items-center gap-2">
+            <input 
+              type="checkbox" 
+              class="accent-primary-400" 
+              :checked="checklistMetadata.showBackground !== false" 
+              :disabled="!isPro"
+              @change="updateChecklistMetadata((draft) => { draft.showBackground = ($event.target as HTMLInputElement).checked })" 
+            />
+            <span>Show background</span>
+          </label>
+          <label class="flex items-center gap-2">
+            <input 
+              type="checkbox" 
+              class="accent-primary-400" 
+              :checked="checklistMetadata.showBorder !== false" 
+              :disabled="!isPro"
+              @change="updateChecklistMetadata((draft) => { draft.showBorder = ($event.target as HTMLInputElement).checked })" 
+            />
+            <span>Show border</span>
+          </label>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs font-medium text-white/60 mb-1.5 block">Radius</label>
+            <input 
+              type="number" 
+              min="0" 
+              max="80" 
+              class="control-glass" 
+              :value="checklistMetadata.cornerRadius ?? 22" 
+              :disabled="!isPro"
+              @change="updateChecklistMetadata((draft) => { draft.cornerRadius = Math.max(0, Math.min(80, Number(($event.target as HTMLInputElement).value) || 0)) })" 
+            />
+          </div>
+          <div>
+            <label class="text-xs font-medium text-white/60 mb-1.5 block">Border Width</label>
+            <input 
+              type="number" 
+              min="0" 
+              max="10" 
+              class="control-glass" 
+              :value="checklistMetadata.borderWidth ?? 1" 
+              :disabled="!isPro"
+              @change="updateChecklistMetadata((draft) => { draft.borderWidth = Math.max(0, Math.min(10, Number(($event.target as HTMLInputElement).value) || 0)) })" 
             />
           </div>
         </div>
@@ -877,6 +964,54 @@ const patternVariantOptions = [
               :model-value="notesPanelMetadata.borderColor ?? '#e2e8f0'" 
               :disabled="!isPro"
               @update:modelValue="(c) => updateNotesPanelMetadata((draft) => { draft.borderColor = c })" 
+            />
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-4 text-xs text-white/80">
+          <label class="flex items-center gap-2">
+            <input 
+              type="checkbox" 
+              class="accent-primary-400" 
+              :checked="notesPanelMetadata.showBackground !== false" 
+              :disabled="!isPro"
+              @change="updateNotesPanelMetadata((draft) => { draft.showBackground = ($event.target as HTMLInputElement).checked })" 
+            />
+            <span>Show background</span>
+          </label>
+          <label class="flex items-center gap-2">
+            <input 
+              type="checkbox" 
+              class="accent-primary-400" 
+              :checked="notesPanelMetadata.showBorder !== false" 
+              :disabled="!isPro"
+              @change="updateNotesPanelMetadata((draft) => { draft.showBorder = ($event.target as HTMLInputElement).checked })" 
+            />
+            <span>Show border</span>
+          </label>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs font-medium text-white/60 mb-1.5 block">Radius</label>
+            <input 
+              type="number" 
+              min="0" 
+              max="80" 
+              class="control-glass" 
+              :value="notesPanelMetadata.cornerRadius ?? 22" 
+              :disabled="!isPro"
+              @change="updateNotesPanelMetadata((draft) => { draft.cornerRadius = Math.max(0, Math.min(80, Number(($event.target as HTMLInputElement).value) || 0)) })" 
+            />
+          </div>
+          <div>
+            <label class="text-xs font-medium text-white/60 mb-1.5 block">Border Width</label>
+            <input 
+              type="number" 
+              min="0" 
+              max="10" 
+              class="control-glass" 
+              :value="notesPanelMetadata.borderWidth ?? 1" 
+              :disabled="!isPro"
+              @change="updateNotesPanelMetadata((draft) => { draft.borderWidth = Math.max(0, Math.min(10, Number(($event.target as HTMLInputElement).value) || 0)) })" 
             />
           </div>
         </div>

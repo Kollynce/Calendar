@@ -90,6 +90,13 @@ const activeUploadList = computed(() =>
     ...meta,
   })),
 )
+function isImageAsset(asset: UserUploadAsset): boolean {
+  const contentType = asset.contentType?.toLowerCase() ?? ''
+  if (contentType.startsWith('image/')) return true
+  const extension = asset.name?.split('.').pop()?.toLowerCase() ?? ''
+  return ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'].includes(extension)
+}
+const imageUploads = computed(() => userUploads.value.filter((asset) => isImageAsset(asset)))
 const isAuthenticated = computed(() => !!authStore.user?.id)
 
 // Use the useTemplates composable for template management
@@ -105,12 +112,18 @@ const {
   templateCategories,
   applyTemplate,
   loadTemplateThumbnails,
+  refreshMarketplaceTemplates,
   resetTemplateOverrides,
   renderTemplateWithOverrides,
 } = useTemplates(
   () => calendarStore.currentMonthData?.month || new Date().getMonth(),
   () => ({ width: canvasSize.value.width, height: canvasSize.value.height })
 )
+
+async function refreshTemplatesPanel(): Promise<void> {
+  await refreshMarketplaceTemplates()
+  await loadTemplateThumbnails()
+}
 
 // Panel visibility state for Adobe-style collapsible UI
 const isRightSidebarVisible = ref(true)
@@ -984,6 +997,7 @@ function handleDistribute(axis: 'horizontal' | 'vertical') {
                   :loading="thumbnailsLoading"
                   @update:selected-category="selectedTemplateCategory = $event"
                   @apply="(template) => applyTemplate(template)"
+                  @refresh="refreshTemplatesPanel"
                 />
               </div>
 
@@ -1096,7 +1110,7 @@ function handleDistribute(axis: 'horizontal' | 'vertical') {
                   <div class="space-y-2">
                     <div class="flex items-center justify-between">
                       <p class="text-xs font-semibold text-gray-500 uppercase">
-                        Library ({{ userUploads.length }})
+                        Library ({{ imageUploads.length }})
                       </p>
                       <button
                         type="button"
@@ -1116,7 +1130,7 @@ function handleDistribute(axis: 'horizontal' | 'vertical') {
                     </div>
 
                     <div 
-                      v-else-if="userUploads.length === 0" 
+                      v-else-if="imageUploads.length === 0" 
                       class="text-xs text-gray-400 dark:text-gray-500 text-center py-6"
                     >
                       No uploads yet. Drop files above to start building your asset library.
@@ -1124,7 +1138,7 @@ function handleDistribute(axis: 'horizontal' | 'vertical') {
 
                     <div v-else class="space-y-3">
                       <div
-                        v-for="asset in userUploads"
+                        v-for="asset in imageUploads"
                         :key="asset.storagePath"
                         class="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/70 shadow-sm p-3 space-y-3"
                         draggable="true"

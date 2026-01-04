@@ -14,6 +14,14 @@ service firebase.storage {
       return isAuthenticated() && request.auth.token.admin == true;
     }
 
+    function hasDownloadToken() {
+      return request.query.token != null
+        && resource != null
+        && resource.metadata != null
+        && resource.metadata.firebaseStorageDownloadTokens != null
+        && resource.metadata.firebaseStorageDownloadTokens.matches('(^|,)' + request.query.token + '($|,)');
+    }
+
     function isValidImage() {
       return request.resource.contentType.matches('image/.*') &&
         request.resource.size < 20 * 1024 * 1024;
@@ -22,6 +30,30 @@ service firebase.storage {
     function isValidPDF() {
       return request.resource.contentType == 'application/pdf' &&
         request.resource.size < 50 * 1024 * 1024;
+    }
+
+    function hasFontExtension() {
+      return request.resource != null
+        && request.resource.name.matches('users/.+/brand-fonts/.*\\.(ttf|otf|woff2?|TTF|OTF|WOFF2?)$');
+    }
+
+    function hasFontContentType() {
+      return request.resource != null
+        && (
+          request.resource.contentType == null ||
+          request.resource.contentType == '' ||
+          request.resource.contentType.matches('font/.*') ||
+          request.resource.contentType.matches('application/(x-)?font-.*') ||
+          request.resource.contentType == 'application/octet-stream'
+        );
+    }
+
+    function isValidFont() {
+      return request.resource.size < 20 * 1024 * 1024 &&
+        (
+          hasFontContentType() ||
+          hasFontExtension()
+        );
     }
 
     function isValidUserAsset() {
@@ -39,8 +71,16 @@ service firebase.storage {
     }
 
     match /users/{userId}/uploads/{assetId} {
-      allow read, list: if isOwner(userId);
-      allow write, delete: if isOwner(userId) && isValidUserAsset();
+      allow read: if isOwner(userId) || hasDownloadToken();
+      allow list: if isOwner(userId);
+      allow write: if isOwner(userId) && isValidUserAsset();
+      allow delete: if isOwner(userId);
+    }
+
+    match /users/{userId}/brand-fonts/{fileName=**} {
+      allow read: if isOwner(userId) || hasDownloadToken();
+      allow write: if isOwner(userId) && isValidFont();
+      allow delete: if isOwner(userId);
     }
 
     match /projects/{projectId}/{fileName} {

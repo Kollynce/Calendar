@@ -73,8 +73,9 @@ const availableWatermarkPresets = computed(() => {
     FREE_WATERMARK_PRESETS.includes(preset.value as WatermarkPositionPreset),
   )
 })
-const brandKitLogoUrl = computed(() => authStore.user?.brandKit?.logo ?? null)
-const brandKitName = computed(() => authStore.user?.brandKit?.name ?? 'Brand kit')
+const defaultBrandKit = computed(() => authStore.defaultBrandKit)
+const brandKitLogoUrl = computed(() => defaultBrandKit.value?.logo ?? null)
+const brandKitName = computed(() => defaultBrandKit.value?.name ?? 'Brand kit')
 
 function updateWatermark(partial: Partial<WatermarkConfig>): void {
   const current = watermarkConfig.value
@@ -217,6 +218,9 @@ const patternColor = ref('#e2e8f0')
 const patternSpacing = ref(24)
 const patternOpacity = ref(0.5)
 
+let applySizeTimer: ReturnType<typeof setTimeout> | null = null
+let applyPatternTimer: ReturnType<typeof setTimeout> | null = null
+
 const canvasBackgroundColor = computed({
   get: () => editorStore.project?.canvas?.backgroundColor || '#ffffff',
   set: (val) => editorStore.setBackgroundColor(val),
@@ -310,8 +314,9 @@ function setAspectRatioFromCurrent(): void {
 }
 
 function syncFromCanvas(): void {
-  const currentWidth = Math.max(1, Math.round(canvasSize.value.width || 744))
-  const currentHeight = Math.max(1, Math.round(canvasSize.value.height || 1052))
+  const nextCanvasSize = canvasSize.value
+  const currentWidth = Math.max(1, Math.round(nextCanvasSize?.width || 744))
+  const currentHeight = Math.max(1, Math.round(nextCanvasSize?.height || 1052))
   width.value = currentWidth
   height.value = currentHeight
   aspectLocked.value = true
@@ -348,7 +353,7 @@ function handlePresetSelect(key: string): void {
     height.value = portraitHeight
   }
   setAspectRatioFromCurrent()
-  applyCanvasSettings()
+  applyCanvasSize()
 }
 
 function handleOrientationChange(target: 'portrait' | 'landscape'): void {
@@ -358,7 +363,7 @@ function handleOrientationChange(target: 'portrait' | 'landscape'): void {
   width.value = newWidth
   height.value = newHeight
   setAspectRatioFromCurrent()
-  applyCanvasSettings()
+  applyCanvasSize()
 }
 
 function convertUnitValue(
@@ -401,7 +406,7 @@ function updateWidthValue(value: number): void {
   } else {
     setAspectRatioFromCurrent()
   }
-  applyCanvasSettings()
+  scheduleApplyCanvasSize()
 }
 
 function updateHeightValue(value: number): void {
@@ -414,7 +419,7 @@ function updateHeightValue(value: number): void {
   } else {
     setAspectRatioFromCurrent()
   }
-  applyCanvasSettings()
+  scheduleApplyCanvasSize()
 }
 
 function handleWidthInput(event: Event): void {
@@ -434,9 +439,20 @@ function toggleAspectLock(): void {
   }
 }
 
-function applyCanvasSettings(): void {
+function applyCanvasSize(): void {
   if (!width.value || !height.value) return
   editorStore.setCanvasSize(width.value, height.value)
+}
+
+function scheduleApplyCanvasSize(): void {
+  if (applySizeTimer) clearTimeout(applySizeTimer)
+  applySizeTimer = setTimeout(() => {
+    applySizeTimer = null
+    applyCanvasSize()
+  }, 200)
+}
+
+function applyCanvasPattern(): void {
   editorStore.setBackgroundPattern({
     pattern: selectedPattern.value,
     color: patternColor.value,
@@ -445,13 +461,21 @@ function applyCanvasSettings(): void {
   })
 }
 
+function scheduleApplyCanvasPattern(): void {
+  if (applyPatternTimer) clearTimeout(applyPatternTimer)
+  applyPatternTimer = setTimeout(() => {
+    applyPatternTimer = null
+    applyCanvasPattern()
+  }, 120)
+}
+
 function resetToCurrentCanvas(): void {
   syncFromCanvas()
 }
 
 // Watch for pattern changes to apply immediately
 watch([selectedPattern, patternColor, patternSpacing, patternOpacity], () => {
-  applyCanvasSettings()
+  scheduleApplyCanvasPattern()
 })
 </script>
 
@@ -803,33 +827,33 @@ watch([selectedPattern, patternColor, patternSpacing, patternOpacity], () => {
             />
           </div>
 
-          <div class="grid gap-4 md:grid-cols-2">
-            <div>
+          <div class="space-y-3">
+            <div class="flex flex-col gap-2">
               <label class="text-[10px] font-semibold text-white/40 uppercase">Size</label>
-              <div class="flex items-center gap-3">
+              <div class="flex items-center gap-2">
                 <input
                   v-model.number="watermarkSizePercent"
                   type="range"
                   min="10"
                   max="60"
-                  class="flex-1 accent-primary-500"
+                  class="flex-1 h-2 accent-primary-500"
                 />
                 <span class="text-xs text-white/70 w-10 text-right">{{ watermarkSizePercent }}%</span>
               </div>
             </div>
-            <div>
+            <div class="flex flex-col gap-2">
               <label class="text-[10px] font-semibold text-white/40 uppercase">Opacity</label>
-              <div class="flex items-center gap-3">
+              <div class="flex items-center gap-2">
                 <input
                   v-model.number="watermarkOpacityPercent"
                   type="range"
                   min="10"
                   max="100"
-                  class="flex-1 accent-primary-500"
+                  class="flex-1 h-2 accent-primary-500"
                 />
                 <span class="text-xs text-white/70 w-10 text-right">{{ watermarkOpacityPercent }}%</span>
               </div>
-              <p class="text-[10px] text-white/40 mt-1">Free tier locks opacity at 60%.</p>
+              <p class="text-[10px] text-white/40">Free tier locks opacity at 60%.</p>
             </div>
           </div>
 
@@ -851,33 +875,33 @@ watch([selectedPattern, patternColor, patternSpacing, patternOpacity], () => {
             </div>
           </div>
 
-          <div v-if="watermarkPreset === 'custom'" class="grid gap-4 md:grid-cols-2">
-            <label class="space-y-1 text-[10px] font-semibold text-white/40 uppercase">
-              Horizontal offset
-              <div class="flex items-center gap-3">
+          <div v-if="watermarkPreset === 'custom'" class="space-y-3">
+            <div class="flex flex-col gap-2">
+              <label class="text-[10px] font-semibold text-white/40 uppercase">Horizontal offset</label>
+              <div class="flex items-center gap-2">
                 <input
                   v-model.number="watermarkCustomX"
                   type="range"
                   min="0"
                   max="100"
-                  class="flex-1 accent-primary-500"
+                  class="flex-1 h-2 accent-primary-500"
                 />
                 <span class="text-xs text-white/70 w-10 text-right">{{ watermarkCustomX }}%</span>
               </div>
-            </label>
-            <label class="space-y-1 text-[10px] font-semibold text-white/40 uppercase">
-              Vertical offset
-              <div class="flex items-center gap-3">
+            </div>
+            <div class="flex flex-col gap-2">
+              <label class="text-[10px] font-semibold text-white/40 uppercase">Vertical offset</label>
+              <div class="flex items-center gap-2">
                 <input
                   v-model.number="watermarkCustomY"
                   type="range"
                   min="0"
                   max="100"
-                  class="flex-1 accent-primary-500"
+                  class="flex-1 h-2 accent-primary-500"
                 />
                 <span class="text-xs text-white/70 w-10 text-right">{{ watermarkCustomY }}%</span>
               </div>
-            </label>
+            </div>
           </div>
         </div>
       </div>

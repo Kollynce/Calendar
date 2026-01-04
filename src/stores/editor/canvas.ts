@@ -1,5 +1,5 @@
 import { ref, watch, type Ref } from 'vue'
-import { Canvas, FabricImage, Textbox, Group, type Object as FabricObject } from 'fabric'
+import { Canvas, FabricImage, Textbox, Group, FabricObject } from 'fabric'
 import type {
   CanvasElementMetadata,
   CanvasPatternConfig,
@@ -25,6 +25,10 @@ type RebuildElementWithMetadata = (
   target: FabricObject,
   metadata: CanvasElementMetadata,
 ) => FabricObject | null
+
+// NOTE: Fabric objects coming from `loadFromJSON()` / `getObjects()` can be typed loosely.
+// Internally we treat the watermark group as an untyped Fabric object with optional metadata.
+type WatermarkFabricObject = any
 
 export function createCanvasModule(params: {
   project: Ref<Project | null>
@@ -55,7 +59,11 @@ export function createCanvasModule(params: {
     rebuildElementWithMetadata,
   } = params
 
-  const watermarkGroup = ref<any>(null)
+  const watermarkGroup = ref<WatermarkFabricObject | null>(null)
+  let watermarkUpdateTimer: ReturnType<typeof setTimeout> | null = null
+  let watermarkUpdateInProgress = false
+  let patternApplyTimer: ReturnType<typeof setTimeout> | null = null
+  let patternApplyToken = 0
   const authStore = useAuthStore()
 
   function resolveWatermarkMode(config: WatermarkConfig): 'text' | 'image' {
@@ -81,7 +89,7 @@ export function createCanvasModule(params: {
     return enforced
   }
 
-  async function createWatermarkObject(config: WatermarkConfig): Promise<FabricObject | null> {
+  async function createWatermarkObject(config: WatermarkConfig): Promise<WatermarkFabricObject | null> {
     if (!canvas.value || !project.value) return null
     const canvasWidth = project.value.canvas.width
     const normalizedSize = clamp(config.size ?? DEFAULT_WATERMARK_CONFIG.size, 0.05, 0.5)
@@ -131,34 +139,28 @@ export function createCanvasModule(params: {
 
     if (!objects.length) return null
 
-    const group = new Group(objects)
-    const typedGroup = group as FabricObject & {
-      data?: Record<string, unknown>
-      excludeFromExport?: boolean
-      id?: string
-      name?: string
-    }
-    typedGroup.set({
+    const group = new Group(objects as any, {
       selectable: false,
       evented: false,
+    })
+    ;(group as any).set({
       opacity: clamp(config.opacity ?? DEFAULT_WATERMARK_CONFIG.opacity, 0, 1),
       hoverCursor: 'default',
     } as Partial<any>)
-    typedGroup.excludeFromExport = true
-    typedGroup.id = 'watermark-layer'
-    typedGroup.name = 'Watermark'
+    ;(group as any).excludeFromExport = true
+    ;(group as any).id = 'watermark-layer'
+    ;(group as any).name = 'Watermark'
 
-    typedGroup.data = {
-      ...(typedGroup.data || {}),
+    ;(group as any).data = {
       watermark: true,
       watermarkMode: resolvedMode,
       watermarkImageSrc: resolvedMode === 'image' ? config.imageSrc ?? null : null,
     }
 
-    return group as unknown as FabricObject
+    return group as any
   }
 
-  function positionWatermark(group: FabricObject, config: WatermarkConfig): void {
+  function positionWatermark(group: any, config: WatermarkConfig): void {
     if (!project.value) return
     const canvasWidth = project.value.canvas.width
     const canvasHeight = project.value.canvas.height
@@ -208,7 +210,7 @@ export function createCanvasModule(params: {
     })
   }
 
-  function shouldRebuildWatermark(current: FabricObject | null, config: WatermarkConfig): boolean {
+  function shouldRebuildWatermark(current: any | null, config: WatermarkConfig): boolean {
     if (!current) return true
     const currentData = (current as any).data || {}
     const currentMode = currentData.watermarkMode
@@ -223,99 +225,124 @@ export function createCanvasModule(params: {
 
   async function ensureWatermark(): Promise<void> {
     if (!canvas.value) return
-    const config = getEffectiveWatermarkConfig()
+    
+    // Prevent concurrent execution to avoid duplicate watermarks
+    if (watermarkUpdateInProgress) return
+    watermarkUpdateInProgress = true
 
-    const existingWatermarks = (canvas.value.getObjects() as any[]).filter(
-      (obj) => obj?.id === 'watermark-layer' || obj?.data?.watermark,
-    )
+    try {
+      const config = getEffectiveWatermarkConfig()
 
-    if (existingWatermarks.length > 1) {
-      existingWatermarks.slice(1).forEach((obj) => {
-        try {
-          canvas.value?.remove(obj)
-        } catch {
-          // ignore
-        }
-      })
-    }
+      const existingWatermarks = (canvas.value.getObjects() as any[]).filter(
+        (obj) => obj?.id === 'watermark-layer' || obj?.data?.watermark,
+      ) as WatermarkFabricObject[]
 
-    if (!watermarkGroup.value && existingWatermarks.length === 1) {
-      watermarkGroup.value = existingWatermarks[0]
-    }
-
-    if (!config) {
-      existingWatermarks.forEach((obj) => {
-        try {
-          canvas.value?.remove(obj)
-        } catch {
-          // ignore
-        }
-      })
-      watermarkGroup.value = null
-      canvas.value.requestRenderAll()
-      return
-    }
-
-    const needsRebuild = shouldRebuildWatermark(watermarkGroup.value, config)
-    let group = watermarkGroup.value
-
-    if (needsRebuild) {
-      if (group && canvas.value) {
-        canvas.value.remove(group as any)
-      }
-      group = await createWatermarkObject(config)
-      if (!group) return
-      canvas.value.add(group as any)
-      watermarkGroup.value = group
-    } else if (group) {
-      group.set('opacity', clamp(config.opacity ?? DEFAULT_WATERMARK_CONFIG.opacity, 0, 1))
-      const resolvedMode = resolveWatermarkMode(config)
-      const firstChild = (group as any)._objects?.[0]
-
-      if (resolvedMode === 'text' && firstChild && firstChild.type === 'textbox') {
-        const textbox = firstChild as Textbox
-        textbox.set('text', config.text || DEFAULT_WATERMARK_CONFIG.text)
-        const targetWidth =
-          (project.value?.canvas.width ?? 0) * clamp(config.size ?? DEFAULT_WATERMARK_CONFIG.size, 0.05, 0.5)
-        textbox.set('width', targetWidth)
-      } else if (resolvedMode === 'image' && firstChild && firstChild.type === 'image') {
-        const image = firstChild as FabricImage
-        const width = image.width || 1
-        const targetWidth =
-          (project.value?.canvas.width ?? 0) * clamp(config.size ?? DEFAULT_WATERMARK_CONFIG.size, 0.05, 0.5)
-        const scaling = targetWidth / width
-        image.set({
-          scaleX: scaling,
-          scaleY: scaling,
+      if (existingWatermarks.length > 1) {
+        existingWatermarks.slice(1).forEach((obj) => {
+          try {
+            canvas.value?.remove(obj)
+          } catch {
+            // ignore
+          }
         })
       }
 
-      const typedGroup = group as FabricObject & { data?: Record<string, unknown> }
-      typedGroup.data = {
-        ...(typedGroup.data || {}),
-        watermark: true,
-        watermarkMode: resolvedMode,
-        watermarkImageSrc: resolvedMode === 'image' ? config.imageSrc ?? null : null,
+      if (!watermarkGroup.value && existingWatermarks.length === 1) {
+        watermarkGroup.value = existingWatermarks[0] ?? null
       }
-    }
 
-    if (!group) return
+      if (!config) {
+        existingWatermarks.forEach((obj) => {
+          try {
+            canvas.value?.remove(obj)
+          } catch {
+            // ignore
+          }
+        })
+        watermarkGroup.value = null
+        canvas.value.requestRenderAll()
+        return
+      }
 
-    positionWatermark(group, config)
-    const fabricCanvas = canvas.value as Canvas & { bringToFront?: (obj: FabricObject) => void }
-    if (fabricCanvas.bringToFront) {
-      fabricCanvas.bringToFront(group as FabricObject)
-    } else {
-      fabricCanvas.remove(group as FabricObject)
-      fabricCanvas.add(group as FabricObject)
+      const needsRebuild = shouldRebuildWatermark(watermarkGroup.value, config)
+      let group = watermarkGroup.value
+
+      if (needsRebuild) {
+        if (group && canvas.value) {
+          canvas.value.remove(group as any)
+        }
+        group = await createWatermarkObject(config)
+        if (!group) return
+        canvas.value.add(group as any)
+        watermarkGroup.value = group
+      } else if (group) {
+        // Batch all property updates before rendering
+        const updates: any = {
+          opacity: clamp(config.opacity ?? DEFAULT_WATERMARK_CONFIG.opacity, 0, 1),
+        }
+        
+        const resolvedMode = resolveWatermarkMode(config)
+        const firstChild = (group as any)._objects?.[0]
+
+        if (resolvedMode === 'text' && firstChild && firstChild.type === 'textbox') {
+          const textbox = firstChild as Textbox
+          const targetWidth =
+            (project.value?.canvas.width ?? 0) * clamp(config.size ?? DEFAULT_WATERMARK_CONFIG.size, 0.05, 0.5)
+          textbox.set({
+            text: config.text || DEFAULT_WATERMARK_CONFIG.text,
+            width: targetWidth,
+          })
+        } else if (resolvedMode === 'image' && firstChild && firstChild.type === 'image') {
+          const image = firstChild as FabricImage
+          const width = image.width || 1
+          const targetWidth =
+            (project.value?.canvas.width ?? 0) * clamp(config.size ?? DEFAULT_WATERMARK_CONFIG.size, 0.05, 0.5)
+          const scaling = targetWidth / width
+          image.set({
+            scaleX: scaling,
+            scaleY: scaling,
+          })
+        }
+
+        group.set(updates)
+        ;(group as any).data = {
+          ...(((group as any).data || {}) as any),
+          watermark: true,
+          watermarkMode: resolvedMode,
+          watermarkImageSrc: resolvedMode === 'image' ? config.imageSrc ?? null : null,
+        }
+      }
+
+      if (!group) return
+
+      positionWatermark(group, config)
+      const fabricCanvas = canvas.value as Canvas & { bringToFront?: (obj: any) => void }
+      if (fabricCanvas.bringToFront) {
+        fabricCanvas.bringToFront(group)
+      } else {
+        fabricCanvas.remove(group as any)
+        fabricCanvas.add(group as any)
+      }
+      
+      // Single render call at the end after all updates
+      canvas.value.requestRenderAll()
+    } finally {
+      watermarkUpdateInProgress = false
     }
-    canvas.value.requestRenderAll()
+  }
+
+  function scheduleEnsureWatermark(delayMs: number = 120): void {
+    if (watermarkUpdateTimer) clearTimeout(watermarkUpdateTimer)
+    watermarkUpdateTimer = setTimeout(() => {
+      watermarkUpdateTimer = null
+      void ensureWatermark()
+    }, delayMs)
   }
 
   watch(
     () => [project.value?.config?.watermark, project.value?.config?.showWatermark],
     () => {
-      void ensureWatermark()
+      scheduleEnsureWatermark()
     },
     { deep: true },
   )
@@ -323,7 +350,7 @@ export function createCanvasModule(params: {
   watch(
     () => authStore.tierLimits.watermark,
     () => {
-      void ensureWatermark()
+      scheduleEnsureWatermark()
     },
   )
 
@@ -334,7 +361,7 @@ export function createCanvasModule(params: {
         positionWatermark(watermarkGroup.value, getEffectiveWatermarkConfig() ?? DEFAULT_WATERMARK_CONFIG)
         canvas.value?.requestRenderAll()
       } else {
-        void ensureWatermark()
+        scheduleEnsureWatermark()
       }
     },
   )
@@ -343,7 +370,7 @@ export function createCanvasModule(params: {
     canvas,
     (next) => {
       if (next) {
-        void ensureWatermark()
+        scheduleEnsureWatermark(0)
       } else {
         watermarkGroup.value = null
       }
@@ -387,7 +414,15 @@ export function createCanvasModule(params: {
     const meta = (target as any)?.data?.elementMetadata as CanvasElementMetadata | undefined
     if (!meta) return
     // Handle all element types that have size metadata and should regenerate on resize
-    const resizableKinds = ['calendar-grid', 'week-strip', 'date-cell', 'planner-note', 'schedule', 'checklist']
+    const resizableKinds = [
+      'calendar-grid',
+      'week-strip',
+      'date-cell',
+      'planner-note',
+      'schedule',
+      'checklist',
+      'table',
+    ]
     if (!resizableKinds.includes(meta.kind)) return
 
     const scaleX = Number((target as any).scaleX ?? 1) || 1
@@ -399,8 +434,35 @@ export function createCanvasModule(params: {
     const nextWidth = Math.max(10, Math.round(target.getScaledWidth()))
     const nextHeight = Math.max(10, Math.round(target.getScaledHeight()))
 
-    const nextMetadata = JSON.parse(JSON.stringify(meta)) as CanvasElementMetadata
-    ;(nextMetadata as any).size = { width: nextWidth, height: nextHeight }
+    const nextMetadata = JSON.parse(JSON.stringify(meta)) as CanvasElementMetadata & {
+      columnWidths?: number[]
+      rowHeights?: number[]
+    }
+    const prevWidth = Number(meta?.size?.width) || nextWidth
+    const prevHeight = Number(meta?.size?.height) || nextHeight
+    const widthRatio = prevWidth > 0 ? nextWidth / prevWidth : 1
+    const heightRatio = prevHeight > 0 ? nextHeight / prevHeight : 1
+
+    nextMetadata.size = { width: nextWidth, height: nextHeight }
+
+    if (meta.kind === 'table') {
+      if (Array.isArray(nextMetadata.columnWidths)) {
+        nextMetadata.columnWidths = nextMetadata.columnWidths.map((value) => {
+          const numeric = Number(value)
+          if (!Number.isFinite(numeric)) return numeric
+          const scaled = numeric * widthRatio
+          return Number.isFinite(scaled) ? Math.max(0, +scaled.toFixed(2)) : numeric
+        })
+      }
+      if (Array.isArray(nextMetadata.rowHeights)) {
+        nextMetadata.rowHeights = nextMetadata.rowHeights.map((value) => {
+          const numeric = Number(value)
+          if (!Number.isFinite(numeric)) return numeric
+          const scaled = numeric * heightRatio
+          return Number.isFinite(scaled) ? Math.max(0, +scaled.toFixed(2)) : numeric
+        })
+      }
+    }
 
     isBakingCalendarScale = true
     try {
@@ -416,7 +478,7 @@ export function createCanvasModule(params: {
       canvas.value.remove(target)
       canvas.value.add(rebuilt)
       canvas.value.setActiveObject(rebuilt)
-      canvas.value.renderAll()
+      canvas.value.requestRenderAll?.()
     } finally {
       isBakingCalendarScale = false
     }
@@ -447,7 +509,7 @@ export function createCanvasModule(params: {
     if (typeof (target as any).setCoords === 'function') {
       ;(target as any).setCoords()
     }
-    canvas.value.renderAll()
+    canvas.value.requestRenderAll?.()
   }
 
   function handleObjectModified(e: any): void {
@@ -671,7 +733,7 @@ export function createCanvasModule(params: {
     canvas.value.setHeight(height)
     project.value.canvas.width = width
     project.value.canvas.height = height
-    canvas.value.renderAll()
+    canvas.value.requestRenderAll?.()
     canvas.value.calcOffset()
     isDirty.value = true
     void ensureWatermark()
@@ -682,8 +744,17 @@ export function createCanvasModule(params: {
 
     canvas.value.backgroundColor = color
     project.value.canvas.backgroundColor = color
-    canvas.value.renderAll()
+    canvas.value.requestRenderAll?.()
     isDirty.value = true
+  }
+
+  function scheduleApplyBackgroundPattern(delayMs: number = 120): void {
+    if (!canvas.value) return
+    if (patternApplyTimer) clearTimeout(patternApplyTimer)
+    patternApplyTimer = setTimeout(() => {
+      patternApplyTimer = null
+      applyBackgroundPattern()
+    }, delayMs)
   }
 
   function setBackgroundPattern(patternConfig: CanvasPatternConfig): void {
@@ -691,15 +762,17 @@ export function createCanvasModule(params: {
 
     project.value.canvas.backgroundPattern = patternConfig
     
-    // Apply pattern to canvas using afterRender event
-    applyBackgroundPattern()
+    // Apply pattern, but debounce to avoid regenerating on every slider tick.
+    scheduleApplyBackgroundPattern()
     
-    canvas.value.renderAll()
+    canvas.value.requestRenderAll?.()
     isDirty.value = true
   }
 
   function applyBackgroundPattern(): void {
     if (!canvas.value || !project.value) return
+
+    const token = ++patternApplyToken
     
     const patternConfig = project.value.canvas.backgroundPattern
     
@@ -711,7 +784,7 @@ export function createCanvasModule(params: {
     if (!patternConfig || patternConfig.pattern === 'none') {
       // Clear the background image pattern
       canvas.value.backgroundImage = undefined
-      canvas.value.renderAll()
+      canvas.value.requestRenderAll?.()
       return
     }
     
@@ -776,6 +849,9 @@ export function createCanvasModule(params: {
     // Use Fabric.js FabricImage to set as background
     FabricImage.fromURL(dataUrl).then((img) => {
       if (!canvas.value) return
+
+      // Ignore stale async loads if a newer pattern was requested.
+      if (token !== patternApplyToken) return
       
       img.set({
         left: 0,
@@ -786,7 +862,7 @@ export function createCanvasModule(params: {
       
       // Set as backgroundImage so it renders behind all objects
       canvas.value.backgroundImage = img
-      canvas.value.renderAll()
+      canvas.value.requestRenderAll?.()
     })
   }
 

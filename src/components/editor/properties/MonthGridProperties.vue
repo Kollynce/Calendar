@@ -172,6 +172,26 @@ const weekStartOptions: { value: 0 | 1 | 2 | 3 | 4 | 5 | 6; label: string }[] = 
         />
       </div>
     </div>
+    <div class="flex flex-wrap items-center gap-4 text-xs text-white/80">
+      <label class="flex items-center gap-2">
+        <input
+          type="checkbox"
+          class="accent-primary-400"
+          :checked="calendarMetadata.showBackground !== false"
+          @change="updateCalendarMetadata((draft) => { draft.showBackground = ($event.target as HTMLInputElement).checked })"
+        />
+        <span>Show background</span>
+      </label>
+      <label class="flex items-center gap-2">
+        <input
+          type="checkbox"
+          class="accent-primary-400"
+          :checked="calendarMetadata.showBorder !== false"
+          @change="updateCalendarMetadata((draft) => { draft.showBorder = ($event.target as HTMLInputElement).checked })"
+        />
+        <span>Show border</span>
+      </label>
+    </div>
 
     <div class="grid grid-cols-2 gap-3">
       <div>

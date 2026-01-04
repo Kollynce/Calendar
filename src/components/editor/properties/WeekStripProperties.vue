@@ -152,6 +152,26 @@ const weekStripDateValue = computed(() =>
         />
       </div>
     </div>
+    <div class="flex flex-wrap items-center gap-4 text-xs text-white/80">
+      <label class="flex items-center gap-2">
+        <input
+          type="checkbox"
+          class="accent-primary-400"
+          :checked="weekStripMetadata.showBackground !== false"
+          @change="updateWeekStripMetadata((draft) => { draft.showBackground = ($event.target as HTMLInputElement).checked })"
+        />
+        <span>Show background</span>
+      </label>
+      <label class="flex items-center gap-2">
+        <input
+          type="checkbox"
+          class="accent-primary-400"
+          :checked="weekStripMetadata.showBorder !== false"
+          @change="updateWeekStripMetadata((draft) => { draft.showBorder = ($event.target as HTMLInputElement).checked })"
+        />
+        <span>Show border</span>
+      </label>
+    </div>
 
     <div class="grid grid-cols-2 gap-3">
       <div>

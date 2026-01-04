@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import type { CalendarTemplate } from '@/data/templates/calendar-templates'
 import type { MarketplaceProduct } from '@/services/marketplace.service'
+import { marketplaceService } from '@/services/marketplace.service'
 import { PhotoIcon, DocumentTextIcon, LockClosedIcon, ArrowDownTrayIcon } from '@heroicons/vue/24/outline'
 import { StarIcon as StarSolidIcon, FireIcon } from '@heroicons/vue/24/solid'
 import AppTierBadge from '@/components/ui/AppTierBadge.vue'
@@ -22,7 +24,10 @@ const router = useRouter()
 const emit = defineEmits<{
   (e: 'update:selectedCategory', value: string): void
   (e: 'apply', template: CalendarTemplate): void
+  (e: 'refresh'): void
 }>()
+
+const actionLoadingId = ref<string | null>(null)
 
 function selectCategory(id: string) {
   emit('update:selectedCategory', id)
@@ -30,6 +35,10 @@ function selectCategory(id: string) {
 
 function getMarketplaceProduct(template: CalendarTemplate): MarketplaceProduct | undefined {
   return (template as any)._marketplaceProduct
+}
+
+function getMarketplaceId(template: CalendarTemplate): string | undefined {
+  return getMarketplaceProduct(template)?.id
 }
 
 function getTier(template: CalendarTemplate): 'free' | 'pro' | 'business' {
@@ -73,6 +82,52 @@ function isNew(template: CalendarTemplate): boolean {
   const product = getMarketplaceProduct(template)
   return product?.isNew || false
 }
+
+function isUnpublished(template: CalendarTemplate): boolean {
+  const product = getMarketplaceProduct(template)
+  return product?.isPublished === false
+}
+
+async function togglePublish(template: CalendarTemplate): Promise<void> {
+  if (!authStore.isAdmin) return
+  const product = getMarketplaceProduct(template)
+  if (!product?.id) return
+
+  const nextPublished = product.isPublished === false
+  const prompt = nextPublished
+    ? `Publish "${template.name}" to the marketplace?`
+    : `Unpublish "${template.name}" from the marketplace?`
+  if (!confirm(prompt)) return
+
+  actionLoadingId.value = product.id
+  try {
+    await marketplaceService.updateTemplate(product.id, { isPublished: nextPublished })
+    emit('refresh')
+  } catch (error) {
+    console.error('[TemplatePanel] Failed to toggle publish status:', error)
+    alert('Failed to update template. Please try again.')
+  } finally {
+    actionLoadingId.value = null
+  }
+}
+
+async function deleteMarketplaceTemplate(template: CalendarTemplate): Promise<void> {
+  if (!authStore.isAdmin) return
+  const product = getMarketplaceProduct(template)
+  if (!product?.id) return
+  if (!confirm(`Delete "${template.name}"? This cannot be undone.`)) return
+
+  actionLoadingId.value = product.id
+  try {
+    await marketplaceService.deleteTemplate(product.id)
+    emit('refresh')
+  } catch (error) {
+    console.error('[TemplatePanel] Failed to delete template:', error)
+    alert('Failed to delete template. Please try again.')
+  } finally {
+    actionLoadingId.value = null
+  }
+}
 </script>
 
 <template>
@@ -111,7 +166,7 @@ function isNew(template: CalendarTemplate): boolean {
         variant="flat"
         hover="shadow"
         interactive
-        :class="{ 'opacity-80 grayscale-[0.3]': isLocked(template) }"
+        :class="['group', { 'opacity-80 grayscale-[0.3]': isLocked(template) }]"
       >
         <template #image>
           <!-- Template Preview -->
@@ -132,6 +187,13 @@ function isNew(template: CalendarTemplate): boolean {
 
             <!-- Compact badges -->
             <div class="absolute top-1 left-1 flex gap-0.5 z-20">
+              <span
+                v-if="authStore.isAdmin && isUnpublished(template)"
+                class="px-1 py-0.5 rounded bg-yellow-500 text-[7px] text-white font-bold"
+                title="Unpublished"
+              >
+                Draft
+              </span>
               <span
                 v-if="isPopular(template)"
                 class="px-1 py-0.5 rounded bg-amber-500 flex items-center justify-center text-[7px] text-white font-bold"
@@ -178,6 +240,25 @@ function isNew(template: CalendarTemplate): boolean {
               <div class="flex-1 min-w-0">
                 <p class="text-[10px] font-semibold text-white truncate">{{ template.name }}</p>
                 <p class="text-[8px] text-white/70 uppercase">{{ template.category }}</p>
+              </div>
+
+              <div v-if="authStore.isAdmin" class="flex items-center gap-1 ml-2">
+                <button
+                  type="button"
+                  class="text-[9px] font-semibold px-1.5 py-1 rounded bg-white/10 text-white hover:bg-white/20"
+                  :disabled="actionLoadingId === getMarketplaceId(template)"
+                  @click.stop="togglePublish(template)"
+                >
+                  {{ isUnpublished(template) ? 'Publish' : 'Unpublish' }}
+                </button>
+                <button
+                  type="button"
+                  class="text-[9px] font-semibold px-1.5 py-1 rounded bg-red-500/80 text-white hover:bg-red-500"
+                  :disabled="actionLoadingId === getMarketplaceId(template)"
+                  @click.stop="deleteMarketplaceTemplate(template)"
+                >
+                  Delete
+                </button>
               </div>
             </div>
           </div>

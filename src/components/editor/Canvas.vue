@@ -10,6 +10,8 @@ import KeyboardShortcutsPanel from './KeyboardShortcutsPanel.vue'
 import TouchActionBar from './TouchActionBar.vue'
 import FloatingSelectionToolbar from './FloatingSelectionToolbar.vue'
 import TouchNudgeControls from './TouchNudgeControls.vue'
+import TableResizeOverlay from './TableResizeOverlay.vue'
+import type { TableMetadata } from '@/types'
 
 const props = defineProps<{
   canvasRef: HTMLCanvasElement | null
@@ -20,7 +22,14 @@ const emit = defineEmits<{
 }>()
 
 const editorStore = useEditorStore()
-const { zoom, canvasSize, showRulers, touchPreferences } = storeToRefs(editorStore)
+const {
+  zoom,
+  canvasSize,
+  showRulers,
+  touchPreferences,
+  selectedObjectIds,
+  canvas: fabricCanvasRef,
+} = storeToRefs(editorStore)
 
 // Device detection for touch UI
 const { needsTouchUI } = useDeviceDetection()
@@ -52,6 +61,178 @@ let panInertiaFrame: number | null = null
 const lastPanDelta = { x: 0, y: 0 }
 const PAN_INERTIA_FRICTION = 0.9
 const PAN_INERTIA_STOP_THRESHOLD = 0.2
+type TableResizeOverlayState = {
+  rect: { left: number; top: number; width: number; height: number }
+  metadata: TableMetadata
+}
+const tableResizeState = ref<TableResizeOverlayState | null>(null)
+const tableOverlayListenerCleanup: Array<() => void> = []
+const tableOverlayCanvasListeners: Array<() => void> = []
+let overlayRefreshRaf: number | null = null
+const MIN_RESIZE_CELL = 24
+
+function resolveColumnWidths(metadata: TableMetadata): number[] {
+  const columns = Math.max(1, metadata.columns)
+  const totalWidth = Math.max(1, metadata.size?.width ?? 1)
+  const baseWidth = totalWidth / columns
+  return Array.from({ length: columns }, (_, idx) => {
+    const value = metadata.columnWidths?.[idx]
+    return Number.isFinite(value) && Number(value) > 0 ? Number(value) : baseWidth
+  })
+}
+
+function resolveRowHeights(metadata: TableMetadata): number[] {
+  const rows = Math.max(1, metadata.rows)
+  const totalHeight = Math.max(1, metadata.size?.height ?? 1)
+  const baseHeight = totalHeight / rows
+  return Array.from({ length: rows }, (_, idx) => {
+    const value = metadata.rowHeights?.[idx]
+    return Number.isFinite(value) && Number(value) > 0 ? Number(value) : baseHeight
+  })
+}
+
+function clearTableResizeOverlay() {
+  tableResizeState.value = null
+}
+
+function updateTableResizeOverlay() {
+  const canvasInstance = fabricCanvasRef.value
+  if (!canvasInstance) {
+    clearTableResizeOverlay()
+    return
+  }
+
+  const active = canvasInstance.getActiveObject() as any
+  const metadata = active?.data?.elementMetadata as TableMetadata | undefined
+
+  if (!active || !metadata || metadata.kind !== 'table') {
+    clearTableResizeOverlay()
+    return
+  }
+
+  const zoomValue = zoom.value || 1
+  active.setCoords?.()
+  const bounds = active.getBoundingRect?.(true, true) ?? active.getBoundingRect?.()
+  if (!bounds) {
+    clearTableResizeOverlay()
+    return
+  }
+  const rulerOffset = showRulers.value ? RULER_SIZE : 0
+  const rect = {
+    left: rulerOffset + panOffset.value.x + bounds.left * zoomValue,
+    top: rulerOffset + panOffset.value.y + bounds.top * zoomValue,
+    width: bounds.width * zoomValue,
+    height: bounds.height * zoomValue,
+  }
+
+  tableResizeState.value = {
+    rect,
+    metadata: JSON.parse(JSON.stringify(metadata)) as TableMetadata,
+  }
+}
+
+function queueTableOverlayRefresh() {
+  if (overlayRefreshRaf !== null) {
+    cancelAnimationFrame(overlayRefreshRaf)
+  }
+  overlayRefreshRaf = requestAnimationFrame(() => {
+    overlayRefreshRaf = null
+    updateTableResizeOverlay()
+  })
+}
+
+function detachTableOverlayCanvasListeners() {
+  while (tableOverlayCanvasListeners.length) {
+    const dispose = tableOverlayCanvasListeners.pop()
+    dispose?.()
+  }
+}
+
+function attachTableOverlayCanvasListeners(instance: any) {
+  detachTableOverlayCanvasListeners()
+  const events: Array<string> = [
+    'selection:created',
+    'selection:updated',
+    'selection:cleared',
+    'object:modified',
+    'object:moving',
+    'object:scaling',
+    'object:skewing',
+    'object:rotating',
+    'object:added',
+    'object:removed',
+  ]
+
+  events.forEach((eventName) => {
+    const handler = () => queueTableOverlayRefresh()
+    instance.on(eventName, handler)
+    tableOverlayCanvasListeners.push(() => instance.off(eventName, handler))
+  })
+}
+
+function applyColumnDelta(metadata: TableMetadata, boundaryIndex: number, delta: number): number[] | null {
+  const columns = Math.max(1, metadata.columns)
+  if (columns < 2 || boundaryIndex < 0 || boundaryIndex >= columns - 1) return null
+  const widths = resolveColumnWidths(metadata)
+  const leftIndex = boundaryIndex
+  const rightIndex = boundaryIndex + 1
+  const leftWidth = widths[leftIndex]
+  const rightWidth = widths[rightIndex]
+  if (typeof leftWidth !== 'number' || typeof rightWidth !== 'number') return null
+  const maxPositive = rightWidth - MIN_RESIZE_CELL
+  const maxNegative = -(leftWidth - MIN_RESIZE_CELL)
+  const applied = Math.max(Math.min(delta, maxPositive), maxNegative)
+  if (!Number.isFinite(applied) || applied === 0) return null
+  widths[leftIndex] = leftWidth + applied
+  widths[rightIndex] = rightWidth - applied
+  return widths
+}
+
+function applyRowDelta(metadata: TableMetadata, boundaryIndex: number, delta: number): number[] | null {
+  const rows = Math.max(1, metadata.rows)
+  if (rows < 2 || boundaryIndex < 0 || boundaryIndex >= rows - 1) return null
+  const heights = resolveRowHeights(metadata)
+  const topIndex = boundaryIndex
+  const bottomIndex = boundaryIndex + 1
+  const topHeight = heights[topIndex]
+  const bottomHeight = heights[bottomIndex]
+  if (typeof topHeight !== 'number' || typeof bottomHeight !== 'number') return null
+  const maxPositive = bottomHeight - MIN_RESIZE_CELL
+  const maxNegative = -(topHeight - MIN_RESIZE_CELL)
+  const applied = Math.max(Math.min(delta, maxPositive), maxNegative)
+  if (!Number.isFinite(applied) || applied === 0) return null
+  heights[topIndex] = topHeight + applied
+  heights[bottomIndex] = bottomHeight - applied
+  return heights
+}
+
+function handleTableColumnAdjust(payload: { boundaryIndex: number; delta: number }) {
+  const zoomValue = zoom.value || 1
+  const deltaInCanvas = payload.delta / zoomValue
+  if (!Number.isFinite(deltaInCanvas) || deltaInCanvas === 0) return
+  editorStore.updateSelectedElementMetadata((draft) => {
+    if (draft.kind !== 'table') return null
+    const next = applyColumnDelta(draft, payload.boundaryIndex, deltaInCanvas)
+    if (!next) return draft
+    draft.columnWidths = next
+    return draft
+  })
+  queueTableOverlayRefresh()
+}
+
+function handleTableRowAdjust(payload: { boundaryIndex: number; delta: number }) {
+  const zoomValue = zoom.value || 1
+  const deltaInCanvas = payload.delta / zoomValue
+  if (!Number.isFinite(deltaInCanvas) || deltaInCanvas === 0) return
+  editorStore.updateSelectedElementMetadata((draft) => {
+    if (draft.kind !== 'table') return null
+    const next = applyRowDelta(draft, payload.boundaryIndex, deltaInCanvas)
+    if (!next) return draft
+    draft.rowHeights = next
+    return draft
+  })
+  queueTableOverlayRefresh()
+}
 
 function resetPanDelta() {
   lastPanDelta.x = 0
@@ -178,6 +359,39 @@ let stylusWatchStop = watch(
   { immediate: true },
 )
 
+tableOverlayListenerCleanup.push(
+  watch(
+    fabricCanvasRef,
+    (next) => {
+      if (next) {
+        attachTableOverlayCanvasListeners(next)
+      } else {
+        detachTableOverlayCanvasListeners()
+        clearTableResizeOverlay()
+      }
+      queueTableOverlayRefresh()
+    },
+    { immediate: true },
+  ),
+)
+
+tableOverlayListenerCleanup.push(
+  watch(
+    () => selectedObjectIds.value.join(','),
+    () => queueTableOverlayRefresh(),
+    { immediate: true },
+  ),
+)
+
+tableOverlayListenerCleanup.push(
+  watch(
+    () => [panOffset.value.x, panOffset.value.y, zoom.value],
+    () => {
+      if (tableResizeState.value) queueTableOverlayRefresh()
+    },
+  ),
+)
+
 // Zoom presets
 const zoomPresets = [
   { label: '25%', value: 0.25 },
@@ -250,6 +464,7 @@ function clampPanOffset(nextX: number, nextY: number, scale = zoom.value) {
 
 function applyPanOffset(nextX: number, nextY: number, scale = zoom.value) {
   panOffset.value = clampPanOffset(nextX, nextY, scale)
+  if (tableResizeState.value) queueTableOverlayRefresh()
 }
 
 watch(
@@ -257,6 +472,7 @@ watch(
   () => {
     const clamped = clampPanOffset(panOffset.value.x, panOffset.value.y)
     panOffset.value = clamped
+    if (tableResizeState.value) queueTableOverlayRefresh()
   },
 )
 
@@ -759,6 +975,7 @@ function updateViewportDimensions() {
       width: rect.width,
       height: rect.height
     }
+    if (tableResizeState.value) queueTableOverlayRefresh()
   }
 }
 
@@ -782,6 +999,9 @@ onBeforeUnmount(() => {
   if (stylusWatchStop) {
     stylusWatchStop()
   }
+  tableOverlayListenerCleanup.forEach((stop) => stop())
+  tableOverlayListenerCleanup.length = 0
+  detachTableOverlayCanvasListeners()
   stopPanInertia()
 })
 
@@ -855,6 +1075,13 @@ defineExpose({
           />
         </div>
       </div>
+
+      <TableResizeOverlay
+        v-if="tableResizeState"
+        :state="tableResizeState"
+        @adjust-column="handleTableColumnAdjust"
+        @adjust-row="handleTableRowAdjust"
+      />
     </div>
     
     <!-- Bottom Toolbar -->

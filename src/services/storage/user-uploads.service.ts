@@ -18,7 +18,7 @@ import {
 } from 'firebase/firestore'
 import { db, storage } from '@/config/firebase'
 
-export type UploadCategory = 'sticker' | 'background'
+export type UploadCategory = 'sticker' | 'background' | 'brand'
 
 export interface UserUploadAsset {
   id: string

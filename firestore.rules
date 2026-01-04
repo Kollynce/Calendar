@@ -54,9 +54,31 @@ service cloud.firestore {
         (data.thumbnail == null || validString(data.thumbnail, 5, 100000)) &&
         (data.downloads == null || (data.downloads is number && data.downloads >= 0)) &&
         data.creatorId is string &&
-        data.creatorId == request.auth.uid &&
         validString(data.creatorName, 1, 100)
       );
+    }
+
+    function brandKitLimit(tier, role) {
+      return role == 'admin'
+        ? 1000
+        : tier == 'enterprise'
+        ? 50
+        : tier == 'business'
+          ? 20
+          : tier == 'pro'
+            ? 1
+            : 0;
+    }
+
+    function validDefaultBrandKitId(id) {
+      return id == null || (id is string && id.size() > 0 && id.size() <= 200);
+    }
+
+    function validBrandKitList(kits, tier, role) {
+      return kits == null ||
+        (kits is list &&
+          kits.size() <= brandKitLimit(tier, role) &&
+          kits.size() <= 50);
     }
 
     match /users/{userId} {
@@ -65,11 +87,19 @@ service cloud.firestore {
       allow create: if isOwner(userId) &&
         validString(request.resource.data.displayName, 1, 100) &&
         request.resource.data.role == 'user' &&
-        request.resource.data.subscription == 'free';
+        request.resource.data.subscription == 'free' &&
+        validBrandKitList(request.resource.data.brandKits, 'free', request.resource.data.role) &&
+        validDefaultBrandKitId(request.resource.data.defaultBrandKitId);
 
       allow update: if isOwner(userId) &&
         request.resource.data.role == resource.data.role &&
-        request.resource.data.subscription == resource.data.subscription;
+        request.resource.data.subscription == resource.data.subscription &&
+        validBrandKitList(
+          request.resource.data.brandKits,
+          request.resource.data.subscription,
+          request.resource.data.role
+        ) &&
+        validDefaultBrandKitId(request.resource.data.defaultBrandKitId);
 
       allow delete: if isAdmin();
 
@@ -144,6 +174,14 @@ service cloud.firestore {
       }
     }
 
+    // Helper to check admin via token claim or users collection role
+    function isAdminOrAdminRole() {
+      return isAuthenticated() && (
+        request.auth.token.admin == true ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+      );
+    }
+
     match /marketplace_templates/{templateId} {
       allow read: if true;
 
@@ -151,11 +189,17 @@ service cloud.firestore {
       allow create: if isAuthenticated() &&
         request.resource.data.creatorId == request.auth.uid;
 
-      allow update: if (isOwner(resource.data.creatorId) || isAdmin()) &&
+      // Admins can toggle publish state even for legacy docs that don't satisfy full validation.
+      allow update: if isAdminOrAdminRole() &&
+        request.resource.data.creatorId == resource.data.creatorId &&
+        request.resource.data.diff(resource.data).changedKeys().hasOnly(['isPublished', 'updatedAt', 'publishedAt']);
+
+      // For all other updates, require full validation.
+      allow update: if isOwner(resource.data.creatorId) &&
         request.resource.data.creatorId == resource.data.creatorId &&
         validMarketplaceTemplate(request.resource.data);
 
-      allow delete: if isAdmin() || isOwner(resource.data.creatorId);
+      allow delete: if isAdminOrAdminRole() || isOwner(resource.data.creatorId);
     }
 
     match /subscriptions/{subscriptionId} {

@@ -13,10 +13,11 @@ import {
   ClockIcon, 
   CalendarDaysIcon,
   ChartPieIcon,
-  SparklesIcon
+  SparklesIcon,
+  TrashIcon,
 } from '@heroicons/vue/24/outline'
 
-import { recalculateUserStats } from '@/services/storage/storage-usage.service'
+import { recalculateUserStats, updateProjectCount } from '@/services/storage/storage-usage.service'
 
 const authStore = useAuthStore()
 
@@ -26,6 +27,11 @@ const currentCount = computed(() => authStore.user?.stats?.projectCount || 0)
 
 const recentProjects = ref<Project[]>([])
 const recentProjectsLoading = ref(false)
+const deleteConfirmId = ref<string | null>(null)
+const actionLoadingId = ref<string | null>(null)
+const projectPendingDelete = computed(() =>
+  recentProjects.value.find((project) => project.id === deleteConfirmId.value) || null,
+)
 
 onMounted(async () => {
   if (authStore.user?.id) {
@@ -90,6 +96,37 @@ watch(
   },
   { immediate: true },
 )
+
+function confirmDelete(projectId: string) {
+  deleteConfirmId.value = projectId
+}
+
+function cancelDelete() {
+  deleteConfirmId.value = null
+}
+
+async function handleDelete() {
+  const projectId = deleteConfirmId.value
+  const userId = authStore.user?.id
+  if (!projectId) return
+
+  actionLoadingId.value = projectId
+  try {
+    await projectsService.delete(projectId)
+    recentProjects.value = recentProjects.value.filter((project) => project.id !== projectId)
+    if (userId) {
+      await updateProjectCount(userId, -1).catch((error) => {
+        console.error('[Dashboard] Failed to decrement project count:', error)
+      })
+    }
+  } catch (error) {
+    console.error('[Dashboard] Failed to delete project:', error)
+    alert('Failed to delete the project. Please try again.')
+  } finally {
+    actionLoadingId.value = null
+    deleteConfirmId.value = null
+  }
+}
 </script>
 
 <template>
@@ -233,10 +270,48 @@ watch(
                 {{ project.status }}
               </span>
             </div>
-            <p class="text-xs text-gray-500 dark:text-gray-400">Edited {{ formatUpdatedAt(project.updatedAt) }}</p>
+            <div class="flex items-center justify-between gap-3">
+              <p class="text-xs text-gray-500 dark:text-gray-400">Edited {{ formatUpdatedAt(project.updatedAt) }}</p>
+              <button
+                type="button"
+                class="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:text-red-300 dark:bg-red-500/10 dark:hover:bg-red-500/20"
+                :class="{ 'opacity-50 cursor-not-allowed': actionLoadingId === project.id }"
+                :disabled="actionLoadingId === project.id"
+                @click.stop.prevent="confirmDelete(project.id)"
+              >
+                <TrashIcon class="w-3.5 h-3.5" />
+                Delete
+              </button>
+            </div>
           </AppCard>
         </div>
       </div>
+      <Teleport to="body">
+        <div
+          v-if="projectPendingDelete"
+          class="fixed inset-0 z-50 flex items-center justify-center p-4"
+        >
+          <div class="fixed inset-0 bg-black/50" @click="cancelDelete"></div>
+          <div class="relative bg-white dark:bg-gray-900 rounded-2xl p-6 w-full max-w-sm shadow-2xl space-y-4">
+            <div>
+              <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Delete project?</h3>
+              <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                “{{ projectPendingDelete.name }}” and all of its design data will be permanently removed. This action cannot be undone.
+              </p>
+            </div>
+            <div class="flex flex-col sm:flex-row justify-end gap-3">
+              <AppButton variant="secondary" class="sm:flex-1" @click="cancelDelete">Cancel</AppButton>
+              <AppButton
+                class="sm:flex-1 bg-red-600 hover:bg-red-700 focus-visible:ring-red-500"
+                :disabled="actionLoadingId === projectPendingDelete.id"
+                @click="handleDelete"
+              >
+                {{ actionLoadingId === projectPendingDelete.id ? 'Deleting…' : 'Delete' }}
+              </AppButton>
+            </div>
+          </div>
+        </div>
+      </Teleport>
     </div>
   </AppLayout>
 </template>

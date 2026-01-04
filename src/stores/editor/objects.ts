@@ -21,6 +21,7 @@ import {
   buildDateCellGraphics,
   buildPlannerNoteGraphics,
   buildScheduleGraphics,
+  buildTableGraphics,
   buildWeekStripGraphics,
 } from '@/stores/editor/graphics-builders'
 import {
@@ -30,6 +31,7 @@ import {
   getDefaultDateCellMetadata,
   getDefaultPlannerNoteMetadata,
   getDefaultScheduleMetadata,
+  getDefaultTableMetadata,
   getDefaultWeekStripMetadata,
 } from '@/stores/editor/metadata-defaults'
 
@@ -62,6 +64,7 @@ export function createObjectIdentityHelper(params: {
     if (metadata?.kind === 'schedule') return 'Schedule'
     if (metadata?.kind === 'checklist') return 'Checklist'
     if (metadata?.kind === 'collage') return 'Photo Collage'
+    if (metadata?.kind === 'table') return 'Table'
     
     // Check for arrow (group with shapeKind)
     if (obj?.data?.shapeKind === 'arrow') return 'Arrow'
@@ -289,13 +292,16 @@ export function createObjectsModule(params: {
       case 'collage':
         fabricObject = createCollageObject(id, options)
         break
+      case 'table':
+        fabricObject = createTableObject(id, options)
+        break
     }
 
     if (fabricObject) {
       ensureObjectIdentity(fabricObject as any)
       canvas.value.add(fabricObject)
       canvas.value.setActiveObject(fabricObject)
-      canvas.value.renderAll()
+      canvas.value.requestRenderAll?.()
       snapshotCanvasState()
     }
   }
@@ -648,6 +654,27 @@ export function createObjectsModule(params: {
     return group
   }
 
+  function createTableObject(id: string, options: any): FabricObject {
+    const metadata = getDefaultTableMetadata({
+      ...options,
+      rows: options.rows,
+      columns: options.columns,
+      size: options.width && options.height ? { width: options.width, height: options.height } : options.size,
+    })
+    const group = buildTableGraphics(metadata)
+    group.set({
+      left: options.x ?? options.left ?? 360,
+      top: options.y ?? options.top ?? 220,
+      id,
+      name: options.name ?? getLayerNameForMetadata(metadata),
+      subTargetCheck: false,
+      hoverCursor: 'move',
+      objectCaching: false,
+    })
+    attachElementMetadata(group, metadata)
+    return group
+  }
+
   function createWeekStripObject(id: string, options: any): FabricObject {
     const metadata = getDefaultWeekStripMetadata({
       ...options,
@@ -784,7 +811,7 @@ export function createObjectsModule(params: {
 
           canvas.value!.add(img)
           canvas.value!.setActiveObject(img)
-          canvas.value!.renderAll()
+          canvas.value!.requestRenderAll?.()
           snapshotCanvasState()
           resolve()
         })
@@ -803,7 +830,7 @@ export function createObjectsModule(params: {
     })
 
     canvas.value.discardActiveObject()
-    canvas.value.renderAll()
+    canvas.value.requestRenderAll?.()
     snapshotCanvasState()
   }
 
@@ -845,7 +872,7 @@ export function createObjectsModule(params: {
       
       canvas.value!.add(cloned)
       canvas.value!.setActiveObject(cloned)
-      canvas.value!.renderAll()
+      canvas.value!.requestRenderAll?.()
       
       // Manually trigger selection update to ensure properties panel shows
       selectedObjectIds.value = [(cloned as any).id].filter(Boolean)
@@ -897,7 +924,7 @@ export function createObjectsModule(params: {
       
       canvas.value!.add(pasted)
       canvas.value!.setActiveObject(pasted)
-      canvas.value!.renderAll()
+      canvas.value!.requestRenderAll?.()
       
       // Manually trigger selection update to ensure properties panel shows
       selectedObjectIds.value = [(pasted as any).id].filter(Boolean)
@@ -927,14 +954,12 @@ export function createObjectsModule(params: {
     if (allObjects.length === 1) {
       canvas.value.setActiveObject(allObjects[0]!)
       canvas.value.requestRenderAll?.()
-      canvas.value.renderAll()
       return
     }
 
     const sel = new ActiveSelection(allObjects, { canvas: canvas.value })
     canvas.value.setActiveObject(sel)
     canvas.value.requestRenderAll?.()
-    canvas.value.renderAll()
   }
 
   function nudgeSelection(dx: number, dy: number): void {
@@ -951,7 +976,6 @@ export function createObjectsModule(params: {
 
     canvas.value.getActiveObject()?.setCoords?.()
     canvas.value.requestRenderAll?.()
-    canvas.value.renderAll()
     isDirty.value = true
     queueHistorySave()
   }
@@ -1034,7 +1058,6 @@ export function createObjectsModule(params: {
         // Update selectedObjectIds with the new group ID
         selectedObjectIds.value = [(group as any).id].filter(Boolean)
         canvas.value.requestRenderAll?.()
-        canvas.value.renderAll()
         snapshotCanvasState()
         console.log('[groupSelected] success (manual)', {
           groupId: (group as any)?.id ?? null,
@@ -1053,7 +1076,6 @@ export function createObjectsModule(params: {
           }
         })
         canvas.value.requestRenderAll?.()
-        canvas.value.renderAll()
         return
       }
     }
@@ -1100,7 +1122,6 @@ export function createObjectsModule(params: {
     // Update selectedObjectIds with the new group ID
     selectedObjectIds.value = [(group as any).id].filter(Boolean)
     canvas.value.requestRenderAll?.()
-    canvas.value.renderAll()
     snapshotCanvasState()
   }
 
@@ -1182,7 +1203,6 @@ export function createObjectsModule(params: {
     }
     
     canvas.value.requestRenderAll?.()
-    canvas.value.renderAll()
     snapshotCanvasState()
   }
 
@@ -1190,7 +1210,6 @@ export function createObjectsModule(params: {
     if (!canvas.value) return
     canvas.value.discardActiveObject()
     canvas.value.requestRenderAll?.()
-    canvas.value.renderAll()
   }
 
   function toggleLockSelected(): void {
@@ -1219,7 +1238,6 @@ export function createObjectsModule(params: {
     }
 
     canvas.value.requestRenderAll?.()
-    canvas.value.renderAll()
     snapshotCanvasState()
   }
 
@@ -1237,7 +1255,6 @@ export function createObjectsModule(params: {
 
     canvas.value.discardActiveObject()
     canvas.value.requestRenderAll?.()
-    canvas.value.renderAll()
     snapshotCanvasState()
   }
 
@@ -1344,7 +1361,6 @@ export function createObjectsModule(params: {
     }
 
     canvas.value.requestRenderAll?.()
-    canvas.value.renderAll()
     isDirty.value = true
   }
 
@@ -1353,7 +1369,7 @@ export function createObjectsModule(params: {
     const obj = getCanvasObjectById(id)
     if (!obj) return
     canvas.value.setActiveObject(obj)
-    canvas.value.renderAll()
+    canvas.value.requestRenderAll?.()
   }
 
   function toggleObjectVisibility(id: string): void {
@@ -1361,7 +1377,7 @@ export function createObjectsModule(params: {
     const obj: any = getCanvasObjectById(id)
     if (!obj) return
     obj.visible = obj.visible === false
-    canvas.value.renderAll()
+    canvas.value.requestRenderAll?.()
     snapshotCanvasState()
   }
 
@@ -1373,7 +1389,7 @@ export function createObjectsModule(params: {
     obj.selectable = nextSelectable
     obj.evented = nextSelectable
     obj.hasControls = nextSelectable
-    canvas.value.renderAll()
+    canvas.value.requestRenderAll?.()
     snapshotCanvasState()
   }
 
@@ -1383,7 +1399,7 @@ export function createObjectsModule(params: {
     if (!obj) return
     canvas.value.remove(obj)
     canvas.value.discardActiveObject()
-    canvas.value.renderAll()
+    canvas.value.requestRenderAll?.()
     snapshotCanvasState()
   }
 
@@ -1392,7 +1408,7 @@ export function createObjectsModule(params: {
     const activeObject = canvas.value.getActiveObject()
     if (activeObject) {
       canvas.value.bringObjectForward(activeObject)
-      canvas.value.renderAll()
+      canvas.value.requestRenderAll?.()
       saveToHistory()
     }
   }
@@ -1402,7 +1418,7 @@ export function createObjectsModule(params: {
     const activeObject = canvas.value.getActiveObject()
     if (activeObject) {
       canvas.value.sendObjectBackwards(activeObject)
-      canvas.value.renderAll()
+      canvas.value.requestRenderAll?.()
       saveToHistory()
     }
   }
@@ -1412,7 +1428,7 @@ export function createObjectsModule(params: {
     const activeObject = canvas.value.getActiveObject()
     if (activeObject) {
       canvas.value.bringObjectToFront(activeObject)
-      canvas.value.renderAll()
+      canvas.value.requestRenderAll?.()
       saveToHistory()
     }
   }
@@ -1422,7 +1438,7 @@ export function createObjectsModule(params: {
     const activeObject = canvas.value.getActiveObject()
     if (activeObject) {
       canvas.value.sendObjectToBack(activeObject)
-      canvas.value.renderAll()
+      canvas.value.requestRenderAll?.()
       saveToHistory()
     }
   }
@@ -1639,7 +1655,6 @@ export function createObjectsModule(params: {
 
     canvas.value.getActiveObject()?.setCoords?.()
     canvas.value.requestRenderAll?.()
-    canvas.value.renderAll()
     saveToHistory()
   }
 
@@ -1725,7 +1740,6 @@ export function createObjectsModule(params: {
     }
 
     canvas.value.requestRenderAll?.()
-    canvas.value.renderAll()
     saveToHistory()
   }
 

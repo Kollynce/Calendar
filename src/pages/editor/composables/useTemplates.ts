@@ -1,5 +1,6 @@
 import { ref, computed, watch, nextTick } from 'vue'
 import { useEditorStore } from '@/stores/editor.store'
+import { useAuthStore } from '@/stores/auth.store'
 import {
   type CalendarTemplate,
   buildTemplateInstance,
@@ -57,6 +58,7 @@ export function useTemplates(
   canvasSize: () => { width: number; height: number }
 ) {
   const editorStore = useEditorStore()
+  const authStore = useAuthStore()
 
   const selectedTemplateCategory = ref('all')
   const templateThumbnails = ref<Record<string, string>>({})
@@ -67,14 +69,17 @@ export function useTemplates(
   const isSyncingTemplateUiFromProject = ref(false)
   let overridesRenderTimer: ReturnType<typeof setTimeout> | null = null
 
+  const lastTemplateOverrides = ref<TemplateOptions>({ ...DEFAULT_TEMPLATE_OPTIONS })
+
   const marketplaceTemplates = ref<MarketplaceProduct[]>([])
   const marketplaceLoading = ref(false)
   const marketplaceError = ref<string | null>(null)
 
   const allTemplates = computed<CalendarTemplate[]>(() => {
-    return marketplaceTemplates.value
-      .filter(p => p.isPublished !== false)
-      .map(marketplaceToCalendarTemplate)
+    const visible = authStore.isAdmin
+      ? marketplaceTemplates.value
+      : marketplaceTemplates.value.filter(p => p.isPublished !== false)
+    return visible.map(marketplaceToCalendarTemplate)
   })
 
   const filteredTemplates = computed(() => {
@@ -95,7 +100,7 @@ export function useTemplates(
     marketplaceError.value = null
     try {
       const templates = await marketplaceService.listTemplates(undefined, 100)
-      marketplaceTemplates.value = templates.filter(t => t.isPublished !== false)
+      marketplaceTemplates.value = templates
     } catch (error) {
       console.error('[useTemplates] Failed to load marketplace templates:', error)
       marketplaceError.value = 'Failed to load templates'
@@ -121,12 +126,15 @@ export function useTemplates(
 
       await new Promise<void>((resolve) => {
         editorStore.canvas?.loadFromJSON(state as any, () => {
-          editorStore.canvas?.getObjects().forEach((obj) => {
-            if ((obj as any).data?.watermark) {
-              editorStore.canvas?.remove(obj)
-            }
+          editorStore.withCanvasBatch(() => {
+            // Snapshot array to avoid issues when removing during iteration
+            const objects = [...(editorStore.canvas?.getObjects() ?? [])]
+            objects.forEach((obj) => {
+              if ((obj as any).data?.watermark) {
+                editorStore.canvas?.remove(obj)
+              }
+            })
           })
-          editorStore.canvas?.renderAll()
           resolve()
         })
       })
@@ -188,9 +196,77 @@ export function useTemplates(
     }
   }
 
+  function getChangedTemplateOptionKeys(prev: TemplateOptions, next: TemplateOptions): (keyof TemplateOptions)[] {
+    const keys = new Set<keyof TemplateOptions>([
+      'highlightToday',
+      'highlightWeekends',
+      'hasPhotoArea',
+      'hasNotesArea',
+      'primaryColor',
+      'accentColor',
+      'backgroundColor',
+    ])
+    const changed: (keyof TemplateOptions)[] = []
+    keys.forEach((key) => {
+      if (prev[key] !== next[key]) changed.push(key)
+    })
+    return changed
+  }
+
+  function isHeavyTemplateOverrideChange(changedKeys: (keyof TemplateOptions)[]): boolean {
+    // Structural/layout toggles require full template regeneration.
+    return changedKeys.includes('hasPhotoArea') || changedKeys.includes('hasNotesArea')
+  }
+
+  function applyLightTemplateOverrides(): void {
+    if (!editorStore.canvas) return
+    const year = editorStore.project?.config.year
+    if (!year) return
+
+    const next = templateOverrides.value
+
+    // Apply lightweight updates by mutating element metadata and rebuilding just the affected elements.
+    // This avoids a full template regeneration for common control changes (colors/highlights).
+    editorStore.withCanvasBatch(() => {
+      editorStore.canvas?.getObjects().forEach((obj) => {
+        const metadata = (obj as any)?.data?.elementMetadata as any
+        if (!metadata) return
+
+        if (metadata.kind === 'calendar-grid') {
+          if (typeof next.backgroundColor === 'string') {
+            metadata.backgroundColor = next.backgroundColor
+          }
+
+          if (typeof next.primaryColor === 'string') {
+            metadata.headerBackgroundColor = next.primaryColor
+          }
+
+          if (typeof next.accentColor === 'string') {
+            metadata.dayNumberColor = next.accentColor
+            metadata.holidayMarkerColor = next.accentColor
+            metadata.holidayListAccentColor = next.accentColor
+          }
+
+          metadata.weekendBackgroundColor = next.highlightWeekends
+            ? (metadata.weekendBackgroundColor ?? '#fdf2f8')
+            : undefined
+
+          metadata.todayBackgroundColor = next.highlightToday
+            ? (metadata.todayBackgroundColor ?? '#fee2e2')
+            : undefined
+
+          return
+        }
+      })
+    })
+
+    editorStore.refreshCalendarGridsForYear(year)
+  }
+
   function resetTemplateOverrides() {
     if (!activeTemplate.value) return
     templateOverrides.value = getTemplateDefaultOptions(activeTemplate.value)
+    lastTemplateOverrides.value = { ...templateOverrides.value }
   }
 
   async function syncTemplateUiFromProject(): Promise<void> {
@@ -211,6 +287,7 @@ export function useTemplates(
 
     const projectOptions = editorStore.project?.config.templateOptions
     templateOverrides.value = resolveTemplateOptions(template, projectOptions || {})
+    lastTemplateOverrides.value = { ...templateOverrides.value }
 
     await nextTick()
     isSyncingTemplateUiFromProject.value = false
@@ -275,6 +352,7 @@ export function useTemplates(
 
     if (appliedStoredState) {
       templateOverrides.value = storedTemplateOptions ?? getTemplateDefaultOptions(template)
+      lastTemplateOverrides.value = { ...templateOverrides.value }
       editorStore.updateTemplateOptions({ ...templateOverrides.value })
       await nextTick()
       isApplyingTemplate.value = false
@@ -282,6 +360,7 @@ export function useTemplates(
     }
 
     templateOverrides.value = getTemplateDefaultOptions(template)
+    lastTemplateOverrides.value = { ...templateOverrides.value }
     editorStore.updateTemplateOptions({ ...templateOverrides.value })
 
     // Clear canvas before applying generated template
@@ -326,8 +405,15 @@ export function useTemplates(
 
         editorStore.updateTemplateOptions({ ...templateOverrides.value })
 
+        const changedKeys = getChangedTemplateOptionKeys(lastTemplateOverrides.value, templateOverrides.value)
+        lastTemplateOverrides.value = { ...templateOverrides.value }
+
         if (overridesRenderTimer) clearTimeout(overridesRenderTimer)
         overridesRenderTimer = setTimeout(async () => {
+          if (changedKeys.length > 0 && !isHeavyTemplateOverrideChange(changedKeys)) {
+            applyLightTemplateOverrides()
+            return
+          }
           await renderTemplateWithOverrides(activeTemplate.value!, { recordHistory: false })
         }, 200)
       },
@@ -390,6 +476,7 @@ export function useTemplates(
     applyTemplate,
     loadTemplateThumbnails,
     loadMarketplaceTemplates,
+    refreshMarketplaceTemplates: loadMarketplaceTemplates,
     resetTemplateOverrides,
     renderTemplateWithOverrides,
     setupTemplateWatchers,

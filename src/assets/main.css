@@ -378,6 +378,15 @@ select[class*="bg-black/20"] option {
   display: none;
 }
 
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
 /* Touch-friendly slider */
 input[type="range"].touch-slider {
   height: 44px;

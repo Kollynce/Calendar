@@ -12,6 +12,9 @@ import type {
   Holiday,
   PlannerNoteMetadata,
   ScheduleMetadata,
+  TableCellContent,
+  TableCellMerge,
+  TableMetadata,
   WeekStripMetadata,
 } from '@/types'
 import { calendarGeneratorService } from '@/services/calendar/generator.service'
@@ -28,6 +31,42 @@ type CalendarGridDay = {
 
 type WeekStripDay = CalendarDay
 
+function computeStripeFill(
+  index: number,
+  metadata: TableMetadata,
+  defaultFill: string,
+  section: 'header' | 'body' | 'footer',
+): string {
+  if (section !== 'body') return defaultFill
+  if (!metadata.stripeEvenRows) return defaultFill
+  const stripeColor = metadata.stripeColor ?? '#f9fafb'
+  return index % 2 === 1 ? stripeColor : defaultFill
+}
+
+function getCellContent(
+  row: number,
+  column: number,
+  metadata: TableMetadata,
+): TableCellContent | undefined {
+  return metadata.cellContents?.find((item) => item.row === row && item.column === column)
+}
+
+function getMergeForCell(
+  row: number,
+  column: number,
+  merges?: TableCellMerge[],
+): TableCellMerge | undefined {
+  return merges?.find((merge) => row >= merge.row && row < merge.row + merge.rowSpan && column >= merge.column && column < merge.column + merge.colSpan)
+}
+
+function isCellCoveredByMerge(
+  row: number,
+  column: number,
+  merge: TableCellMerge,
+): boolean {
+  return row > merge.row && row < merge.row + merge.rowSpan && column >= merge.column && column < merge.column + merge.colSpan
+}
+
 export function buildCalendarGridGraphics(
   metadata: CalendarGridMetadata,
   getHolidaysForCalendarYear: (year: number, country?: string, language?: string) => Holiday[],
@@ -40,6 +79,8 @@ export function buildCalendarGridGraphics(
   const borderWidth = Math.max(0, metadata.borderWidth ?? 1)
   const borderColor = metadata.borderColor ?? '#e5e7eb'
   const backgroundColor = metadata.backgroundColor ?? '#ffffff'
+  const showBackground = metadata.showBackground !== false
+  const showBorder = metadata.showBorder !== false
   const headerHeight = metadata.showHeader ? Math.max(0, metadata.headerHeight ?? 60) : 0
   const weekdayHeight = metadata.showWeekdays ? Math.max(0, metadata.weekdayHeight ?? 36) : 0
   const gridLineColor = metadata.gridLineColor ?? '#e5e7eb'
@@ -125,9 +166,9 @@ export function buildCalendarGridGraphics(
       height: totalHeight,
       rx: cornerRadius,
       ry: cornerRadius,
-      fill: backgroundColor,
-      stroke: borderColor,
-      strokeWidth: borderWidth,
+      fill: showBackground ? backgroundColor : 'transparent',
+      stroke: showBorder ? borderColor : undefined,
+      strokeWidth: showBorder ? borderWidth : 0,
     }),
   )
 
@@ -483,6 +524,8 @@ export function buildWeekStripGraphics(
   const borderColor = metadata.borderColor ?? '#e5e7eb'
   const cellBorderColor = metadata.cellBorderColor ?? '#f1f5f9'
   const cellBorderWidth = Math.max(0, metadata.cellBorderWidth ?? 1)
+  const showBackground = metadata.showBackground !== false
+  const showBorder = metadata.showBorder !== false
 
   const labelColor = metadata.labelColor ?? '#0f172a'
   const labelFontFamily = metadata.labelFontFamily ?? 'Inter'
@@ -579,17 +622,19 @@ export function buildWeekStripGraphics(
   const listHeight = reserveSpaceForList ? Math.min(desiredListHeight, availableForList) : 0
   const listTop = height - listHeight
 
-  objects.push(
-    new Rect({
-      width,
-      height,
-      rx: cornerRadius,
-      ry: cornerRadius,
-      fill: backgroundColor,
-      stroke: borderColor,
-      strokeWidth: borderWidth,
-    }),
-  )
+  if (showBackground || showBorder) {
+    objects.push(
+      new Rect({
+        width,
+        height,
+        rx: cornerRadius,
+        ry: cornerRadius,
+        fill: showBackground ? backgroundColor : 'transparent',
+        stroke: showBorder ? borderColor : undefined,
+        strokeWidth: showBorder ? borderWidth : 0,
+      }),
+    )
+  }
 
   objects.push(
     new Textbox(label, {
@@ -836,6 +881,195 @@ export function buildWeekStripGraphics(
   })
 }
 
+export function buildTableGraphics(metadata: TableMetadata): Group {
+  const width = metadata.size.width
+  const height = metadata.size.height
+  const rows = Math.max(1, metadata.rows)
+  const columns = Math.max(1, metadata.columns)
+  const objects: FabricObject[] = []
+
+  const normalizeSegments = (total: number, segments: number[]): number[] => {
+    const safeTotal = Number.isFinite(total) && total > 0 ? total : 0
+    if (!safeTotal) {
+      const fallbackValue = segments.length ? 1 : 0
+      return segments.map(() => fallbackValue)
+    }
+    const sanitized = segments.map((value) => {
+      const numeric = Number(value)
+      return Number.isFinite(numeric) && numeric > 0 ? numeric : safeTotal / Math.max(1, segments.length)
+    })
+    const sum = sanitized.reduce((acc, value) => acc + value, 0)
+    if (!Number.isFinite(sum) || sum <= 0) {
+      const fallback = safeTotal / Math.max(1, segments.length)
+      return segments.map(() => fallback)
+    }
+    const scale = safeTotal / sum
+    let accumulated = 0
+    return sanitized.map((value, index) => {
+      if (index === sanitized.length - 1) {
+        return Math.max(0, safeTotal - accumulated)
+      }
+      const scaled = value * scale
+      accumulated += scaled
+      return scaled
+    })
+  }
+
+  const showOuterFrame = metadata.showOuterFrame ?? false
+  const showBackground = showOuterFrame && metadata.showBackground !== false
+  const showBorder = showOuterFrame && metadata.showBorder !== false
+  const borderColor = metadata.borderColor ?? '#d1d5db'
+  const borderWidth = Math.max(0, metadata.borderWidth ?? 0)
+  const cornerRadius = Math.max(0, metadata.cornerRadius ?? 0)
+  const backgroundColor = metadata.backgroundColor ?? 'transparent'
+  const cellPadding = Math.max(0, metadata.cellPadding ?? 12)
+  const showGridLines = metadata.showGridLines !== false
+  const gridLineColor = metadata.gridLineColor ?? '#e5e7eb'
+  const gridLineWidth = Math.max(0, metadata.gridLineWidth ?? 1)
+
+  const baseColumnWidth = width / columns
+  const baseRowHeight = height / rows
+
+  const rawColumnWidths = Array.from({ length: columns }, (_, idx) => {
+    const explicit = metadata.columnWidths?.[idx]
+    return Number.isFinite(explicit) && Number(explicit) > 0 ? Number(explicit) : baseColumnWidth
+  })
+
+  const rawRowHeights = Array.from({ length: rows }, (_, idx) => {
+    const explicit = metadata.rowHeights?.[idx]
+    return Number.isFinite(explicit) && Number(explicit) > 0 ? Number(explicit) : baseRowHeight
+  })
+
+  const columnWidths = normalizeSegments(width, rawColumnWidths)
+  const rowHeights = normalizeSegments(height, rawRowHeights)
+
+  if (showBackground || showBorder) {
+    objects.push(
+      new Rect({
+        width,
+        height,
+        rx: cornerRadius,
+        ry: cornerRadius,
+        fill: showBackground ? backgroundColor : 'transparent',
+        stroke: showBorder ? borderColor : undefined,
+        strokeWidth: showBorder ? borderWidth : 0,
+      }),
+    )
+  }
+
+  const headerRows = Math.max(0, Math.min(rows, metadata.headerRows ?? 0))
+  const footerRows = Math.max(0, Math.min(rows - headerRows, metadata.footerRows ?? 0))
+
+  let currentTop = showBorder ? borderWidth / 2 : 0
+
+  for (let rowIndex = 0; rowIndex < rows; rowIndex++) {
+    const rowHeight = rowHeights[rowIndex] ?? rowHeights[rowHeights.length - 1] ?? baseRowHeight
+    let currentLeft = showBorder ? borderWidth / 2 : 0
+    const section =
+      rowIndex < headerRows ? 'header' : rowIndex >= rows - footerRows ? 'footer' : 'body'
+
+    for (let colIndex = 0; colIndex < columns; colIndex++) {
+      const columnWidth =
+        columnWidths[colIndex] ?? columnWidths[columnWidths.length - 1] ?? baseColumnWidth
+      const merge = getMergeForCell(rowIndex, colIndex, metadata.merges)
+
+      if (merge && isCellCoveredByMerge(rowIndex, colIndex, merge)) {
+        currentLeft += columnWidth
+        continue
+      }
+
+      const spanWidth = (() => {
+        if (!merge || merge.column !== colIndex || merge.row !== rowIndex) return columnWidth
+        let total = 0
+        for (let span = 0; span < Math.max(1, merge.colSpan); span++) {
+          const idx = colIndex + span
+          total += columnWidths[idx] ?? columnWidth
+        }
+        return total || columnWidth
+      })()
+
+      const spanHeight = (() => {
+        if (!merge || merge.column !== colIndex || merge.row !== rowIndex) return rowHeight
+        let total = 0
+        for (let span = 0; span < Math.max(1, merge.rowSpan); span++) {
+          const idx = rowIndex + span
+          total += rowHeights[idx] ?? rowHeight
+        }
+        return total || rowHeight
+      })()
+
+      const defaultFill =
+        section === 'header'
+          ? metadata.headerBackgroundColor ?? '#111827'
+          : section === 'footer'
+            ? metadata.footerBackgroundColor ?? '#f3f4f6'
+            : metadata.cellBackgroundColor ?? '#ffffff'
+
+      const fill = computeStripeFill(
+        rowIndex - headerRows,
+        metadata,
+        defaultFill,
+        section,
+      )
+
+      objects.push(
+        new Rect({
+          left: currentLeft,
+          top: currentTop,
+          width: spanWidth,
+          height: spanHeight,
+          fill,
+          selectable: false,
+          stroke: showGridLines ? gridLineColor : undefined,
+          strokeWidth: showGridLines ? gridLineWidth : 0,
+        }),
+      )
+
+      const cellContent = getCellContent(rowIndex, colIndex, metadata)
+      const text = cellContent?.text ?? ''
+      if (text) {
+        const fontFamily = cellContent?.fontFamily ?? metadata.cellFontFamily ?? 'Inter'
+        const fontSize = cellContent?.fontSize ?? metadata.cellFontSize ?? 14
+        const fontWeight = cellContent?.fontWeight ?? metadata.cellFontWeight ?? 500
+        const textColor =
+          cellContent?.textColor ??
+          (section === 'header'
+            ? metadata.headerTextColor ?? '#ffffff'
+            : section === 'footer'
+              ? metadata.footerTextColor ?? '#111827'
+              : metadata.cellTextColor ?? '#111827')
+        const textAlign = cellContent?.textAlign ?? metadata.cellTextAlign ?? 'left'
+
+        objects.push(
+          new Textbox(text, {
+            left: currentLeft + cellPadding,
+            top: currentTop + cellPadding,
+            width: Math.max(4, spanWidth - cellPadding * 2),
+            height: Math.max(4, spanHeight - cellPadding * 2),
+            fontFamily,
+            fontSize,
+            fontWeight,
+            fill: textColor,
+            textAlign,
+            selectable: false,
+            verticalAlign: 'middle',
+          }),
+        )
+      }
+
+      currentLeft += columnWidth
+    }
+
+    currentTop += rowHeight
+  }
+
+  return new Group(objects, {
+    subTargetCheck: false,
+    hoverCursor: 'move',
+    objectCaching: rows * columns > 64,
+  })
+}
+
 export function buildDateCellGraphics(
   metadata: DateCellMetadata,
   getHolidaysForCalendarYear?: HolidaysGetter,
@@ -862,6 +1096,8 @@ export function buildDateCellGraphics(
   const borderWidth = Math.max(0, metadata.borderWidth ?? 1)
   const backgroundColor = metadata.backgroundColor ?? '#ffffff'
   const borderColor = metadata.borderColor ?? '#e2e8f0'
+  const showBackground = metadata.showBackground !== false
+  const showBorder = metadata.showBorder !== false
   const accentRatioRaw = metadata.accentHeightRatio ?? 0.4
   const accentRatio = Math.max(0.05, Math.min(0.85, Number(accentRatioRaw) || 0.4))
   const accentHeight = height * accentRatio
@@ -885,17 +1121,19 @@ export function buildDateCellGraphics(
   const markerColor = metadata.holidayMarkerColor ?? '#ef4444'
   const markerHeight = Math.max(1, metadata.holidayMarkerHeight ?? 6)
   const effectiveDayNumberColor = showHolidayMarkers && markerStyle === 'text' && hasHoliday ? markerColor : (metadata.dayNumberColor ?? dayNumberColor)
-  objects.push(
-    new Rect({
-      width,
-      height,
-      rx: cornerRadius,
-      ry: cornerRadius,
-      fill: backgroundColor,
-      stroke: borderColor,
-      strokeWidth: borderWidth,
-    }),
-  )
+  if (showBackground || showBorder) {
+    objects.push(
+      new Rect({
+        width,
+        height,
+        rx: cornerRadius,
+        ry: cornerRadius,
+        fill: showBackground ? backgroundColor : 'transparent',
+        stroke: showBorder ? borderColor : undefined,
+        strokeWidth: showBorder ? borderWidth : 0,
+      }),
+    )
+  }
 
   objects.push(
     new Rect({
@@ -1126,6 +1364,8 @@ export function buildPlannerNoteGraphics(metadata: PlannerNoteMetadata): Group {
   const borderWidth = Math.max(0, metadata.borderWidth ?? 1)
   const borderColor = metadata.borderColor ?? '#e2e8f0'
   const backgroundColor = metadata.backgroundColor ?? '#ffffff'
+  const showBackground = metadata.showBackground !== false
+  const showBorder = metadata.showBorder !== false
   const headerStyle = metadata.headerStyle ?? (metadata.pattern === 'hero' ? 'filled' : 'minimal')
 
   const paddingX = 24
@@ -1134,17 +1374,19 @@ export function buildPlannerNoteGraphics(metadata: PlannerNoteMetadata): Group {
   const bodyTop = paddingTop + (headerStyle === 'none' ? 18 : headerHeight)
   const headerRectRadius = Math.min(cornerRadius, 12)
 
-  objects.push(
-    new Rect({
-      width,
-      height,
-      rx: cornerRadius,
-      ry: cornerRadius,
-      fill: backgroundColor,
-      stroke: borderColor,
-      strokeWidth: borderWidth,
-    }),
-  )
+  if (showBackground || showBorder) {
+    objects.push(
+      new Rect({
+        width,
+        height,
+        rx: cornerRadius,
+        ry: cornerRadius,
+        fill: showBackground ? backgroundColor : 'transparent',
+        stroke: showBorder ? borderColor : undefined,
+        strokeWidth: showBorder ? borderWidth : 0,
+      }),
+    )
+  }
 
   if (headerStyle === 'filled' || headerStyle === 'tint') {
     const fill = metadata.headerBackgroundColor ?? metadata.accentColor
@@ -1263,22 +1505,26 @@ export function buildScheduleGraphics(metadata: ScheduleMetadata): Group {
   const borderWidth = Math.max(0, metadata.borderWidth ?? 1)
   const borderColor = metadata.borderColor ?? '#e2e8f0'
   const backgroundColor = metadata.backgroundColor ?? '#ffffff'
+  const showBackground = metadata.showBackground !== false
+  const showBorder = metadata.showBorder !== false
   const headerStyle = metadata.headerStyle ?? 'minimal'
   const headerHeight = headerStyle === 'none' ? 0 : 48
   const bodyTop = paddingTop + (headerStyle === 'none' ? 18 : headerHeight)
   const headerRectRadius = Math.min(cornerRadius, 12)
 
-  objects.push(
-    new Rect({
-      width,
-      height,
-      rx: cornerRadius,
-      ry: cornerRadius,
-      fill: backgroundColor,
-      stroke: borderColor,
-      strokeWidth: borderWidth,
-    }),
-  )
+  if (showBackground || showBorder) {
+    objects.push(
+      new Rect({
+        width,
+        height,
+        rx: cornerRadius,
+        ry: cornerRadius,
+        fill: showBackground ? backgroundColor : 'transparent',
+        stroke: showBorder ? borderColor : undefined,
+        strokeWidth: showBorder ? borderWidth : 0,
+      }),
+    )
+  }
 
   if (headerStyle === 'filled' || headerStyle === 'tint') {
     const fill = metadata.headerBackgroundColor ?? metadata.accentColor
@@ -1383,22 +1629,26 @@ export function buildChecklistGraphics(metadata: ChecklistMetadata): Group {
   const borderWidth = Math.max(0, metadata.borderWidth ?? 1)
   const borderColor = metadata.borderColor ?? '#e2e8f0'
   const backgroundColor = metadata.backgroundColor ?? '#ffffff'
+  const showBackground = metadata.showBackground !== false
+  const showBorder = metadata.showBorder !== false
   const headerStyle = metadata.headerStyle ?? 'tint'
   const headerHeight = headerStyle === 'none' ? 0 : 48
   const bodyTop = paddingTop + (headerStyle === 'none' ? 18 : headerHeight)
   const headerRectRadius = Math.min(cornerRadius, 12)
 
-  objects.push(
-    new Rect({
-      width,
-      height,
-      rx: cornerRadius,
-      ry: cornerRadius,
-      fill: backgroundColor,
-      stroke: borderColor,
-      strokeWidth: borderWidth,
-    }),
-  )
+  if (showBackground || showBorder) {
+    objects.push(
+      new Rect({
+        width,
+        height,
+        rx: cornerRadius,
+        ry: cornerRadius,
+        fill: showBackground ? backgroundColor : 'transparent',
+        stroke: showBorder ? borderColor : undefined,
+        strokeWidth: showBorder ? borderWidth : 0,
+      }),
+    )
+  }
 
   if (headerStyle === 'filled' || headerStyle === 'tint') {
     const fill = metadata.headerBackgroundColor ?? metadata.accentColor

@@ -7,6 +7,7 @@ import {
   elementCategories,
   emojiCategories,
   elementPlacementDefaults,
+  getCenteredTablePlacement,
   type ElementItem,
 } from '@/pages/editor/composables/useElements'
 
@@ -88,13 +89,20 @@ function getSmartCalendarPlacement(element: ElementItem): { x: number; y: number
 }
 
 function addElement(element: ElementItem) {
-  const placement = element.type === 'calendar' ? getSmartCalendarPlacement(element) : elementPlacementDefaults[element.type]
+  const placement =
+    element.type === 'calendar'
+      ? getSmartCalendarPlacement(element)
+      : element.type === 'table'
+        ? getCenteredTablePlacement(element)
+        : elementPlacementDefaults[element.type]
   const options = { x: placement?.x, y: placement?.y, ...(element.options || {}) }
 
   if (element.type === 'text') {
     editorStore.addObject('text', options)
   } else if (element.type === 'shape') {
     editorStore.addObject('shape', { shapeType: element.shapeType || 'rect', ...options })
+  } else if (element.type === 'table') {
+    editorStore.addObject('table', options)
   } else if (element.type === 'calendar') {
     if (element.calendarType === 'month-grid') editorStore.addObject('calendar-grid', options)
     else if (element.calendarType === 'week-strip') editorStore.addObject('week-strip', options)

@@ -1,0 +1,49 @@
+{"users": [
+{
+  "localId": "FntGZHstGJTuwv1XyTBzTHjnKkw2",
+  "email": "test@example.com",
+  "emailVerified": false,
+  "passwordHash": "frBLQUyWFIwT1M9vLz8MoBH8R/ZeJxYTzNiigGwn1KQiLQcsBQt/MHzNE3zr9+5JXGISLqJAR5K6LnWN3xE8cQ==",
+  "salt": "N9yT1aTNynBOUg==",
+  "lastSignedInAt": "1766853794983",
+  "createdAt": "1766853794983",
+  "providerUserInfo": []
+},
+{
+  "localId": "HaCsug7od9YMV2CJd5OLWxkzznA3",
+  "email": "collinskreation@gmail.com",
+  "emailVerified": true,
+  "displayName": "Collins Kreation",
+  "photoUrl": "https://lh3.googleusercontent.com/a/ACg8ocI0POQQV3_EcvYquo5Rn5P0x2RY0dxICjLueO7YfduPwoi-hS0=s96-c",
+  "lastSignedInAt": "1767260889943",
+  "createdAt": "1766936548106",
+  "customAttributes": "{\"admin\":true}",
+  "providerUserInfo": [
+    {
+      "providerId": "google.com",
+      "rawId": "109516654219961488772",
+      "email": "collinskreation@gmail.com",
+      "displayName": "Collins Kreation",
+      "photoUrl": "https://lh3.googleusercontent.com/a/ACg8ocI0POQQV3_EcvYquo5Rn5P0x2RY0dxICjLueO7YfduPwoi-hS0=s96-c"
+    }
+  ]
+},
+{
+  "localId": "mF1haKQrx0bgChdPM26JsYz8f8v2",
+  "email": "collinsodeny@gmail.com",
+  "emailVerified": true,
+  "displayName": "Collins Odeny (Collins Kreation)",
+  "photoUrl": "https://lh3.googleusercontent.com/a/ACg8ocKxxvxNMBkuNIfbd7dhHyekABjTR9v26eWe4oFmjkL3_hBTpxCE=s96-c",
+  "lastSignedInAt": "1767014315186",
+  "createdAt": "1766048095056",
+  "customAttributes": "{\"admin\":true}",
+  "providerUserInfo": [
+    {
+      "providerId": "google.com",
+      "rawId": "112573420953126514920",
+      "email": "collinsodeny@gmail.com",
+      "displayName": "Collins Odeny (Collins Kreation)",
+      "photoUrl": "https://lh3.googleusercontent.com/a/ACg8ocKxxvxNMBkuNIfbd7dhHyekABjTR9v26eWe4oFmjkL3_hBTpxCE=s96-c"
+    }
+  ]
+}]}

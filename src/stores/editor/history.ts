@@ -218,7 +218,7 @@ export function createHistoryModule(params: {
       }
 
       objects.forEach((obj) => processObject(obj))
-      canvas.value.renderAll()
+      canvas.value.requestRenderAll?.()
     } finally {
       historyProcessing = false
     }

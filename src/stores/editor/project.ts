@@ -69,7 +69,22 @@ export function createProjectModule(params: {
   }
 
   function ensureWatermarkConfig(config: CalendarConfig): WatermarkConfig {
-    const visible = config.showWatermark === false ? false : true
+    // Determine default visibility based on user tier and existing config
+    let visible: boolean
+    if (config.showWatermark !== undefined) {
+      // Respect existing config
+      visible = config.showWatermark
+    } else if (config.watermark?.visible !== undefined) {
+      // Respect existing watermark config
+      visible = config.watermark.visible
+    } else {
+      // Set default based on subscription tier
+      // Free users: watermark enabled by default (with logo)
+      // Paid users: watermark disabled by default
+      const isPaidUser = authStore.user && ['pro', 'business', 'enterprise'].includes((authStore.user as any).subscription || 'free')
+      visible = !isPaidUser
+    }
+    
     const fallback: WatermarkConfig = {
       ...DEFAULT_WATERMARK_CONFIG,
       visible,

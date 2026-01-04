@@ -350,7 +350,7 @@ export function useCanvasOperations(
 
     await nextTick()
     editorStore.canvas.calcOffset()
-    editorStore.canvas.renderAll()
+    editorStore.requestRender()
     editorStore.snapshotCanvasState()
   }
 

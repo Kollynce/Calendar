@@ -1,7 +1,7 @@
 import { useEditorStore } from '@/stores/editor.store'
 import type { SubscriptionTier } from '@/types'
 
-export type ElementType = 'shape' | 'calendar' | 'planner' | 'text' | 'collage'
+export type ElementType = 'shape' | 'calendar' | 'planner' | 'text' | 'collage' | 'table'
 
 export interface ElementItem {
   id: string
@@ -36,6 +36,77 @@ export const elementPlacementDefaults: Record<ElementType, { x: number; y: numbe
   planner: { x: 420, y: 160 },
   text: { x: 180, y: 180 },
   collage: { x: 100, y: 100 },
+  table: { x: 360, y: 240 },
+}
+
+export function getCenteredTablePlacement(
+  element: ElementItem,
+  sizeOverride?: { width: number; height: number },
+): { x: number; y: number } {
+  const fallback = elementPlacementDefaults.table
+  const editorStore = useEditorStore()
+  const canvasWidth = editorStore.canvas?.width ?? editorStore.project?.canvas.width ?? 800
+  const canvasHeight = editorStore.canvas?.height ?? editorStore.project?.canvas.height ?? 600
+  const width = sizeOverride?.width ?? Number((element.options as any)?.width ?? 440)
+  const height = sizeOverride?.height ?? Number((element.options as any)?.height ?? 360)
+  if (!canvasWidth || !canvasHeight || width <= 0 || height <= 0) return fallback
+  const margin = 24
+  const centeredX = Math.max(margin, (canvasWidth - width) / 2)
+  const centeredY = Math.max(margin, (canvasHeight - height) / 2)
+  return { x: centeredX, y: centeredY }
+}
+
+export function getFittedTableOptions(element: ElementItem): {
+  width: number
+  height: number
+  scale: number
+  columnWidths?: number[]
+  rowHeights?: number[]
+} {
+  const editorStore = useEditorStore()
+  const canvasWidth = editorStore.canvas?.width ?? editorStore.project?.canvas.width ?? 0
+  const canvasHeight = editorStore.canvas?.height ?? editorStore.project?.canvas.height ?? 0
+  const defaults = (element.options as any) ?? {}
+  const width = Number(defaults.width ?? 440)
+  const height = Number(defaults.height ?? 360)
+  const baseColumnWidths = Array.isArray(defaults.columnWidths) ? defaults.columnWidths : undefined
+  const baseRowHeights = Array.isArray(defaults.rowHeights) ? defaults.rowHeights : undefined
+
+  if (!canvasWidth || !canvasHeight || width <= 0 || height <= 0) {
+    return { width, height, scale: 1, columnWidths: baseColumnWidths, rowHeights: baseRowHeights }
+  }
+
+  const margin = 48
+  const maxWidth = Math.max(120, canvasWidth - margin * 2)
+  const maxHeight = Math.max(120, canvasHeight - margin * 2)
+  const scale = Math.min(1, maxWidth / width, maxHeight / height)
+
+  if (scale >= 0.999) {
+    return { width, height, scale: 1, columnWidths: baseColumnWidths, rowHeights: baseRowHeights }
+  }
+
+  const scaledWidth = +(width * scale).toFixed(2)
+  const scaledHeight = +(height * scale).toFixed(2)
+
+  const scaleArray = (values?: number[]): number[] | undefined => {
+    if (!values) return undefined
+    const next = values
+      .map((value) => {
+        const numeric = Number(value)
+        if (!Number.isFinite(numeric)) return 0
+        return +(numeric * scale).toFixed(2)
+      })
+      .map((value) => (value < 0 ? 0 : value))
+    return next
+  }
+
+  return {
+    width: scaledWidth,
+    height: scaledHeight,
+    scale,
+    columnWidths: scaleArray(baseColumnWidths),
+    rowHeights: scaleArray(baseRowHeights),
+  }
 }
 
 // Expanded emoji library organized by categories
@@ -374,6 +445,222 @@ export const elementCategories: ElementCategory[] = [
     ],
   },
   {
+    name: 'Tables',
+    items: [
+      {
+        id: 'simple-table',
+        name: 'Table',
+        icon: '▦',
+        type: 'table',
+        description: 'Customizable table with rows & columns',
+        options: {
+          width: 480,
+          height: 340,
+          rows: 5,
+          columns: 4,
+          headerRows: 1,
+          stripeEvenRows: true,
+          stripeColor: '#f8fafc',
+          headerBackgroundColor: '#1f2937',
+          headerTextColor: '#ffffff',
+          cellPadding: 14,
+          columnWidths: [160, 110, 100, 110],
+          cellContents: [
+            { row: 0, column: 0, text: 'Task' },
+            { row: 0, column: 1, text: 'Owner' },
+            { row: 0, column: 2, text: 'Status' },
+            { row: 0, column: 3, text: 'Notes' },
+            { row: 1, column: 0, text: 'Design exploration' },
+            { row: 1, column: 1, text: 'Mia' },
+            { row: 1, column: 2, text: 'In progress' },
+            { row: 1, column: 3, text: 'Mood board + refs' },
+            { row: 2, column: 0, text: 'Copy polish' },
+            { row: 2, column: 1, text: 'Alex' },
+            { row: 2, column: 2, text: 'Review' },
+            { row: 2, column: 3, text: 'Tone & grammar' },
+            { row: 3, column: 0, text: 'Print proofs' },
+            { row: 3, column: 1, text: 'Noah' },
+            { row: 3, column: 2, text: 'Blocked' },
+            { row: 3, column: 3, text: 'Waiting on vendor' },
+            { row: 4, column: 0, text: 'Launch checklist' },
+            { row: 4, column: 1, text: 'Team' },
+            { row: 4, column: 2, text: 'Queued' },
+            { row: 4, column: 3, text: 'Kickoff Friday' },
+          ],
+        },
+      },
+      {
+        id: 'table-weekly-planner',
+        name: 'Weekly Planner',
+        icon: '🗓️',
+        type: 'table',
+        description: 'Striped planner table for tracking weekly goals',
+        options: {
+          width: 560,
+          height: 360,
+          rows: 8,
+          columns: 4,
+          headerRows: 1,
+          stripeEvenRows: true,
+          stripeColor: '#f8fafc',
+          headerBackgroundColor: '#0f172a',
+          headerTextColor: '#ffffff',
+          cellBackgroundColor: '#ffffff',
+          borderColor: '#cbd5f5',
+          borderWidth: 2,
+          cellPadding: 14,
+          columnWidths: [180, 120, 120, 120],
+          cellContents: [
+            { row: 0, column: 0, text: 'Day' },
+            { row: 0, column: 1, text: 'Top Focus' },
+            { row: 0, column: 2, text: 'Priority' },
+            { row: 0, column: 3, text: 'Notes' },
+            { row: 1, column: 0, text: 'Monday' },
+            { row: 1, column: 1, text: 'Planning Sprint' },
+            { row: 1, column: 2, text: '🔥' },
+            { row: 1, column: 3, text: 'Outline milestones' },
+            { row: 2, column: 0, text: 'Tuesday' },
+            { row: 2, column: 1, text: 'Design Review' },
+            { row: 2, column: 2, text: 'High' },
+            { row: 2, column: 3, text: 'Sync w/ team' },
+            { row: 3, column: 0, text: 'Wednesday' },
+            { row: 3, column: 1, text: 'Content Drafts' },
+            { row: 3, column: 2, text: 'Medium' },
+            { row: 3, column: 3, text: 'Prep newsletters' },
+            { row: 4, column: 0, text: 'Thursday' },
+            { row: 4, column: 1, text: 'Platform QA' },
+            { row: 4, column: 2, text: 'High' },
+            { row: 4, column: 3, text: 'Device testing' },
+            { row: 5, column: 0, text: 'Friday' },
+            { row: 5, column: 1, text: 'Launch Prep' },
+            { row: 5, column: 2, text: '🔥' },
+            { row: 5, column: 3, text: 'Finalize assets' },
+            { row: 6, column: 0, text: 'Weekend' },
+            { row: 6, column: 1, text: 'Reflect & reset' },
+            { row: 6, column: 2, text: 'Low' },
+            { row: 6, column: 3, text: 'Plan next week' },
+            { row: 7, column: 0, text: 'Notes' },
+            { row: 7, column: 1, text: 'Ideas, gratitude, wins' },
+          ],
+        },
+      },
+      {
+        id: 'table-meal-plan',
+        name: 'Meal Plan',
+        icon: '🍽️',
+        type: 'table',
+        description: 'Seven-day meal planner with breakfast/lunch/dinner columns',
+        options: {
+          width: 600,
+          height: 420,
+          rows: 8,
+          columns: 4,
+          headerRows: 1,
+          stripeEvenRows: true,
+          stripeColor: '#f1f5f9',
+          headerBackgroundColor: '#dc2626',
+          headerTextColor: '#ffffff',
+          cellPadding: 16,
+          columnWidths: [140, 150, 150, 150],
+          cellContents: [
+            { row: 0, column: 0, text: 'Day' },
+            { row: 0, column: 1, text: 'Breakfast' },
+            { row: 0, column: 2, text: 'Lunch' },
+            { row: 0, column: 3, text: 'Dinner' },
+            { row: 1, column: 0, text: 'Monday' },
+            { row: 1, column: 1, text: 'Oats + berries' },
+            { row: 1, column: 2, text: 'Quinoa salad' },
+            { row: 1, column: 3, text: 'Grilled salmon' },
+            { row: 2, column: 0, text: 'Tuesday' },
+            { row: 2, column: 1, text: 'Yogurt parfait' },
+            { row: 2, column: 2, text: 'Veggie tacos' },
+            { row: 2, column: 3, text: 'Pasta primavera' },
+            { row: 3, column: 0, text: 'Wednesday' },
+            { row: 3, column: 1, text: 'Green smoothie' },
+            { row: 3, column: 2, text: 'Sushi bowl' },
+            { row: 3, column: 3, text: 'Stir-fry' },
+            { row: 4, column: 0, text: 'Thursday' },
+            { row: 4, column: 1, text: 'Avocado toast' },
+            { row: 4, column: 2, text: 'Soup + sourdough' },
+            { row: 4, column: 3, text: 'Roasted veggies' },
+            { row: 5, column: 0, text: 'Friday' },
+            { row: 5, column: 1, text: 'Protein pancakes' },
+            { row: 5, column: 2, text: 'Mediterranean bowl' },
+            { row: 5, column: 3, text: 'Sushi night' },
+            { row: 6, column: 0, text: 'Saturday' },
+            { row: 6, column: 1, text: 'Breakfast burrito' },
+            { row: 6, column: 2, text: 'Picnic sandwiches' },
+            { row: 6, column: 3, text: 'BBQ skewers' },
+            { row: 7, column: 0, text: 'Sunday' },
+            { row: 7, column: 1, text: 'Waffles' },
+            { row: 7, column: 2, text: 'Leftovers' },
+            { row: 7, column: 3, text: 'Slow cooker stew' },
+          ],
+        },
+      },
+      {
+        id: 'table-budget',
+        name: 'Budget Tracker',
+        icon: '💰',
+        type: 'table',
+        description: 'Finance table with totals row',
+        options: {
+          width: 520,
+          height: 360,
+          rows: 7,
+          columns: 5,
+          headerRows: 1,
+          footerRows: 1,
+          headerBackgroundColor: '#0f172a',
+          headerTextColor: '#ffffff',
+          footerBackgroundColor: '#e0f2fe',
+          footerTextColor: '#0f172a',
+          borderColor: '#94a3b8',
+          borderWidth: 2,
+          cellPadding: 12,
+          columnWidths: [160, 90, 90, 90, 90],
+          cellContents: [
+            { row: 0, column: 0, text: 'Category' },
+            { row: 0, column: 1, text: 'Planned' },
+            { row: 0, column: 2, text: 'Actual' },
+            { row: 0, column: 3, text: 'Diff' },
+            { row: 0, column: 4, text: 'Notes' },
+            { row: 1, column: 0, text: 'Rent / Mortgage' },
+            { row: 1, column: 1, text: '$1,200' },
+            { row: 1, column: 2, text: '$1,200' },
+            { row: 1, column: 3, text: '$0' },
+            { row: 1, column: 4, text: 'Paid 1st' },
+            { row: 2, column: 0, text: 'Groceries' },
+            { row: 2, column: 1, text: '$400' },
+            { row: 2, column: 2, text: '$365' },
+            { row: 2, column: 3, text: '+$35' },
+            { row: 2, column: 4, text: 'Market sale' },
+            { row: 3, column: 0, text: 'Transport' },
+            { row: 3, column: 1, text: '$120' },
+            { row: 3, column: 2, text: '$98' },
+            { row: 3, column: 3, text: '+$22' },
+            { row: 3, column: 4, text: 'WFH days' },
+            { row: 4, column: 0, text: 'Subscriptions' },
+            { row: 4, column: 1, text: '$90' },
+            { row: 4, column: 2, text: '$110' },
+            { row: 4, column: 3, text: '-$20' },
+            { row: 4, column: 4, text: 'Annual renewals' },
+            { row: 5, column: 0, text: 'Wellness' },
+            { row: 5, column: 1, text: '$80' },
+            { row: 5, column: 2, text: '$60' },
+            { row: 5, column: 3, text: '+$20' },
+            { row: 5, column: 4, text: 'Yoga pass' },
+            { row: 6, column: 0, text: 'TOTAL', textAlign: 'right' },
+            { row: 6, column: 1, text: '$1,890' },
+            { row: 6, column: 2, text: '$1,833' },
+            { row: 6, column: 3, text: '+$57' },
+            { row: 6, column: 4, text: 'Under budget 🎉' },
+          ],
+        },
+      },
+    ],
+  },
+  {
     name: 'Photo Collages',
     items: [
       {
@@ -568,22 +855,28 @@ export function useElements() {
   }
 
   function addElement(element: ElementItem) {
-    const placement = element.type === 'calendar' ? getSmartCalendarPlacement(element) : elementPlacementDefaults[element.type]
-    const baseOptions = {
-      x: placement?.x,
-      y: placement?.y,
-    }
-    const options = {
-      ...baseOptions,
-      ...(element.options || {}),
-    }
+    const placement =
+      element.type === 'calendar'
+        ? getSmartCalendarPlacement(element)
+        : element.type === 'table'
+        ? getCenteredTablePlacement(element)
+        : elementPlacementDefaults[element.type]
+    const options = { x: placement?.x, y: placement?.y, ...(element.options || {}) }
 
     if (element.type === 'text') {
       editorStore.addObject('text', options)
       return
     }
 
-    if (element.type === 'shape') {
+    if (element.type === 'collage') {
+      editorStore.addObject('collage', { collageLayout: element.collageLayout || 'grid-2x2', ...options })
+    } else if (element.type === 'table') {
+      editorStore.addObject('table', {
+        rows: (element.options as any)?.rows ?? 4,
+        columns: (element.options as any)?.columns ?? 4,
+        ...options,
+      })
+    } else if (element.type === 'shape') {
       editorStore.addObject('shape', { shapeType: element.shapeType || 'rect', ...options })
       return
     }

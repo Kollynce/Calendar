@@ -18,6 +18,7 @@ import type {
   PlannerHeaderStyle,
   ScheduleMetadata,
   ChecklistMetadata,
+  TableMetadata,
 } from '@/types'
 
 const props = defineProps<{
@@ -81,6 +82,74 @@ const cornerRadius = computed({
     editorStore.updateObjectProperty('ry', value)
   },
 })
+
+function isColorVisible(value: any): boolean {
+  if (!value) return false
+  const normalized = String(value).toLowerCase()
+  return !['transparent', 'rgba(0,0,0,0)', 'rgb(0,0,0,0)', 'none'].includes(normalized)
+}
+
+function updateShapeData(patch: Record<string, any>) {
+  const obj = selectedObject.value as any
+  if (!obj) return
+  const nextData = { ...(obj.data ?? {}), ...patch }
+  editorStore.updateObjectProperty('data', nextData)
+}
+
+const shapeFillVisible = computed(() => {
+  const obj = selectedObject.value as any
+  if (!obj) return true
+  return isColorVisible(obj.fill ?? '#3b82f6')
+})
+
+function toggleShapeFillVisibility(next: boolean) {
+  const obj = selectedObject.value as any
+  if (!obj) return
+  if (next) {
+    const fallback =
+      (obj.data?._lastFillColor && isColorVisible(obj.data._lastFillColor))
+        ? obj.data._lastFillColor
+        : '#3b82f6'
+    editorStore.updateObjectProperty('fill', fallback)
+  } else {
+    const currentFill = obj.fill
+    if (isColorVisible(currentFill)) {
+      updateShapeData({ _lastFillColor: currentFill })
+    }
+    editorStore.updateObjectProperty('fill', 'transparent')
+  }
+}
+
+const shapeStrokeVisible = computed(() => {
+  const obj = selectedObject.value as any
+  if (!obj) return true
+  const width = Number(obj.strokeWidth ?? 0)
+  return width > 0 && isColorVisible(obj.stroke ?? '#000000')
+})
+
+function toggleShapeStrokeVisibility(next: boolean) {
+  const obj = selectedObject.value as any
+  if (!obj) return
+  if (next) {
+    const fallbackColor =
+      (obj.data?._lastStrokeColor && isColorVisible(obj.data._lastStrokeColor))
+        ? obj.data._lastStrokeColor
+        : '#0f172a'
+    const fallbackWidth = Number(obj.data?._lastStrokeWidth ?? 2) || 2
+    editorStore.updateObjectProperty('stroke', fallbackColor)
+    editorStore.updateObjectProperty('strokeWidth', Math.max(1, fallbackWidth))
+  } else {
+    const currentStroke = obj.stroke
+    const currentWidth = Number(obj.strokeWidth ?? 0)
+    const patch: Record<string, any> = {}
+    if (isColorVisible(currentStroke)) patch._lastStrokeColor = currentStroke
+    if (currentWidth > 0) patch._lastStrokeWidth = currentWidth
+    if (Object.keys(patch).length) {
+      updateShapeData(patch)
+    }
+    editorStore.updateObjectProperty('strokeWidth', 0)
+  }
+}
 
 // Line/Arrow detection
 const isArrow = computed(() => {
@@ -268,6 +337,110 @@ const localAlignTarget = computed({
   get: () => props.alignTarget,
   set: (value) => emit('update:alignTarget', value),
 })
+
+const BASIC_SHAPE_TYPES = ['rect', 'circle', 'ellipse', 'triangle']
+const METADATA_APPEARANCE_CAPABILITIES: Partial<
+  Record<
+    CanvasElementMetadata['kind'],
+    {
+      background: boolean
+      border: boolean
+    }
+  >
+> = {
+  'planner-note': { background: true, border: true },
+  schedule: { background: true, border: true },
+  checklist: { background: true, border: true },
+  table: { background: true, border: true },
+  collage: { background: true, border: true },
+}
+
+type AppearanceSource = 'shape' | 'metadata'
+interface AppearanceControls {
+  source: AppearanceSource
+  hasBackground: boolean
+  hasBorder: boolean
+  showBackground?: boolean
+  showBorder?: boolean
+  metadataKind?: CanvasElementMetadata['kind']
+}
+
+const appearanceControls = computed<AppearanceControls | null>(() => {
+  const obj = selectedObject.value as any
+  if (!obj) return null
+
+  if (BASIC_SHAPE_TYPES.includes(obj.type)) {
+    return {
+      source: 'shape',
+      hasBackground: true,
+      hasBorder: true,
+      showBackground: shapeFillVisible.value,
+      showBorder: shapeStrokeVisible.value,
+    }
+  }
+
+  const metadata = elementMetadata.value
+  if (!metadata) return null
+
+  const excludedKinds: CanvasElementMetadata['kind'][] = ['calendar-grid', 'week-strip', 'date-cell']
+  if (excludedKinds.includes(metadata.kind)) {
+    return null
+  }
+
+  const capabilities = METADATA_APPEARANCE_CAPABILITIES[metadata.kind]
+  if (!capabilities) return null
+
+  const hasBackground = capabilities.background
+  const hasBorder = capabilities.border
+
+  return {
+    source: 'metadata',
+    hasBackground,
+    hasBorder,
+    showBackground: hasBackground ? (metadata as any).showBackground !== false : undefined,
+    showBorder: hasBorder ? (metadata as any).showBorder !== false : undefined,
+    metadataKind: metadata.kind,
+  }
+})
+
+function updateTableOuterFrame(metadata: TableMetadata) {
+  metadata.showOuterFrame =
+    (metadata.showBackground !== false) || (metadata.showBorder !== false)
+}
+
+function setAppearanceToggle(target: 'background' | 'border', value: boolean) {
+  const controls = appearanceControls.value
+  if (!controls) return
+
+  if (controls.source === 'shape') {
+    if (target === 'background') {
+      toggleShapeFillVisibility(value)
+    } else {
+      toggleShapeStrokeVisibility(value)
+    }
+    return
+  }
+
+  editorStore.updateSelectedElementMetadata((metadata: any) => {
+    if (!metadata || (!('showBackground' in metadata) && !('showBorder' in metadata))) {
+      return null
+    }
+
+    if (target === 'background' && controls.hasBackground) {
+      metadata.showBackground = value
+    }
+
+    if (target === 'border' && controls.hasBorder) {
+      metadata.showBorder = value
+    }
+
+    if (metadata.kind === 'table') {
+      updateTableOuterFrame(metadata as TableMetadata)
+    }
+
+    return metadata
+  })
+}
 </script>
 
 <template>
@@ -330,6 +503,32 @@ const localAlignTarget = computed({
           <input v-model.number="objectHeight" type="number" min="1" class="control-glass" />
         </div>
       </div>
+    </div>
+
+    <!-- Appearance toggles -->
+    <div v-if="appearanceControls" class="pt-4 border-t border-white/10 space-y-3">
+      <p class="text-xs font-semibold uppercase tracking-widest text-white/60">Appearance</p>
+      <div class="flex flex-wrap items-center gap-4 text-xs text-white/80">
+        <label v-if="appearanceControls.hasBackground" class="flex items-center gap-2">
+          <input
+            type="checkbox"
+            class="accent-primary-400"
+            :checked="appearanceControls.showBackground"
+            @change="setAppearanceToggle('background', ($event.target as HTMLInputElement).checked)"
+          />
+          <span>Show background</span>
+        </label>
+        <label v-if="appearanceControls.hasBorder" class="flex items-center gap-2">
+          <input
+            type="checkbox"
+            class="accent-primary-400"
+            :checked="appearanceControls.showBorder"
+            @change="setAppearanceToggle('border', ($event.target as HTMLInputElement).checked)"
+          />
+          <span>Show border</span>
+        </label>
+      </div>
+      <p class="text-[11px] text-white/50">Toggle the fill and outline for this element.</p>
     </div>
 
     <!-- Align & Distribute -->
@@ -480,6 +679,26 @@ const localAlignTarget = computed({
             <ColorPicker :model-value="scheduleMetadata.borderColor ?? '#e2e8f0'" @update:modelValue="(c: string) => updateScheduleMetadata((draft) => { draft.borderColor = c })" />
           </div>
         </div>
+        <div class="flex flex-wrap items-center gap-4 text-xs text-white/80">
+          <label class="flex items-center gap-2">
+            <input
+              type="checkbox"
+              class="accent-primary-400"
+              :checked="scheduleMetadata.showBackground !== false"
+              @change="updateScheduleMetadata((draft) => { draft.showBackground = ($event.target as HTMLInputElement).checked })"
+            />
+            <span>Show background</span>
+          </label>
+          <label class="flex items-center gap-2">
+            <input
+              type="checkbox"
+              class="accent-primary-400"
+              :checked="scheduleMetadata.showBorder !== false"
+              @change="updateScheduleMetadata((draft) => { draft.showBorder = ($event.target as HTMLInputElement).checked })"
+            />
+            <span>Show border</span>
+          </label>
+        </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="text-xs font-medium text-white/60 mb-1.5 block">Radius</label>
@@ -537,6 +756,50 @@ const localAlignTarget = computed({
             <ColorPicker :model-value="checklistMetadata.borderColor ?? '#e2e8f0'" @update:modelValue="(c: string) => updateChecklistMetadata((draft) => { draft.borderColor = c })" />
           </div>
         </div>
+        <div class="flex flex-wrap items-center gap-4 text-xs text-white/80">
+          <label class="flex items-center gap-2">
+            <input
+              type="checkbox"
+              class="accent-primary-400"
+              :checked="checklistMetadata.showBackground !== false"
+              @change="updateChecklistMetadata((draft) => { draft.showBackground = ($event.target as HTMLInputElement).checked })"
+            />
+            <span>Show background</span>
+          </label>
+          <label class="flex items-center gap-2">
+            <input
+              type="checkbox"
+              class="accent-primary-400"
+              :checked="checklistMetadata.showBorder !== false"
+              @change="updateChecklistMetadata((draft) => { draft.showBorder = ($event.target as HTMLInputElement).checked })"
+            />
+            <span>Show border</span>
+          </label>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs font-medium text-white/60 mb-1.5 block">Radius</label>
+            <input
+              type="number"
+              min="0"
+              max="80"
+              class="control-glass"
+              :value="checklistMetadata.cornerRadius ?? 22"
+              @change="updateChecklistMetadata((draft) => { draft.cornerRadius = Math.max(0, Math.min(80, Number(($event.target as HTMLInputElement).value) || 0)) })"
+            />
+          </div>
+          <div>
+            <label class="text-xs font-medium text-white/60 mb-1.5 block">Border Width</label>
+            <input
+              type="number"
+              min="0"
+              max="10"
+              class="control-glass"
+              :value="checklistMetadata.borderWidth ?? 1"
+              @change="updateChecklistMetadata((draft) => { draft.borderWidth = Math.max(0, Math.min(10, Number(($event.target as HTMLInputElement).value) || 0)) })"
+            />
+          </div>
+        </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="text-xs font-medium text-white/60 mb-1.5 block">Rows</label>
@@ -585,6 +848,50 @@ const localAlignTarget = computed({
             <ColorPicker :model-value="plannerNoteMetadata.borderColor ?? '#e2e8f0'" @update:modelValue="(c: string) => updatePlannerMetadata((draft) => { draft.borderColor = c })" />
           </div>
         </div>
+        <div class="flex flex-wrap items-center gap-4 text-xs text-white/80">
+          <label class="flex items-center gap-2">
+            <input
+              type="checkbox"
+              class="accent-primary-400"
+              :checked="plannerNoteMetadata.showBackground !== false"
+              @change="updatePlannerMetadata((draft) => { draft.showBackground = ($event.target as HTMLInputElement).checked })"
+            />
+            <span>Show background</span>
+          </label>
+          <label class="flex items-center gap-2">
+            <input
+              type="checkbox"
+              class="accent-primary-400"
+              :checked="plannerNoteMetadata.showBorder !== false"
+              @change="updatePlannerMetadata((draft) => { draft.showBorder = ($event.target as HTMLInputElement).checked })"
+            />
+            <span>Show border</span>
+          </label>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs font-medium text-white/60 mb-1.5 block">Radius</label>
+            <input
+              type="number"
+              min="0"
+              max="80"
+              class="control-glass"
+              :value="plannerNoteMetadata.cornerRadius ?? 22"
+              @change="updatePlannerMetadata((draft) => { draft.cornerRadius = Math.max(0, Math.min(80, Number(($event.target as HTMLInputElement).value) || 0)) })"
+            />
+          </div>
+          <div>
+            <label class="text-xs font-medium text-white/60 mb-1.5 block">Border Width</label>
+            <input
+              type="number"
+              min="0"
+              max="10"
+              class="control-glass"
+              :value="plannerNoteMetadata.borderWidth ?? 1"
+              @change="updatePlannerMetadata((draft) => { draft.borderWidth = Math.max(0, Math.min(10, Number(($event.target as HTMLInputElement).value) || 0)) })"
+            />
+          </div>
+        </div>
       </div>
     </template>
     
@@ -612,10 +919,28 @@ const localAlignTarget = computed({
           <label class="text-xs font-medium text-white/60 mb-1.5 block">Fill Color</label>
           <ColorPicker v-model="fillColor" />
         </div>
+        <label class="flex items-center gap-2 text-sm text-white/80">
+          <input
+            type="checkbox"
+            class="accent-primary-400"
+            :checked="shapeFillVisible"
+            @change="toggleShapeFillVisibility(($event.target as HTMLInputElement).checked)"
+          />
+          <span>Show fill</span>
+        </label>
         <div>
           <label class="text-xs font-medium text-white/60 mb-1.5 block">Stroke Color</label>
           <ColorPicker v-model="strokeColor" />
         </div>
+        <label class="flex items-center gap-2 text-sm text-white/80">
+          <input
+            type="checkbox"
+            class="accent-primary-400"
+            :checked="shapeStrokeVisible"
+            @change="toggleShapeStrokeVisibility(($event.target as HTMLInputElement).checked)"
+          />
+          <span>Show stroke</span>
+        </label>
         <div>
           <label class="text-xs font-medium text-white/60 mb-1.5 block">Stroke Width</label>
           <div class="flex items-center gap-3">

@@ -145,6 +145,26 @@ const dateCellDateValue = computed(() =>
         />
       </div>
     </div>
+    <div class="flex flex-wrap items-center gap-4 text-xs text-white/80">
+      <label class="flex items-center gap-2">
+        <input
+          type="checkbox"
+          class="accent-primary-400"
+          :checked="dateCellMetadata.showBackground !== false"
+          @change="updateDateCellMetadata((draft) => { draft.showBackground = ($event.target as HTMLInputElement).checked })"
+        />
+        <span>Show background</span>
+      </label>
+      <label class="flex items-center gap-2">
+        <input
+          type="checkbox"
+          class="accent-primary-400"
+          :checked="dateCellMetadata.showBorder !== false"
+          @change="updateDateCellMetadata((draft) => { draft.showBorder = ($event.target as HTMLInputElement).checked })"
+        />
+        <span>Show border</span>
+      </label>
+    </div>
 
     <div class="grid grid-cols-2 gap-3">
       <div>

@@ -403,7 +403,8 @@ export const useExportStore = defineStore('export', () => {
 
         // Optionally strip user objects when the user wants template-only output.
         if (!preserveUserObjects) {
-          const objects = editorStore.canvas.getObjects() as any[]
+          // Snapshot array to avoid issues when removing during iteration
+          const objects = [...editorStore.canvas.getObjects()] as any[]
           objects.forEach((obj) => {
             const kind = (obj as any)?.data?.elementMetadata?.kind as string | undefined
             const keep = kind === 'calendar-grid' || kind === 'week-strip' || kind === 'date-cell'
@@ -419,7 +420,8 @@ export const useExportStore = defineStore('export', () => {
 
         // Rebuild calendar grid objects so the visuals match the existing design,
         // without generating extra title textboxes outside the grid.
-        const objects = editorStore.canvas.getObjects() as any[]
+        // Snapshot array to avoid issues when adding/removing during iteration
+        const objects = [...editorStore.canvas.getObjects()] as any[]
         objects.forEach((obj, idx) => {
           const metadata = (obj as any)?.data?.elementMetadata as CanvasElementMetadata | undefined
           if (!metadata || metadata.kind !== 'calendar-grid') return

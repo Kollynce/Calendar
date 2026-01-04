@@ -1,5 +1,6 @@
 import {
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -51,6 +52,11 @@ class ProjectsService {
     if (this.isDemoMode) return
     const cleaned = stripUndefinedDeep(project)
     await setDoc(doc(db, 'projects', project.id), cleaned, { merge: true })
+  }
+
+  async delete(projectId: string): Promise<void> {
+    if (this.isDemoMode) return
+    await deleteDoc(doc(db, 'projects', projectId))
   }
 
   async listForUser(userId: string, max = 20): Promise<Project[]> {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, type Component } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useExportStore } from '@/stores/export.store'
 import { useEditorStore } from '@/stores/editor.store'
@@ -20,6 +20,11 @@ import {
   ArrowPathIcon,
   CodeBracketIcon,
   LockClosedIcon,
+  ScissorsIcon,
+  ShieldCheckIcon,
+  CalendarDaysIcon,
+  Squares2X2Icon,
+  ArrowsRightLeftIcon,
 } from '@heroicons/vue/24/outline'
 
 const props = defineProps<{
@@ -81,6 +86,54 @@ const includeUserObjectsAllMonths = computed({
   set: (value: boolean) => exportStore.updateConfig({ includeUserObjectsAllMonths: value }),
 })
 
+type PageModeOption = {
+  value: 'current' | 'all' | 'custom'
+  label: string
+  description: string
+  icon: Component
+  iconBg: string
+  iconColor: string
+  requiresPdf?: boolean
+}
+
+type PageModeOptionDisplay = PageModeOption & { disabled: boolean }
+
+const basePageModeOptions: readonly PageModeOption[] = [
+  {
+    value: 'current',
+    label: 'Current page',
+    description: 'Export only what’s on the canvas right now.',
+    icon: CalendarDaysIcon,
+    iconBg: 'bg-primary-100',
+    iconColor: 'text-primary-600',
+  },
+  {
+    value: 'all',
+    label: 'All months',
+    description: 'Bundle Jan–Dec into one multi-page PDF.',
+    icon: Squares2X2Icon,
+    iconBg: 'bg-indigo-100',
+    iconColor: 'text-indigo-600',
+    requiresPdf: true,
+  },
+  {
+    value: 'custom',
+    label: 'Custom range',
+    description: 'Choose the exact months to include.',
+    icon: ArrowsRightLeftIcon,
+    iconBg: 'bg-amber-100',
+    iconColor: 'text-amber-600',
+    requiresPdf: true,
+  },
+]
+
+const pageModeOptions = computed<PageModeOptionDisplay[]>(() =>
+  basePageModeOptions.map((option) => ({
+    ...option,
+    disabled: option.requiresPdf ? !isPdf.value : false,
+  })),
+)
+
 const isPdf = computed(() => config.value.format === 'pdf')
 
 const isMultiPagePdf = computed(() => {
@@ -96,12 +149,49 @@ const quality = computed({
   set: (value: any) => exportStore.updateConfig({ quality: value }),
 })
 
+type QualityLevelOption = {
+  value: 'screen' | 'print' | 'press'
+  label: string
+  description: string
+  requiresPro?: boolean
+}
+
+const qualityLevels: readonly QualityLevelOption[] = [
+  { value: 'screen', label: 'Web', description: '72 DPI' },
+  { value: 'print', label: 'Print', description: '300 DPI', requiresPro: true },
+  { value: 'press', label: 'Press', description: '300 DPI', requiresPro: true },
+]
+
+const defaultQualityLevel: QualityLevelOption = qualityLevels[0] ?? {
+  value: 'screen',
+  label: 'Web',
+  description: '72 DPI',
+}
+
+const qualitySliderValue = computed({
+  get: () => Math.max(0, qualityLevels.findIndex((level) => level.value === quality.value)),
+  set: (index: number) => {
+    const option = qualityLevels[index]
+    if (!option) return
+    if (option.requiresPro && !authStore.isPro) return
+    quality.value = option.value
+  },
+})
+
+const currentQualityLevel = computed<QualityLevelOption>(() => qualityLevels[qualitySliderValue.value] ?? defaultQualityLevel)
+
 const canExportPrintQuality = computed(() => maxDPI.value >= 300)
 
 const bleed = computed({
   get: () => config.value.bleed,
   set: (value: number) => exportStore.updateConfig({ bleed: Math.max(0, value || 0) }),
 })
+
+const bleedRange = {
+  min: 0,
+  max: 15,
+  step: 0.5,
+} as const
 
 const cropMarks = computed({
   get: () => config.value.cropMarks,
@@ -142,9 +232,21 @@ watch(
     }
 
     const canvas: any = editorStore.canvas
+    const w = typeof canvas?.getWidth === 'function' ? canvas.getWidth() : canvas?.width
+    const h = typeof canvas?.getHeight === 'function' ? canvas.getHeight() : canvas?.height
+
     if (canvas?.toDataURL) {
       try {
-        previewUrl.value = canvas.toDataURL({ format: 'jpeg', quality: 0.6, multiplier: 0.25 })
+        const maxDimension = Math.max(w ?? 0, h ?? 0)
+        const targetPreviewSize = 900
+        const multiplier = maxDimension
+          ? Math.min(1, targetPreviewSize / maxDimension)
+          : 0.5
+        previewUrl.value = canvas.toDataURL({
+          format: 'jpeg',
+          quality: 0.85,
+          multiplier,
+        })
       } catch {
         previewUrl.value = null
       }
@@ -152,8 +254,6 @@ watch(
       previewUrl.value = null
     }
 
-    const w = typeof canvas?.getWidth === 'function' ? canvas.getWidth() : canvas?.width
-    const h = typeof canvas?.getHeight === 'function' ? canvas.getHeight() : canvas?.height
     if (w && h) {
       exportStore.updateConfig({ orientation: w > h ? 'landscape' : 'portrait' })
     }
@@ -217,7 +317,7 @@ watch(
             leave-from="opacity-100 translate-y-0 sm:scale-100" 
             leave-to="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
           >
-            <DialogPanel class="relative transform overflow-hidden rounded-2xl bg-white dark:bg-gray-800 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-2xl border border-gray-200 dark:border-gray-700">
+            <DialogPanel class="relative transform overflow-hidden rounded-2xl bg-white dark:bg-gray-800 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-6xl max-h-[90vh] border border-gray-200 dark:border-gray-700 flex flex-col">
               
               <!-- Modal Header -->
               <div class="px-4 py-4 sm:px-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
@@ -229,222 +329,252 @@ watch(
                 </button>
               </div>
 
-              <div class="px-4 py-6 sm:px-6 flex flex-col md:flex-row gap-8">
+              <div class="px-4 py-6 sm:px-8 flex-1 flex flex-col lg:flex-row gap-10 lg:min-h-0">
                 <!-- Preview Column -->
-                <div class="flex-1 flex flex-col items-center">
-                   <div
-                     class="w-48 sm:w-56 bg-white shadow-2xl rotate-1 transition-transform hover:rotate-0 duration-500 relative ring-1 ring-gray-900/5"
-                     :style="{ aspectRatio: previewAspect }"
-                   >
-                     <img v-if="previewUrl" :src="previewUrl" class="absolute inset-0 w-full h-full object-cover" alt="" />
-                     <div v-else class="h-full w-full flex items-center justify-center bg-gray-50">
-                       <span class="text-xs text-gray-400">Preview unavailable</span>
+                <div class="lg:w-1/2 flex flex-col items-center lg:items-center lg:min-h-0">
+                   <div class="flex-1 flex flex-col items-center justify-center gap-4 lg:w-full">
+                     <div
+                       class="w-48 sm:w-60 lg:w-full lg:max-w-sm bg-white shadow-2xl rotate-1 transition-transform hover:rotate-0 duration-500 relative ring-1 ring-gray-900/5 rounded-2xl overflow-hidden"
+                       :style="{ aspectRatio: previewAspect }"
+                     >
+                       <img v-if="previewUrl" :src="previewUrl" class="absolute inset-0 w-full h-full object-cover" alt="" />
+                       <div v-else class="h-full w-full flex items-center justify-center bg-gray-50">
+                         <span class="text-xs text-gray-400">Preview unavailable</span>
+                       </div>
                      </div>
+                     <p class="text-sm text-gray-500 font-medium">Preview (Cover Page)</p>
                    </div>
-                   <p class="mt-4 text-sm text-gray-500 font-medium">Preview (Cover Page)</p>
+                   <div class="hidden lg:flex flex-col items-center gap-1 text-xs text-gray-500">
+                     <span>Format: {{ selectedFormat.toUpperCase() }}</span>
+                     <span v-if="isPdf">Orientation: {{ config.orientation }}</span>
+                   </div>
                 </div>
 
                 <!-- Settings Column -->
-                <div class="flex-1 space-y-6">
-                  <div class="space-y-4">
-                    <div class="space-y-2">
-                      <label class="text-sm font-medium text-gray-900 dark:text-white">Image Formats</label>
-                      <!-- PNG Option -->
-                      <div 
-                        @click="canExportPng && (selectedFormat = 'png')"
-                        :class="[
-                          !canExportPng
-                            ? 'opacity-50 cursor-not-allowed ring-1 ring-gray-200 dark:ring-gray-700'
-                            : selectedFormat === 'png'
-                              ? 'ring-2 ring-primary-500 bg-primary-50 dark:bg-primary-900/20'
-                              : 'ring-1 ring-gray-200 dark:ring-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50',
-                          'relative flex cursor-pointer rounded-lg px-4 py-3 shadow-sm focus:outline-none'
-                        ]"
-                      >
-                         <div class="flex w-full items-center justify-between">
-                          <div class="flex items-center">
-                            <div class="text-sm">
-                              <p class="font-medium text-gray-900 dark:text-white flex items-center gap-2">
-                                <PhotoIcon class="w-4 h-4" /> PNG Image
-                              </p>
-                              <p class="text-gray-500 dark:text-gray-400">High quality digital sharing</p>
-                            </div>
-                          </div>
-                          <div v-if="selectedFormat === 'png'" class="h-4 w-4 rounded-full border-[5px] border-primary-500"></div>
-                           <div v-else class="h-4 w-4 rounded-full border border-gray-300"></div>
-                        </div>
+                <div class="lg:w-1/2 space-y-8 lg:overflow-y-auto lg:pr-2 lg:min_h-0 scrollbar-hide">
+                  <div class="space-y-6">
+                    <div class="space-y-3">
+                      <div class="flex items-center justify-between">
+                        <label class="text-sm font-medium text-gray-900 dark:text-white">Image Formats</label>
+                        <p class="text-xs text-gray-500">Choose how you’ll share</p>
                       </div>
+                      <div class="grid grid-cols-3 gap-3">
+                        <!-- PNG Option -->
+                        <button
+                          type="button"
+                          @click="canExportPng && (selectedFormat = 'png')"
+                          :disabled="!canExportPng"
+                          :class="[
+                            'aspect-square rounded-2xl border flex flex-col items-center justify-center text-center p-3 transition-all',
+                            canExportPng ? 'hover:border-primary-400 hover:shadow-lg/30 hover:-translate-y-0.5' : 'opacity-60 cursor-not-allowed',
+                            selectedFormat === 'png'
+                              ? 'border-primary-500 bg-primary-50/80 dark:bg-primary-900/20 shadow-lg shadow-primary-500/30'
+                              : 'border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-800/80'
+                          ]"
+                        >
+                          <span class="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-primary-100 text-primary-600 mb-2">
+                            <PhotoIcon class="w-6 h-6" />
+                          </span>
+                          <span class="text-sm font-semibold text-gray-900 dark:text-white">PNG</span>
+                          <span class="text-xs text-gray-500 dark:text-gray-400 mt-1">High quality</span>
+                        </button>
 
-                      <!-- JPG Option -->
-                      <div 
-                        @click="selectedFormat = 'jpg'"
-                        :class="[
-                          selectedFormat === 'jpg'
-                            ? 'ring-2 ring-primary-500 bg-primary-50 dark:bg-primary-900/20'
-                            : 'ring-1 ring-gray-200 dark:ring-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50',
-                          'relative flex cursor-pointer rounded-lg px-4 py-3 shadow-sm focus:outline-none'
-                        ]"
-                      >
-                         <div class="flex w-full items-center justify-between">
-                          <div class="flex items-center">
-                            <div class="text-sm">
-                              <p class="font-medium text-gray-900 dark:text-white flex items-center gap-2">
-                                <PhotoIcon class="w-4 h-4" /> JPG Image
-                              </p>
-                              <p class="text-gray-500 dark:text-gray-400">Smaller file size for sharing</p>
-                            </div>
-                          </div>
-                          <div v-if="selectedFormat === 'jpg'" class="h-4 w-4 rounded-full border-[5px] border-primary-500"></div>
-                           <div v-else class="h-4 w-4 rounded-full border border-gray-300"></div>
-                        </div>
-                      </div>
+                        <!-- JPG Option -->
+                        <button
+                          type="button"
+                          @click="selectedFormat = 'jpg'"
+                          :class="[
+                            'aspect-square rounded-2xl border flex flex-col items-center justify-center text-center p-3 transition-all',
+                            selectedFormat === 'jpg'
+                              ? 'border-primary-500 bg-primary-50/80 dark:bg-primary-900/20 shadow-lg shadow-primary-500/30'
+                              : 'border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-800/80 hover:border-primary-400 hover:-translate-y-0.5',
+                          ]"
+                        >
+                          <span class="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-amber-100 text-amber-600 mb-2">
+                            <PhotoIcon class="w-6 h-6" />
+                          </span>
+                          <span class="text-sm font-semibold text-gray-900 dark:text-white">JPG</span>
+                          <span class="text-xs text-gray-500 dark:text-gray-400 mt-1">Smaller file</span>
+                        </button>
 
-                      <!-- SVG Option -->
-                      <div 
-                        v-if="canExportSvg || !authStore.isPro"
-                        @click="authStore.isPro && (selectedFormat = 'svg')"
-                        :class="[
-                          !authStore.isPro
-                            ? 'opacity-60 cursor-not-allowed ring-1 ring-gray-200 dark:ring-gray-700 bg-gray-50/50 dark:bg-gray-900/10'
-                            : selectedFormat === 'svg'
-                              ? 'ring-2 ring-primary-500 bg-primary-50 dark:bg-primary-900/20'
-                              : 'ring-1 ring-gray-200 dark:ring-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50',
-                          'relative flex rounded-lg px-4 py-3 shadow-sm focus:outline-none transition-all'
-                        ]"
-                      >
-                         <div class="flex w-full items-center justify-between">
-                          <div class="flex items-center">
-                            <div class="text-sm">
-                              <div class="font-medium text-gray-900 dark:text-white flex items-center gap-2">
-                                <CodeBracketIcon class="w-4 h-4" /> SVG Vector
-                                <AppTierBadge v-if="!authStore.isPro" tier="pro" size="sm" />
-                              </div>
-                              <p class="text-gray-500 dark:text-gray-400">Scalable vector graphics</p>
-                            </div>
-                          </div>
-                          <div v-if="selectedFormat === 'svg' && authStore.isPro" class="h-4 w-4 rounded-full border-[5px] border-primary-500"></div>
-                          <div v-else-if="!authStore.isPro" class="text-gray-400"><LockClosedIcon class="w-4 h-4" /></div>
-                          <div v-else class="h-4 w-4 rounded-full border border-gray-300"></div>
-                        </div>
+                        <!-- SVG Option -->
+                        <button
+                          type="button"
+                          v-if="canExportSvg || !authStore.isPro"
+                          @click="authStore.isPro && (selectedFormat = 'svg')"
+                          :class="[
+                            'aspect-square rounded-2xl border flex flex-col items-center justify-center text-center p-3 transition-all relative',
+                            authStore.isPro
+                              ? selectedFormat === 'svg'
+                                ? 'border-primary-500 bg-primary-50/80 dark:bg-primary-900/20 shadow-lg shadow-primary-500/30'
+                                : 'border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-800/80 hover:border-primary-400 hover:-translate-y-0.5'
+                              : 'opacity-60 cursor-not-allowed border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/20'
+                          ]"
+                        >
+                          <span class="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-indigo-100 text-indigo-600 mb-2">
+                            <CodeBracketIcon class="w-6 h-6" />
+                          </span>
+                          <span class="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-1">
+                            SVG
+                            <AppTierBadge v-if="!authStore.isPro" tier="pro" size="sm" />
+                          </span>
+                          <span class="text-xs text-gray-500 dark:text-gray-400 mt-1">Scalable vector</span>
+                          <LockClosedIcon
+                            v-if="!authStore.isPro"
+                            class="w-4 h-4 absolute top-3 right-3 text-gray-400"
+                          />
+                        </button>
                       </div>
                     </div>
 
-                    <div class="space-y-2">
-                      <label class="text-sm font-medium text-gray-900 dark:text-white">Print Formats</label>
-                      <!-- PDF Option -->
-                      <div 
-                        @click="authStore.isPro && (selectedFormat = 'pdf')"
-                        :class="[
-                          !authStore.isPro
-                            ? 'opacity-60 cursor-not-allowed ring-1 ring-gray-200 dark:ring-gray-700 bg-gray-50/50 dark:bg-gray-900/10'
-                            : selectedFormat === 'pdf'
-                              ? 'ring-2 ring-primary-500 bg-primary-50 dark:bg-primary-900/20'
-                              : 'ring-1 ring-gray-200 dark:ring-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50',
-                          'relative flex rounded-lg px-4 py-3 shadow-sm focus:outline-none transition-all'
-                        ]"
-                      >
-                        <div class="flex w-full items-center justify-between">
-                          <div class="flex items-center">
-                            <div class="text-sm">
-                              <div class="font-medium text-gray-900 dark:text-white flex items-center gap-2">
-                                <PrinterIcon class="w-4 h-4" /> PDF Print
-                                <AppTierBadge v-if="!authStore.isPro" tier="pro" size="sm" />
-                              </div>
-                              <p class="text-gray-500 dark:text-gray-400">Best for professional printing (CMYK)</p>
-                            </div>
-                          </div>
-                          <div v-if="selectedFormat === 'pdf' && authStore.isPro" class="h-4 w-4 rounded-full border-[5px] border-primary-500"></div>
-                          <div v-else-if="!authStore.isPro" class="text-gray-400"><LockClosedIcon class="w-4 h-4" /></div>
-                          <div v-else class="h-4 w-4 rounded-full border border-gray-300"></div>
-                        </div>
+                    <div class="space-y-3">
+                      <div class="flex items-center justify-between">
+                        <label class="text-sm font-medium text-gray-900 dark:text-white">Print Formats</label>
+                        <p class="text-xs text-gray-500">Press-ready files</p>
                       </div>
-
-                      <!-- TIFF Option -->
-                      <div 
-                        @click="authStore.isBusiness && (selectedFormat = 'tiff')"
-                        :class="[
-                          !authStore.isBusiness
-                            ? 'opacity-60 cursor-not-allowed ring-1 ring-gray-200 dark:ring-gray-700 bg-gray-50/50 dark:bg-gray-900/10'
-                            : selectedFormat === 'tiff'
-                              ? 'ring-2 ring-primary-500 bg-primary-50 dark:bg-primary-900/20'
-                              : 'ring-1 ring-gray-200 dark:ring-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50',
-                          'relative flex rounded-lg px-4 py-3 shadow-sm focus:outline-none transition-all'
-                        ]"
-                      >
-                         <div class="flex w-full items-center justify-between">
-                          <div class="flex items-center">
-                            <div class="text-sm">
-                              <div class="font-medium text-gray-900 dark:text-white flex items-center gap-2">
-                                <PrinterIcon class="w-4 h-4" /> TIFF Print
-                                <AppTierBadge v-if="!authStore.isBusiness" tier="business" size="sm" />
-                              </div>
-                              <p class="text-gray-500 dark:text-gray-400">Professional print production</p>
-                            </div>
+                      <div class="grid grid-cols-2 gap-3">
+                        <!-- PDF Option -->
+                        <button 
+                          type="button"
+                          @click="authStore.isPro && (selectedFormat = 'pdf')"
+                          :class="[
+                            'rounded-2xl border p-4 flex flex-col gap-2 transition-all text-left',
+                            authStore.isPro
+                              ? selectedFormat === 'pdf'
+                                ? 'border-primary-500 bg-primary-50/80 dark:bg-primary-900/20 shadow-lg shadow-primary-500/30'
+                                : 'border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-800/80 hover:border-primary-400 hover:-translate-y-0.5'
+                              : 'opacity-60 cursor-not-allowed border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/20'
+                          ]"
+                        >
+                          <div class="flex items-center gap-2">
+                            <PrinterIcon class="w-5 h-5" />
+                            <span class="font-semibold text-gray-900 dark:text-white flex items-center gap-1">
+                              PDF Print
+                              <AppTierBadge v-if="!authStore.isPro" tier="pro" size="sm" />
+                            </span>
                           </div>
-                          <div v-if="selectedFormat === 'tiff' && authStore.isBusiness" class="h-4 w-4 rounded-full border-[5px] border-primary-500"></div>
-                          <div v-else-if="!authStore.isBusiness" class="text-gray-400"><LockClosedIcon class="w-4 h-4" /></div>
-                          <div v-else class="h-4 w-4 rounded-full border border-gray-300"></div>
-                        </div>
+                          <p class="text-xs text-gray-500 dark:text-gray-400">Best for professional printing (CMYK)</p>
+                        </button>
+
+                        <!-- TIFF Option -->
+                        <button 
+                          type="button"
+                          @click="authStore.isBusiness && (selectedFormat = 'tiff')"
+                          :class="[
+                            'rounded-2xl border p-4 flex flex-col gap-2 transition-all text-left',
+                            authStore.isBusiness
+                              ? selectedFormat === 'tiff'
+                                ? 'border-primary-500 bg-primary-50/80 dark:bg-primary-900/20 shadow-lg shadow-primary-500/30'
+                                : 'border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-800/80 hover:border-primary-400 hover:-translate-y-0.5'
+                              : 'opacity-60 cursor-not-allowed border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/20'
+                          ]"
+                        >
+                          <div class="flex items-center gap-2">
+                            <PrinterIcon class="w-5 h-5" />
+                            <span class="font-semibold text-gray-900 dark:text-white flex items-center gap-1">
+                              TIFF Print
+                              <AppTierBadge v-if="!authStore.isBusiness" tier="business" size="sm" />
+                            </span>
+                          </div>
+                          <p class="text-xs text-gray-500 dark:text-gray-400">Professional print production</p>
+                          <LockClosedIcon v-if="!authStore.isBusiness" class="w-4 h-4 text-gray-400" />
+                        </button>
                       </div>
                     </div>
                   </div>
 
-                  <div class="space-y-4">
+                  <div class="space-y-6">
                     <div>
-                      <label class="text-sm font-medium text-gray-900 dark:text-white">Pages</label>
-                      <select
-                        v-model="pageMode"
-                        class="mt-2 select"
-                      >
-                        <option value="current">Current page (what’s on the canvas)</option>
-                        <option value="all" :disabled="!isPdf">All months (Jan–Dec)</option>
-                        <option value="custom" :disabled="!isPdf">Custom month range</option>
-                      </select>
-                      <p v-if="!isPdf" class="mt-1 text-xs text-gray-500">
-                        Multi-page export is available for PDF.
+                      <div class="flex items-center justify-between">
+                        <label class="text-sm font-medium text-gray-900 dark:text-white">Pages</label>
+                        <span class="text-xs text-gray-500">Choose how many months to export</span>
+                      </div>
+                      <div class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <button
+                          v-for="option in pageModeOptions"
+                          :key="option.value"
+                          type="button"
+                          @click="!option.disabled && (pageMode = option.value)"
+                          :disabled="option.disabled"
+                          :class="[
+                            'rounded-2xl border p-4 text-left flex flex-col gap-3 transition-all',
+                            option.value === 'custom' ? 'md:col-span-2' : '',
+                            option.disabled
+                              ? 'opacity-60 cursor-not-allowed border-dashed'
+                              : pageMode === option.value
+                                ? 'border-primary-500 bg-primary-50/80 dark:bg-primary-900/10 shadow-lg shadow-primary-500/30'
+                                : 'border-gray-200 dark:border-gray-700 hover:border-primary-400 hover:-translate-y-0.5'
+                          ]"
+                        >
+                          <div class="flex items-center gap-3 text-gray-900 dark:text-white">
+                            <span class="inline-flex items-center justify-center w-8 h-8 rounded-full" :class="[option.iconBg, option.iconColor]">
+                              <component :is="option.icon" class="w-4 h-4" />
+                            </span>
+                            <span class="font-semibold text-sm">{{ option.label }}</span>
+                          </div>
+                          <p class="text-xs text-gray-500 dark:text-gray-400 leading-snug">
+                            {{ option.description }}
+                          </p>
+                          <span
+                            v-if="option.requiresPdf && !isPdf"
+                            class="text-xs font-semibold text-primary-600"
+                          >
+                            PDF only
+                          </span>
+                        </button>
+                      </div>
+                      <p v-if="!isPdf" class="mt-2 text-xs text-gray-500">
+                        Multi-page export becomes available when you pick PDF.
                       </p>
                     </div>
 
-                    <div v-if="isPdf && pageMode === 'custom'" class="grid grid-cols-2 gap-3">
-                      <div>
-                        <label class="text-xs font-medium text-gray-700 dark:text-gray-300">From</label>
-                        <select
-                          v-model.number="monthFrom"
-                          class="mt-1 select"
-                        >
-                          <option :value="1">Jan</option>
-                          <option :value="2">Feb</option>
-                          <option :value="3">Mar</option>
-                          <option :value="4">Apr</option>
-                          <option :value="5">May</option>
-                          <option :value="6">Jun</option>
-                          <option :value="7">Jul</option>
-                          <option :value="8">Aug</option>
-                          <option :value="9">Sep</option>
-                          <option :value="10">Oct</option>
-                          <option :value="11">Nov</option>
-                          <option :value="12">Dec</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label class="text-xs font-medium text-gray-700 dark:text-gray-300">To</label>
-                        <select
-                          v-model.number="monthTo"
-                          class="mt-1 select"
-                        >
-                          <option :value="1">Jan</option>
-                          <option :value="2">Feb</option>
-                          <option :value="3">Mar</option>
-                          <option :value="4">Apr</option>
-                          <option :value="5">May</option>
-                          <option :value="6">Jun</option>
-                          <option :value="7">Jul</option>
-                          <option :value="8">Aug</option>
-                          <option :value="9">Sep</option>
-                          <option :value="10">Oct</option>
-                          <option :value="11">Nov</option>
-                          <option :value="12">Dec</option>
-                        </select>
+                    <div
+                      v-if="isPdf && pageMode === 'custom'"
+                      class="rounded-2xl border border-gray-200 dark:border-gray-700 p-4 bg-white/70 dark:bg-gray-900/30"
+                    >
+                      <p class="text-sm font-medium text-gray-900 dark:text-white">Custom month range</p>
+                      <p class="text-xs text-gray-500 dark:text-gray-400">Use this to select any span between Jan–Dec.</p>
+                      <div class="grid grid-cols-2 gap-3 mt-4">
+                        <div>
+                          <label class="text-xs font-medium text-gray-700 dark:text-gray-300 uppercase tracking-wide">From</label>
+                          <select
+                            v-model.number="monthFrom"
+                            class="mt-1 select"
+                          >
+                            <option :value="1">Jan</option>
+                            <option :value="2">Feb</option>
+                            <option :value="3">Mar</option>
+                            <option :value="4">Apr</option>
+                            <option :value="5">May</option>
+                            <option :value="6">Jun</option>
+                            <option :value="7">Jul</option>
+                            <option :value="8">Aug</option>
+                            <option :value="9">Sep</option>
+                            <option :value="10">Oct</option>
+                            <option :value="11">Nov</option>
+                            <option :value="12">Dec</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label class="text-xs font-medium text-gray-700 dark:text-gray-300 uppercase tracking-wide">To</label>
+                          <select
+                            v-model.number="monthTo"
+                            class="mt-1 select"
+                          >
+                            <option :value="1">Jan</option>
+                            <option :value="2">Feb</option>
+                            <option :value="3">Mar</option>
+                            <option :value="4">Apr</option>
+                            <option :value="5">May</option>
+                            <option :value="6">Jun</option>
+                            <option :value="7">Jul</option>
+                            <option :value="8">Aug</option>
+                            <option :value="9">Sep</option>
+                            <option :value="10">Oct</option>
+                            <option :value="11">Nov</option>
+                            <option :value="12">Dec</option>
+                          </select>
+                        </div>
                       </div>
                     </div>
 
@@ -461,55 +591,107 @@ watch(
                       Turn off to export a clean template-only PDF for each month.
                     </p>
 
-                    <div>
-                      <div class="flex items-center justify-between mb-2">
-                        <label class="text-sm font-medium text-gray-900 dark:text-white">Quality</label>
-                        <AppTierBadge v-if="!authStore.isPro" tier="pro" size="sm" />
+                    <div class="rounded-2xl border border-gray-200 dark:border-gray-700 p-5 bg-gray-50/70 dark:bg-gray-900/30 space-y-6">
+                      <div class="space-y-3">
+                        <div class="flex items-center justify-between">
+                          <div>
+                            <p class="text-sm font-medium text-gray-900 dark:text-white">Quality</p>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">Pick the DPI level for export</p>
+                          </div>
+                          <AppTierBadge v-if="!authStore.isPro" tier="pro" size="sm" />
+                        </div>
+                        <input
+                          type="range"
+                          class="w-full accent-primary-500"
+                          :min="0"
+                          :max="qualityLevels.length - 1"
+                          step="1"
+                          v-model.number="qualitySliderValue"
+                        />
+                        <div class="flex justify-between text-xs mt-2">
+                          <span
+                            v-for="(level, index) in qualityLevels"
+                            :key="level.value"
+                            :class="[
+                              'font-semibold',
+                              qualitySliderValue === index ? 'text-primary-600 dark:text-primary-400' : 'text-gray-500'
+                            ]"
+                          >
+                            {{ level.label }}
+                          </span>
+                        </div>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">
+                          {{ currentQualityLevel.description }}
+                          <span v-if="currentQualityLevel.requiresPro && !authStore.isPro" class="text-amber-600 dark:text-amber-400 font-medium">— Pro</span>
+                        </p>
                       </div>
-                      <select
-                        v-model="quality"
-                        class="select"
-                      >
-                        <option value="screen">Screen (72 DPI)</option>
-                        <option value="print" :disabled="!authStore.isPro">Print (300 DPI) {{ !authStore.isPro ? '— Pro' : '' }}</option>
-                        <option value="press" :disabled="!authStore.isPro">Press (300 DPI) {{ !authStore.isPro ? '— Pro' : '' }}</option>
-                      </select>
-                      <p v-if="!authStore.isPro" class="mt-2 text-xs text-amber-600 dark:text-amber-400 font-medium">
-                        Upgrade to Pro to export high-resolution designs.
-                      </p>
+
+                      <div class="pt-4 border-t border-gray-200 dark:border-gray-800 space-y-3">
+                        <div class="flex items-center justify-between">
+                          <div>
+                            <p class="text-sm font-medium text-gray-900 dark:text-white">Bleed</p>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">Extend artwork past trim for clean edges</p>
+                          </div>
+                          <span class="text-sm font-semibold text-primary-600 dark:text-primary-300">{{ Number(bleed).toFixed(1) }} mm</span>
+                        </div>
+                        <input
+                          type="range"
+                          class="w-full accent-primary-500"
+                          :min="bleedRange.min"
+                          :max="bleedRange.max"
+                          :step="bleedRange.step"
+                          :value="bleed"
+                          @input="bleed = Number(($event.target as HTMLInputElement).value)"
+                        />
+                        <div class="flex justify-between text-xs text-gray-500 dark:text-gray-400">
+                          <span>{{ bleedRange.min }}mm</span>
+                          <span>{{ bleedRange.max }}mm</span>
+                        </div>
+                      </div>
                     </div>
 
-                    <div>
-                      <label class="text-sm font-medium text-gray-900 dark:text-white">Bleed (mm)</label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="1"
-                        :value="bleed"
-                        @input="bleed = Number(($event.target as HTMLInputElement).value)"
-                        class="mt-2 input"
-                      />
+                    <div class="space-y-3">
+                      <label class="text-sm font-medium text-gray-900 dark:text-white">Print helpers</label>
+                      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <button
+                          type="button"
+                          @click="cropMarks = !cropMarks"
+                          :class="[
+                            'rounded-2xl border p-4 text-left flex flex-col gap-2 transition-all',
+                            cropMarks
+                              ? 'border-primary-500 bg-primary-50/80 dark:bg-primary-900/10 shadow-lg shadow-primary-500/30'
+                              : 'border-gray-200 dark:border-gray-700 hover:border-primary-400 hover:-translate-y-0.5'
+                          ]"
+                        >
+                          <div class="flex items-center gap-2 text-gray-900 dark:text-white">
+                            <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-primary-100 text-primary-600">
+                              <ScissorsIcon class="w-4 h-4" />
+                            </span>
+                            <span class="font-semibold">Crop marks</span>
+                          </div>
+                          <p class="text-xs text-gray-500 dark:text-gray-400">Show trim guides so printers know exactly where to cut.</p>
+                        </button>
+
+                        <button
+                          type="button"
+                          @click="safeZone = !safeZone"
+                          :class="[
+                            'rounded-2xl border p-4 text-left flex flex-col gap-2 transition-all',
+                            safeZone
+                              ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/10 shadow-lg shadow-emerald-500/20'
+                              : 'border-gray-200 dark:border-gray-700 hover:border-emerald-400 hover:-translate-y-0.5'
+                          ]"
+                        >
+                          <div class="flex items-center gap-2 text-gray-900 dark:text-white">
+                            <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-emerald-100 text-emerald-600">
+                              <ShieldCheckIcon class="w-4 h-4" />
+                            </span>
+                            <span class="font-semibold">Safe zone</span>
+                          </div>
+                          <p class="text-xs text-gray-500 dark:text-gray-400">Overlay a safety margin to keep important content inside.</p>
+                        </button>
+                      </div>
                     </div>
-
-                    <label class="flex items-center gap-2 text-sm text-gray-900 dark:text-white">
-                      <input
-                        type="checkbox"
-                        :checked="cropMarks"
-                        @change="cropMarks = ($event.target as HTMLInputElement).checked"
-                        class="h-4 w-4 rounded border-gray-300"
-                      />
-                      Crop marks
-                    </label>
-
-                    <label class="flex items-center gap-2 text-sm text-gray-900 dark:text-white">
-                      <input
-                        type="checkbox"
-                        :checked="safeZone"
-                        @change="safeZone = ($event.target as HTMLInputElement).checked"
-                        class="h-4 w-4 rounded border-gray-300"
-                      />
-                      Safe zone overlay
-                    </label>
                   </div>
 
                   <div class="pt-4">

@@ -7,7 +7,13 @@ export interface User {
   photoURL?: string
   role: UserRole
   subscription: SubscriptionTier
-  brandKit?: BrandKit
+  /**
+   * Deprecated: legacy single-brand field kept for backwards compatibility/migrations.
+   * Use brandKits + defaultBrandKitId for new functionality.
+   */
+  brandKit?: BrandKit | null
+  brandKits?: BrandKit[]
+  defaultBrandKitId?: string | null
   preferences: UserPreferences
   stats: UserStats
   createdAt: string
@@ -27,28 +33,56 @@ export type UserRole = 'user' | 'creator' | 'admin'
 
 export type SubscriptionTier = 'free' | 'pro' | 'business' | 'enterprise'
 
+export interface BrandAssetLink {
+  id: string
+  label: string
+  url: string
+  type?: 'logo' | 'guideline' | 'font' | 'other'
+}
+
 export interface BrandKit {
   id: string
   name: string
+  description?: string
   logo?: string
   colors: BrandColors
   fonts: BrandFonts
+  fontLibrary?: BrandFontSetting[]
   watermark?: WatermarkConfig
+  tags?: string[]
+  usageNotes?: string
+  voiceTone?: string
+  assetLinks?: BrandAssetLink[]
+  lastUsedAt?: string
   createdAt: string
   updatedAt: string
 }
 
-export interface BrandColors {
-  primary: string
-  secondary: string
-  accent: string
-  background: string
-  text: string
+export interface BrandColorRole {
+  id: string
+  label: string
+  value: string
+  usage?: string
+}
+
+export type BrandColors = BrandColorRole[]
+
+export type BrandFontSource = 'system' | 'google' | 'upload'
+
+export interface BrandFontSetting {
+  id?: string
+  label?: string
+  family: string
+  weight?: string
+  fallback?: string
+  source?: BrandFontSource
+  fileUrl?: string
+  storagePath?: string
 }
 
 export interface BrandFonts {
-  heading: string
-  body: string
+  heading: BrandFontSetting
+  body: BrandFontSetting
 }
 
 export interface UserPreferences {

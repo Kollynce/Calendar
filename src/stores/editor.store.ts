@@ -8,6 +8,7 @@ import type {
   CanvasElementMetadata,
   Holiday,
   WatermarkConfig,
+  BrandFontSetting,
 } from '@/types'
 import { mergeTemplateOptions } from '@/config/editor-defaults'
 import { holidayService } from '@/services/calendar/holiday.service'
@@ -22,12 +23,16 @@ import {
   buildDateCellGraphics,
   buildPlannerNoteGraphics,
   buildScheduleGraphics,
+  buildTableGraphics,
   buildWeekStripGraphics,
 } from '@/stores/editor/graphics-builders'
 import { createHistoryModule } from '@/stores/editor/history'
 import { createProjectModule } from '@/stores/editor/project'
 import { createCanvasModule } from '@/stores/editor/canvas'
 import { createObjectIdentityHelper, createObjectsModule } from '@/stores/editor/objects'
+import { storage } from '@/config/firebase'
+import { getBlob, getDownloadURL, ref as storageRef } from 'firebase/storage'
+import type { FirebaseError } from 'firebase/app'
 
 function generateObjectId(prefix: string): string {
   try {
@@ -83,7 +88,172 @@ export const useEditorStore = defineStore('editor', () => {
   const authStore = useAuthStore()
   const calendarStore = useCalendarStore()
 
+  const brandKitFonts = computed<BrandFontSetting[]>(() => {
+    const kit = authStore.defaultBrandKit
+    if (!kit) return []
+    const fonts: BrandFontSetting[] = []
+    const pushFont = (font?: BrandFontSetting | null) => {
+      if (font?.family) {
+        fonts.push(font)
+      }
+    }
+    pushFont(kit.fonts?.heading)
+    pushFont(kit.fonts?.body)
+    if (Array.isArray(kit.fontLibrary)) {
+      kit.fontLibrary.forEach(pushFont)
+    }
+    return fonts
+  })
+
+  const brandFontMap = computed(() => {
+    const map = new Map<string, BrandFontSetting>()
+    brandKitFonts.value.forEach((font) => {
+      map.set(font.family.toLowerCase(), font)
+    })
+    return map
+  })
+
+  const brandFontBlobUrlCache = new Map<string, string>()
+  const inflightBrandFontPromises = new Map<string, Promise<string | null>>()
+  const failedBrandFontLookups = new Set<string>()
+  const registeredBrandFontFaces = new Set<string>()
+
+  function supportsFontFace(): boolean {
+    return typeof window !== 'undefined' && typeof window.FontFace !== 'undefined'
+  }
+
+  function getBrandFontCacheKey(font?: BrandFontSetting | null): string | undefined {
+    if (!font) return undefined
+    return font.storagePath || font.fileUrl || undefined
+  }
+
+  async function getBrandFontFileSource(font: BrandFontSetting): Promise<string | null> {
+    const cacheKey = getBrandFontCacheKey(font)
+    if (!cacheKey) return font.fileUrl ?? null
+
+    if (font.storagePath && failedBrandFontLookups.has(font.storagePath)) {
+      return font.fileUrl ?? null
+    }
+
+    if (brandFontBlobUrlCache.has(cacheKey)) {
+      return brandFontBlobUrlCache.get(cacheKey) ?? null
+    }
+    if (inflightBrandFontPromises.has(cacheKey)) {
+      return inflightBrandFontPromises.get(cacheKey) ?? null
+    }
+
+    const promise = (async () => {
+      if (!font.storagePath) {
+        return font.fileUrl ?? null
+      }
+      const ref = storageRef(storage, font.storagePath)
+      try {
+        const blob = await getBlob(ref)
+        if (!blob) {
+          return font.fileUrl ?? null
+        }
+        const blobUrl = URL.createObjectURL(blob)
+        const previous = brandFontBlobUrlCache.get(cacheKey)
+        if (previous) URL.revokeObjectURL(previous)
+        brandFontBlobUrlCache.set(cacheKey, blobUrl)
+        return blobUrl
+      } catch (error) {
+        return await resolveBrandFontSourceFromDownloadUrl(font, error as FirebaseError, ref)
+      } finally {
+        inflightBrandFontPromises.delete(cacheKey)
+      }
+    })()
+
+    inflightBrandFontPromises.set(cacheKey, promise)
+    return promise
+  }
+
+  async function resolveBrandFontSourceFromDownloadUrl(
+    font: BrandFontSetting,
+    error: FirebaseError | undefined,
+    ref: ReturnType<typeof storageRef>,
+  ): Promise<string | null> {
+    if (error?.code === 'storage/object-not-found' && font.storagePath) {
+      failedBrandFontLookups.add(font.storagePath)
+    }
+    console.warn('[EditorStore] Failed to fetch brand font blob', error)
+    if (!font.storagePath) {
+      return font.fileUrl ?? null
+    }
+    try {
+      const renewedUrl = await getDownloadURL(ref)
+      font.fileUrl = renewedUrl
+      return renewedUrl
+    } catch (downloadError) {
+      const firebaseDownloadError = downloadError as FirebaseError | undefined
+      if (firebaseDownloadError?.code === 'storage/object-not-found' && font.storagePath) {
+        failedBrandFontLookups.add(font.storagePath)
+      }
+      console.warn('[EditorStore] Failed to refresh brand font download URL', downloadError)
+      return font.fileUrl ?? null
+    }
+  }
+
+  function findBrandFont(family: string | undefined): BrandFontSetting | null {
+    if (!family) return null
+    return brandFontMap.value.get(family.toLowerCase()) ?? null
+  }
+
+  async function ensureBrandFontRegistered(fontFamily: string | undefined): Promise<void> {
+    if (!fontFamily || !supportsFontFace()) return
+    const font = findBrandFont(fontFamily)
+    if (!font || font.source !== 'upload') return
+    const cacheKey = getBrandFontCacheKey(font)
+    if (!cacheKey) return
+    const key = `${font.family}::${cacheKey}`
+    if (registeredBrandFontFaces.has(key)) return
+    const source = await getBrandFontFileSource(font)
+    if (!source) return
+    try {
+      const face = new FontFace(font.family, `url(${source})`)
+      await face.load()
+      document.fonts?.add(face)
+      registeredBrandFontFaces.add(key)
+      canvas.value?.requestRenderAll()
+    } catch (error) {
+      console.warn('[EditorStore] Failed to register brand font', font.family, error)
+    }
+  }
+
+  function cleanupBrandFontResources(validKeys?: Set<string>): void {
+    brandFontBlobUrlCache.forEach((url, key) => {
+      if (!validKeys || !validKeys.has(key)) {
+        if (url) URL.revokeObjectURL(url)
+        brandFontBlobUrlCache.delete(key)
+      }
+    })
+    inflightBrandFontPromises.clear()
+    if (!validKeys) {
+      failedBrandFontLookups.clear()
+      registeredBrandFontFaces.clear()
+    }
+  }
+
+  watch(
+    brandKitFonts,
+    (fonts) => {
+      const validKeys = new Set<string>()
+      fonts.forEach((font) => {
+        const key = getBrandFontCacheKey(font)
+        if (key) {
+          validKeys.add(key)
+        }
+        if (font?.source === 'upload') {
+          void ensureBrandFontRegistered(font.family)
+        }
+      })
+      cleanupBrandFontResources(validKeys)
+    },
+    { deep: true, immediate: true },
+  )
+
   let lastCalendarWatermarkJSON: string | null = JSON.stringify(calendarStore.config.watermark ?? null)
+  let refreshGridsInProgress = false
 
   function cloneWatermarkConfig(config: WatermarkConfig | undefined): WatermarkConfig | undefined {
     if (!config) return undefined
@@ -304,10 +474,11 @@ export const useEditorStore = defineStore('editor', () => {
     if (!meta) return
     const rebuilt = rebuildElementWithMetadata(active, meta)
     if (!rebuilt) return
-    canvas.value.remove(active)
-    canvas.value.add(rebuilt)
-    canvas.value.setActiveObject(rebuilt)
-    canvas.value.renderAll()
+    withCanvasBatch(() => {
+      canvas.value?.remove(active)
+      canvas.value?.add(rebuilt)
+      canvas.value?.setActiveObject(rebuilt)
+    })
   }
 
   function requestFontLoad(fontFamily: string, fontWeight?: string | number, fontSize?: number): void {
@@ -381,37 +552,68 @@ export const useEditorStore = defineStore('editor', () => {
       requestFontLoad(metadata.weekdayFontFamily ?? 'Inter', metadata.weekdayFontWeight, metadata.weekdayFontSize)
       requestFontLoad(metadata.dayNumberFontFamily ?? 'Inter', metadata.dayNumberFontWeight, metadata.dayNumberFontSize)
       requestFontLoad(metadata.placeholderFontFamily ?? 'Inter', metadata.placeholderFontWeight, metadata.placeholderFontSize)
+      return
+    }
+    if (metadata.kind === 'table') {
+      requestFontLoad(metadata.cellFontFamily ?? 'Inter', metadata.cellFontWeight, metadata.cellFontSize)
+      metadata.cellContents?.forEach((cell) => {
+        requestFontLoad(cell.fontFamily ?? metadata.cellFontFamily ?? 'Inter', cell.fontWeight ?? metadata.cellFontWeight, cell.fontSize ?? metadata.cellFontSize)
+      })
     }
   }
 
   function refreshCalendarGridsForYear(year: number): void {
     if (!canvas.value) return
+    if (refreshGridsInProgress) {
+      console.log('[Calendar] Refresh already in progress, skipping')
+      return
+    }
+    
     const y = Number(year)
     if (!Number.isFinite(y)) return
 
-    const objects = canvas.value.getObjects() ?? []
-    console.log('[Calendar] Refresh calendar grids', {
-      year: y,
-      holidayCount: calendarStore.allHolidays?.length ?? 0,
-      gridCount: objects.filter(
-        (obj) => ((obj as any)?.data?.elementMetadata as CanvasElementMetadata | undefined)?.kind === 'calendar-grid',
-      ).length,
-    })
-    objects.forEach((obj) => {
-      const metadata = (obj as any)?.data?.elementMetadata as CanvasElementMetadata | undefined
-      if (metadata?.kind === 'calendar-grid' && metadata.year === y) {
-        // Ensure language is in sync with global config
-        if (calendarStore.config?.language) {
-          metadata.language = calendarStore.config.language
-        }
+    refreshGridsInProgress = true
+    
+    try {
+      const objects = canvas.value.getObjects() ?? []
+      const gridsToRebuild = objects.filter((obj) => {
+        const metadata = (obj as any)?.data?.elementMetadata as CanvasElementMetadata | undefined
+        return metadata?.kind === 'calendar-grid' && metadata.year === y
+      })
+      
+      console.log('[Calendar] Refresh calendar grids', {
+        year: y,
+        holidayCount: calendarStore.allHolidays?.length ?? 0,
+        gridCount: gridsToRebuild.length,
+        totalObjects: objects.length,
+        gridIds: gridsToRebuild.map(obj => (obj as any).id),
+      })
+      
+      if (gridsToRebuild.length === 0) return
 
-        const rebuilt = rebuildElementWithMetadata(obj, metadata)
-        if (!rebuilt) return
-        canvas.value?.remove(obj)
-        canvas.value?.add(rebuilt)
-      }
-    })
-    canvas.value?.renderAll()
+      withCanvasBatch(() => {
+        gridsToRebuild.forEach((obj) => {
+          const metadata = (obj as any)?.data?.elementMetadata as CanvasElementMetadata | undefined
+          if (!metadata || metadata.kind !== 'calendar-grid') return
+          
+          // Ensure language is in sync with global config
+          if (calendarStore.config?.language && 'language' in metadata) {
+            (metadata as any).language = calendarStore.config.language
+          }
+
+          const rebuilt = rebuildElementWithMetadata(obj, metadata)
+          if (!rebuilt) return
+          
+          console.log('[Calendar] Rebuilding grid', { oldId: (obj as any).id, newId: (rebuilt as any).id })
+          
+          // Remove old object and add rebuilt one
+          canvas.value?.remove(obj)
+          canvas.value?.add(rebuilt)
+        })
+      })
+    } finally {
+      refreshGridsInProgress = false
+    }
   }
 
   function requestHolidaysForYear(year: number, country: string, language: string): void {
@@ -468,7 +670,10 @@ export const useEditorStore = defineStore('editor', () => {
           return false
         }
 
-        canvas.value.getObjects().forEach((obj) => {
+        // Snapshot the objects array to avoid iterating over a live array
+        // that changes when we add rebuilt objects
+        const objectsSnapshot = [...canvas.value.getObjects()]
+        objectsSnapshot.forEach((obj) => {
           const metadata = (obj as any).data?.elementMetadata as CanvasElementMetadata | undefined
           if (!shouldRefreshElement(metadata)) return
 
@@ -478,7 +683,7 @@ export const useEditorStore = defineStore('editor', () => {
             canvas.value?.add(rebuilt)
           }
         })
-        canvas.value?.renderAll()
+        requestRender()
       })
       .finally(() => {
         holidayLoadInFlight.delete(cacheKey)
@@ -556,6 +761,9 @@ export const useEditorStore = defineStore('editor', () => {
       case 'collage':
         rebuilt = buildCollageGraphics(metadata)
         break
+      case 'table':
+        rebuilt = buildTableGraphics(metadata)
+        break
       default:
         rebuilt = null
     }
@@ -612,10 +820,11 @@ export const useEditorStore = defineStore('editor', () => {
 
     const rebuilt = rebuildElementWithMetadata(target, update.metadata)
     if (!rebuilt) return
-    canvas.value.remove(target)
-    canvas.value.add(rebuilt)
-    canvas.value.setActiveObject(rebuilt)
-    canvas.value.renderAll()
+    withCanvasBatch(() => {
+      canvas.value?.remove(target)
+      canvas.value?.add(rebuilt)
+      canvas.value?.setActiveObject(rebuilt)
+    })
     queueHistorySave()
   }
 
@@ -667,9 +876,31 @@ export const useEditorStore = defineStore('editor', () => {
     flushQueuedMetadataUpdate()
   }
 
+  let isRenderQueued = false
+
   function requestRender(): void {
-    if (canvas.value) {
-      canvas.value.requestRenderAll()
+    const target = canvas.value
+    if (!target) return
+    if (isRenderQueued) return
+    isRenderQueued = true
+    requestAnimationFrame(() => {
+      isRenderQueued = false
+      const live = canvas.value
+      if (!live) return
+      live.requestRenderAll?.()
+    })
+  }
+
+  function withCanvasBatch<T>(fn: () => T): T {
+    const target = canvas.value as (Canvas & { renderOnAddRemove?: boolean }) | null
+    if (!target) return fn()
+    const prev = target.renderOnAddRemove
+    target.renderOnAddRemove = false
+    try {
+      return fn()
+    } finally {
+      target.renderOnAddRemove = prev
+      requestRender()
     }
   }
 
@@ -817,7 +1048,9 @@ export const useEditorStore = defineStore('editor', () => {
     getActiveElementMetadata,
     updateActiveElementMetadata,
     updateSelectedElementMetadata,
+    refreshCalendarGridsForYear,
     requestRender,
+    withCanvasBatch,
     rebuildActiveCollage,
   }
 })

@@ -2,7 +2,7 @@
 import { ref, computed, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth.store'
 import { useEditorStore } from '@/stores/editor.store'
-import { PhotoIcon, TrashIcon } from '@heroicons/vue/24/outline'
+import { PhotoIcon, TrashIcon, CheckCircleIcon } from '@heroicons/vue/24/outline'
 import AppAlert from '@/components/ui/AppAlert.vue'
 import {
   uploadUserAsset,
@@ -133,6 +133,10 @@ const storageUsagePercent = computed(() => {
 })
 
 const userUploads = ref<UserUploadAsset[]>([])
+const showHiddenUploads = ref(false)
+const selectionMode = ref(false)
+const selectedUploads = ref<Record<string, boolean>>({})
+const bulkDeleting = ref(false)
 const uploadsLoading = ref(false)
 const uploadError = ref<string | null>(null)
 const activeUploads = ref<Record<string, { name: string; progress: number }>>({})
@@ -150,6 +154,18 @@ const activeUploadList = computed(() =>
     ...meta,
   })),
 )
+
+function isImageAsset(asset: UserUploadAsset): boolean {
+  const contentType = asset.contentType?.toLowerCase() ?? ''
+  if (contentType.startsWith('image/')) return true
+  const extension = asset.name?.split('.').pop()?.toLowerCase() ?? ''
+  return ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'].includes(extension)
+}
+
+const imageUploads = computed(() => userUploads.value.filter((asset) => isImageAsset(asset)))
+const hiddenUploads = computed(() => userUploads.value.filter((asset) => !isImageAsset(asset)))
+const selectedUploadCount = computed(() => Object.values(selectedUploads.value).filter(Boolean).length)
+const hasSelectedUploads = computed(() => selectedUploadCount.value > 0)
 
 const filteredCuratedAssets = computed(() => {
   if (curatedFilter.value === 'all') return curatedVisualAssets
@@ -194,6 +210,66 @@ async function loadUserUploads(): Promise<void> {
     uploadsLoading.value = false
   }
 }
+
+function isUploadSelected(asset: UserUploadAsset): boolean {
+  if (!asset.storagePath) return false
+  return !!selectedUploads.value[asset.storagePath]
+}
+
+function toggleAssetSelection(asset: UserUploadAsset): void {
+  if (!asset.storagePath) return
+  const next = { ...selectedUploads.value }
+  if (next[asset.storagePath]) {
+    delete next[asset.storagePath]
+  } else {
+    next[asset.storagePath] = true
+  }
+  selectedUploads.value = next
+}
+
+function clearSelectedUploads(): void {
+  selectedUploads.value = {}
+}
+
+function toggleSelectionMode(force?: boolean): void {
+  selectionMode.value = typeof force === 'boolean' ? force : !selectionMode.value
+  if (!selectionMode.value) clearSelectedUploads()
+}
+
+function handleAssetCardClick(asset: UserUploadAsset): void {
+  if (!selectionMode.value) return
+  toggleAssetSelection(asset)
+}
+
+async function handleBulkDeleteSelected(): Promise<void> {
+  if (!hasSelectedUploads.value || bulkDeleting.value) return
+  bulkDeleting.value = true
+  try {
+    for (const asset of imageUploads.value) {
+      if (asset.storagePath && selectedUploads.value[asset.storagePath]) {
+        await handleDeleteAsset(asset)
+      }
+    }
+    clearSelectedUploads()
+    toggleSelectionMode(false)
+  } finally {
+    bulkDeleting.value = false
+  }
+}
+
+watch(
+  imageUploads,
+  (assets) => {
+    const allowed = new Set(assets.map((asset) => asset.storagePath))
+    const filteredEntries = Object.entries(selectedUploads.value).filter(([path]) => allowed.has(path))
+    selectedUploads.value = filteredEntries.reduce<Record<string, boolean>>((acc, [path]) => {
+      acc[path] = true
+      return acc
+    }, {})
+    if (!Object.keys(selectedUploads.value).length) selectionMode.value = false
+  },
+  { deep: true },
+)
 
 watch(
   () => authStore.user?.id,
@@ -475,32 +551,70 @@ function downloadCuratedAsset(url: string, filename: string): void {
       </div>
 
       <div class="space-y-2">
-        <div class="flex items-center justify-between">
-          <p class="text-xs font-semibold text-gray-500 uppercase">Library ({{ userUploads.length }})</p>
-          <button
-            type="button"
-            class="text-[11px] font-medium text-primary-500 hover:text-primary-400 disabled:text-gray-400"
-            :disabled="uploadsLoading"
-            @click="loadUserUploads"
-          >
-            {{ uploadsLoading ? 'Refreshing…' : 'Refresh' }}
-          </button>
+        <div class="flex items-center justify-between gap-3 flex-wrap">
+          <p class="text-xs font-semibold text-gray-500 uppercase">Library ({{ imageUploads.length }})</p>
+          <div class="flex items-center gap-2">
+            <button
+              type="button"
+              class="text-[11px] font-medium text-primary-500 hover:text-primary-400 disabled:text-gray-400"
+              :disabled="uploadsLoading"
+              @click="loadUserUploads"
+            >
+              {{ uploadsLoading ? 'Refreshing…' : 'Refresh' }}
+            </button>
+            <button
+              type="button"
+              class="text-[11px] font-semibold px-2 py-1 rounded-lg border border-gray-300 text-gray-600 hover:border-primary-400 hover:text-primary-500 transition"
+              @click="toggleSelectionMode()"
+            >
+              {{ selectionMode ? 'Cancel' : 'Select' }}
+            </button>
+            <button
+              v-if="selectionMode"
+              type="button"
+              class="text-[11px] font-semibold px-3 py-1.5 rounded-lg bg-red-500 text-white hover:bg-red-600 disabled:bg-red-300 disabled:cursor-not-allowed flex items-center gap-1"
+              :disabled="!hasSelectedUploads || bulkDeleting"
+              @click="handleBulkDeleteSelected"
+            >
+              <TrashIcon class="w-3.5 h-3.5" />
+              Delete ({{ selectedUploadCount }})
+            </button>
+          </div>
         </div>
 
         <div v-if="uploadsLoading" class="text-xs text-gray-500 dark:text-gray-400 text-center py-6">Loading your uploads…</div>
-        <div v-else-if="userUploads.length === 0" class="text-xs text-gray-400 dark:text-gray-500 text-center py-6">
+        <div v-else-if="imageUploads.length === 0" class="text-xs text-gray-400 dark:text-gray-500 text-center py-6">
           No uploads yet. Drop files above to start building your asset library.
         </div>
 
         <div v-else class="space-y-3">
           <div
-            v-for="asset in userUploads"
+            v-for="asset in imageUploads"
             :key="asset.storagePath"
-            class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/70 shadow-sm p-3 space-y-3"
+            class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/70 shadow-sm p-3 space-y-3 relative transition-all"
+            :class="[
+              selectionMode
+                ? 'cursor-pointer hover:border-primary-300/80'
+                : 'cursor-default',
+              selectionMode && isUploadSelected(asset)
+                ? 'ring-2 ring-primary-500/60 bg-primary-50/40 dark:bg-primary-500/5'
+                : ''
+            ]"
             draggable="true"
             @dragstart="onAssetDragStart($event, asset)"
             @dragend="onAssetDragEnd"
+            @click="handleAssetCardClick(asset)"
           >
+            <div
+              v-if="selectionMode"
+              class="absolute top-3 right-3 flex items-center gap-1 text-[11px] font-semibold"
+            >
+              <CheckCircleIcon
+                class="w-4 h-4"
+                :class="isUploadSelected(asset) ? 'text-primary-500' : 'text-gray-300'"
+              />
+              <span class="text-gray-600 dark:text-gray-300">{{ isUploadSelected(asset) ? 'Selected' : 'Tap to select' }}</span>
+            </div>
             <div class="flex items-center gap-3">
               <div class="relative w-20 h-16 rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-900/40 shrink-0">
                 <img :src="asset.url" :alt="asset.name" class="w-full h-full object-cover" />
@@ -518,14 +632,62 @@ function downloadCuratedAsset(url: string, filename: string): void {
                 {{ asset.category === 'background' ? 'Background' : 'Sticker' }}
               </span>
             </div>
-            <div class="flex items-center gap-2">
-              <button type="button" class="btn-secondary-sm flex-1" @click="addUploadedAssetToCanvas(asset)">Add to canvas</button>
+            <div class="flex items-center gap-2" v-if="!selectionMode">
+              <button type="button" class="btn-secondary-sm flex-1" @click.stop="addUploadedAssetToCanvas(asset)">Add to canvas</button>
+              <button
+                type="button"
+                class="btn-tertiary-sm px-2"
+                :disabled="deletingUploads[asset.storagePath]"
+                @click.stop="handleDeleteAsset(asset)"
+                title="Delete asset"
+              >
+                <TrashIcon class="w-4 h-4" />
+              </button>
+            </div>
+            <div v-else class="flex items-center justify-between text-[11px] font-medium text-gray-600 dark:text-gray-300">
+              <span>{{ isUploadSelected(asset) ? 'Selected for deletion' : 'Tap card to select' }}</span>
+              <span v-if="isUploadSelected(asset)" class="text-primary-500">Ready</span>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="hiddenUploads.length" class="mt-4 rounded-2xl border border-amber-200 dark:border-amber-500/40 bg-amber-50/60 dark:bg-amber-900/10 p-3 space-y-3">
+          <div class="flex items-center justify-between gap-2">
+            <div>
+              <p class="text-xs font-semibold uppercase text-amber-800 dark:text-amber-200">
+                Hidden files ({{ hiddenUploads.length }})
+              </p>
+              <p class="text-[11px] text-amber-900/80 dark:text-amber-100/80">
+                These uploads are not images and can’t be used on the canvas. Delete them to reclaim storage.
+              </p>
+            </div>
+            <button
+              type="button"
+              class="text-[11px] font-semibold text-amber-800 dark:text-amber-200 underline"
+              @click="showHiddenUploads = !showHiddenUploads"
+            >
+              {{ showHiddenUploads ? 'Hide list' : 'Review files' }}
+            </button>
+          </div>
+
+          <div v-if="showHiddenUploads" class="space-y-2">
+            <div
+              v-for="asset in hiddenUploads"
+              :key="asset.storagePath"
+              class="rounded-xl border border-amber-200 dark:border-amber-500/30 bg-white dark:bg-gray-900/50 p-3 flex items-center gap-3"
+            >
+              <div class="flex-1 min-w-0">
+                <p class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate" :title="asset.name">{{ asset.name }}</p>
+                <p class="text-[11px] text-gray-500 dark:text-gray-400">
+                  {{ asset.contentType || 'Unknown type' }} · {{ formatBytes(asset.size) }} · {{ new Date(asset.createdAt).toLocaleDateString() }}
+                </p>
+              </div>
               <button
                 type="button"
                 class="btn-tertiary-sm px-2"
                 :disabled="deletingUploads[asset.storagePath]"
                 @click="handleDeleteAsset(asset)"
-                title="Delete asset"
+                title="Delete file"
               >
                 <TrashIcon class="w-4 h-4" />
               </button>

@@ -16,7 +16,7 @@ export const FREE_WATERMARK_PRESETS: WatermarkPositionPreset[] = [
 ]
 
 const DEFAULT_POSITION_PRESET: WatermarkPositionPreset = 'bottom-right'
-const DEFAULT_MODE: WatermarkMode = 'text'
+const DEFAULT_MODE: WatermarkMode = 'image'
 
 export const DEFAULT_WATERMARK_CONFIG: WatermarkConfig = {
   visible: true,

@@ -51,6 +51,7 @@ export type ObjectType =
   | 'schedule'
   | 'checklist'
   | 'collage'
+  | 'table'
   | 'text'
   | 'image'
   | 'shape'
@@ -132,6 +133,67 @@ export type CanvasElementMetadata =
   | ScheduleMetadata
   | ChecklistMetadata
   | CollageMetadata
+  | TableMetadata
+
+export type TableTextAlign = 'left' | 'center' | 'right'
+
+export interface TableCellContent {
+  row: number
+  column: number
+  text?: string
+  textAlign?: TableTextAlign
+  fontFamily?: string
+  fontSize?: number
+  fontWeight?: string | number
+  textColor?: string
+  backgroundColor?: string
+}
+
+export interface TableCellMerge {
+  row: number
+  column: number
+  rowSpan: number
+  colSpan: number
+}
+
+export interface TableMetadata {
+  kind: 'table'
+  rows: number
+  columns: number
+  size: {
+    width: number
+    height: number
+  }
+  showOuterFrame?: boolean
+  showBackground?: boolean
+  showBorder?: boolean
+  headerRows?: number
+  footerRows?: number
+  stripeEvenRows?: boolean
+  stripeColor?: string
+  borderColor?: string
+  borderWidth?: number
+  cornerRadius?: number
+  backgroundColor?: string
+  cellBackgroundColor?: string
+  headerBackgroundColor?: string
+  headerTextColor?: string
+  footerBackgroundColor?: string
+  footerTextColor?: string
+  gridLineColor?: string
+  gridLineWidth?: number
+  showGridLines?: boolean
+  cellPadding?: number
+  cellFontFamily?: string
+  cellFontSize?: number
+  cellFontWeight?: string | number
+  cellTextColor?: string
+  cellTextAlign?: TableTextAlign
+  columnWidths?: number[]
+  rowHeights?: number[]
+  cellContents?: TableCellContent[]
+  merges?: TableCellMerge[]
+}
 
 export interface CalendarGridMetadata {
   kind: 'calendar-grid'
@@ -146,6 +208,8 @@ export interface CalendarGridMetadata {
   backgroundColor?: string
   borderColor?: string
   borderWidth?: number
+  showBackground?: boolean
+  showBorder?: boolean
   cornerRadius?: number
   headerHeight?: number
   weekdayHeight?: number
@@ -205,6 +269,8 @@ export interface WeekStripMetadata {
   backgroundColor?: string
   borderColor?: string
   borderWidth?: number
+  showBackground?: boolean
+  showBorder?: boolean
   cornerRadius?: number
   cellBorderColor?: string
   cellBorderWidth?: number
@@ -246,6 +312,8 @@ export interface DateCellMetadata {
   backgroundColor?: string
   borderColor?: string
   borderWidth?: number
+  showBackground?: boolean
+  showBorder?: boolean
   cornerRadius?: number
   accentHeightRatio?: number
   weekdayColor?: string
@@ -292,6 +360,8 @@ export interface PlannerNoteMetadata {
   backgroundColor?: string
   borderColor?: string
   borderWidth?: number
+  showBackground?: boolean
+  showBorder?: boolean
   cornerRadius?: number
   titleColor?: string
   headerBackgroundColor?: string
@@ -315,6 +385,8 @@ export interface ScheduleMetadata {
   backgroundColor?: string
   borderColor?: string
   borderWidth?: number
+  showBackground?: boolean
+  showBorder?: boolean
   cornerRadius?: number
   titleColor?: string
   headerBackgroundColor?: string
@@ -337,6 +409,8 @@ export interface ChecklistMetadata {
   backgroundColor?: string
   borderColor?: string
   borderWidth?: number
+  showBackground?: boolean
+  showBorder?: boolean
   cornerRadius?: number
   titleColor?: string
   headerBackgroundColor?: string

@@ -8,6 +8,7 @@ import type {
   PlannerNoteMetadata,
   PlannerPatternVariant,
   ScheduleMetadata,
+  TableMetadata,
   WeekStripMetadata,
 } from '@/types'
 
@@ -34,6 +35,8 @@ export function getDefaultCalendarMetadata(
     backgroundColor: overrides.backgroundColor ?? '#ffffff',
     borderColor: overrides.borderColor ?? '#e5e7eb',
     borderWidth: overrides.borderWidth ?? 1,
+    showBackground: overrides.showBackground ?? true,
+    showBorder: overrides.showBorder ?? true,
     cornerRadius: overrides.cornerRadius ?? 26,
     headerHeight: overrides.headerHeight ?? 60,
     weekdayHeight: overrides.weekdayHeight ?? 36,
@@ -77,6 +80,54 @@ export function getDefaultCalendarMetadata(
   }
 }
 
+export function getDefaultTableMetadata(overrides: Partial<TableMetadata> = {}): TableMetadata {
+  const defaultSize = { width: 440, height: 360 }
+  const size = overrides.size ? { ...defaultSize, ...overrides.size } : defaultSize
+  const safeRows = Math.max(1, overrides.rows ?? 4)
+  const safeColumns = Math.max(1, overrides.columns ?? 4)
+  const resolvedBorderWidth = Math.max(0, overrides.borderWidth ?? 0)
+  const resolvedBackgroundColor = overrides.backgroundColor ?? 'transparent'
+  const showOuterFrame =
+    overrides.showOuterFrame ??
+    (resolvedBorderWidth > 0 ||
+      (resolvedBackgroundColor !== 'transparent' && resolvedBackgroundColor !== 'rgba(0,0,0,0)'))
+  return {
+    kind: 'table',
+    rows: safeRows,
+    columns: safeColumns,
+    size,
+    showOuterFrame,
+    showBackground: overrides.showBackground ?? showOuterFrame,
+    showBorder: overrides.showBorder ?? showOuterFrame,
+    cellPadding: overrides.cellPadding ?? 12,
+    borderColor: overrides.borderColor ?? '#d1d5db',
+    borderWidth: resolvedBorderWidth,
+    backgroundColor: resolvedBackgroundColor,
+    cellBackgroundColor: overrides.cellBackgroundColor ?? '#ffffff',
+    headerRows: overrides.headerRows ?? 1,
+    headerBackgroundColor: overrides.headerBackgroundColor ?? '#111827',
+    headerTextColor: overrides.headerTextColor ?? '#ffffff',
+    footerRows: overrides.footerRows ?? 0,
+    footerBackgroundColor: overrides.footerBackgroundColor ?? '#f3f4f6',
+    footerTextColor: overrides.footerTextColor ?? '#111827',
+    stripeEvenRows: overrides.stripeEvenRows ?? false,
+    stripeColor: overrides.stripeColor ?? '#f9fafb',
+    gridLineColor: overrides.gridLineColor ?? '#e5e7eb',
+    gridLineWidth: overrides.gridLineWidth ?? 1,
+    showGridLines: overrides.showGridLines ?? true,
+    cellFontFamily: overrides.cellFontFamily ?? 'Inter',
+    cellFontSize: overrides.cellFontSize ?? 14,
+    cellFontWeight: overrides.cellFontWeight ?? 500,
+    cellTextColor: overrides.cellTextColor ?? '#111827',
+    cellTextAlign: overrides.cellTextAlign ?? 'left',
+    columnWidths: overrides.columnWidths,
+    rowHeights: overrides.rowHeights,
+    cellContents: overrides.cellContents,
+    merges: overrides.merges,
+    cornerRadius: overrides.cornerRadius ?? 0,
+  }
+}
+
 export function getDefaultWeekStripMetadata(
   overrides: Partial<WeekStripMetadata> = {},
 ): WeekStripMetadata {
@@ -91,6 +142,8 @@ export function getDefaultWeekStripMetadata(
     backgroundColor: overrides.backgroundColor ?? '#ffffff',
     borderColor: overrides.borderColor ?? '#e5e7eb',
     borderWidth: overrides.borderWidth ?? 1,
+    showBackground: overrides.showBackground ?? true,
+    showBorder: overrides.showBorder ?? true,
     cornerRadius: overrides.cornerRadius ?? 24,
     cellBorderColor: overrides.cellBorderColor ?? '#f1f5f9',
     cellBorderWidth: overrides.cellBorderWidth ?? 1,
@@ -139,6 +192,8 @@ export function getDefaultPlannerNoteMetadata(
     backgroundColor: overrides.backgroundColor ?? '#ffffff',
     borderColor: overrides.borderColor ?? '#e2e8f0',
     borderWidth: overrides.borderWidth ?? 1,
+    showBackground: overrides.showBackground ?? true,
+    showBorder: overrides.showBorder ?? true,
     cornerRadius: overrides.cornerRadius ?? 22,
     titleColor: overrides.titleColor,
     headerBackgroundColor: overrides.headerBackgroundColor,
@@ -214,11 +269,13 @@ export function getDefaultScheduleMetadata(
     borderColor: overrides.borderColor ?? '#e2e8f0',
     borderWidth: overrides.borderWidth ?? 1,
     cornerRadius: overrides.cornerRadius ?? 22,
-    titleColor: overrides.titleColor,
-    headerBackgroundColor: overrides.headerBackgroundColor,
-    headerBackgroundOpacity: overrides.headerBackgroundOpacity,
-    lineColor: overrides.lineColor,
-    timeLabelColor: overrides.timeLabelColor,
+    titleColor: overrides.titleColor ?? '#0f172a',
+    headerBackgroundColor: overrides.headerBackgroundColor ?? '#a855f7',
+    headerBackgroundOpacity: overrides.headerBackgroundOpacity ?? 0.12,
+    lineColor: overrides.lineColor ?? '#e2e8f0',
+    timeLabelColor: overrides.timeLabelColor ?? '#64748b',
+    showBackground: overrides.showBackground ?? true,
+    showBorder: overrides.showBorder ?? true,
     size,
   }
 }
@@ -238,6 +295,8 @@ export function getDefaultChecklistMetadata(
     backgroundColor: overrides.backgroundColor ?? '#ffffff',
     borderColor: overrides.borderColor ?? '#e2e8f0',
     borderWidth: overrides.borderWidth ?? 1,
+    showBackground: overrides.showBackground ?? true,
+    showBorder: overrides.showBorder ?? true,
     cornerRadius: overrides.cornerRadius ?? 22,
     titleColor: overrides.titleColor,
     headerBackgroundColor: overrides.headerBackgroundColor,
