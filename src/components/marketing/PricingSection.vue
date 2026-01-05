@@ -11,7 +11,7 @@ const plans = [
     features: [
       '3 calendar projects',
       'Basic templates',
-      'PNG export only',
+      'PNG & JPG export',
       'Standard support',
       'Watermark on exports',
     ],
@@ -20,17 +20,18 @@ const plans = [
   },
   {
     name: 'Pro',
-    price: '$9.99',
+    price: '$4.99',
     period: '/month',
     description: 'For professionals and small businesses',
     features: [
       'Unlimited projects',
+      'Advanced Studio workspace',
       'All premium templates',
-      'PDF & PNG export',
-      'No watermarks',
+      'PDF, PNG, JPG & SVG export (no watermarks)',
+      'Regional calendar intelligence (54 countries)',
       'Priority support',
-      'Brand kit (1)',
-      'Custom holidays',
+      'Brand kit (1) & custom holidays',
+      'Responsive cross-device editor',
     ],
     cta: 'Upgrade to Pro',
     highlighted: true,
@@ -51,12 +52,30 @@ const plans = [
     ],
     cta: 'Contact Sales',
     highlighted: false,
+    hidden: true,
+  },
+  {
+    name: 'Lifetime Access',
+    price: '$99.9',
+    period: 'one-time',
+    description: 'Own every feature we ship forever—no renewals, no surprises.',
+    features: [
+      'Everything in Pro',
+      'Unlimited brand kits',
+      'Analytics dashboard & reporting',
+      'All current & future features included at no extra cost',
+      'Lifetime priority support',
+    ],
+    cta: 'Unlock Lifetime',
+    highlighted: false,
   },
 ]
+
+const visiblePlans = plans.filter(plan => !plan.hidden)
 </script>
 
 <template>
-  <div class="py-24 sm:py-32 relative overflow-hidden" id="pricing">
+  <div class="relative overflow-hidden min-h-screen py-16 sm:py-20 flex flex-col justify-center" id="pricing">
     <!-- High-End Background Architecture -->
     <div class="absolute inset-0 pointer-events-none overflow-hidden">
       <!-- Modern Grid Pattern -->
@@ -69,7 +88,7 @@ const plans = [
       <div class="absolute bottom-[5%] -right-[15%] w-[700px] h-[700px] bg-primary-500/10 blur-[120px] rounded-full"></div>
     </div>
 
-    <div class="mx-auto max-w-7xl px-6 lg:px-8 relative z-10">
+    <div class="mx-auto max-w-7xl px-6 lg:px-8 relative z-10 flex-1 flex flex-col justify-center w-full">
       <!-- Header -->
       <div class="mx-auto max-w-3xl text-center mb-20 lg:mb-32">
         <div class="badge-premium mb-10 animate-fade-in-up">
@@ -86,9 +105,9 @@ const plans = [
       </div>
 
       <!-- Pricing Cards -->
-      <div class="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+      <div class="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto w-full">
         <AppCard
-          v-for="(plan, index) in plans"
+          v-for="(plan, index) in visiblePlans"
           :key="plan.name"
           :variant="plan.highlighted ? 'glass' : 'outline'"
           hover="shadow"

@@ -1,10 +1,16 @@
 <script setup lang="ts">
+import { computed, ref } from 'vue'
 import AppLayout from '@/layouts/AppLayout.vue'
 import AppCard from '@/components/ui/AppCard.vue'
 import AppButton from '@/components/ui/AppButton.vue'
+import AppInput from '@/components/ui/AppInput.vue'
+import { useAuthStore } from '@/stores'
+import { supportService } from '@/services/support.service'
 import { 
   QuestionMarkCircleIcon, 
   EnvelopeIcon, 
+  BoltIcon,
+  InformationCircleIcon,
 } from '@heroicons/vue/24/outline'
 
 const faqs = [
@@ -25,6 +31,44 @@ const faqs = [
     answer: 'Visit the Marketplace, find a template you like, and click "Get Template". It will be added to your projects for you to customize.',
   },
 ]
+
+const authStore = useAuthStore()
+const subject = ref('')
+const message = ref('')
+const submitting = ref(false)
+const submitError = ref<string | null>(null)
+const submitSuccess = ref(false)
+
+const isPriority = computed(() => authStore.hasPrioritySupport)
+const priorityLabel = computed(() =>
+  isPriority.value ? 'Priority lane • Pro' : 'Standard queue',
+)
+const canSubmit = computed(() => subject.value.trim().length > 3 && message.value.trim().length > 9 && !submitting.value)
+
+async function submitTicket() {
+  if (!canSubmit.value) return
+  submitting.value = true
+  submitError.value = null
+  submitSuccess.value = false
+  try {
+    await supportService.submitTicket({
+      subject: subject.value.trim(),
+      message: message.value.trim(),
+      priority: isPriority.value ? 'priority' : 'standard',
+      userId: authStore.user?.id ?? null,
+      email: authStore.user?.email ?? null,
+      tier: authStore.subscriptionTier,
+    })
+    subject.value = ''
+    message.value = ''
+    submitSuccess.value = true
+  } catch (error) {
+    console.error('[Help] Failed to submit ticket', error)
+    submitError.value = 'Could not send your request. Please try again.'
+  } finally {
+    submitting.value = false
+  }
+}
 </script>
 
 <template>
@@ -56,22 +100,47 @@ const faqs = [
             <EnvelopeIcon class="h-5 w-5 text-primary-500" />
             <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Contact</h2>
           </div>
-          <p class="text-sm text-gray-500 dark:text-gray-400 mb-6">
-            Need more help? Our team is available Mon-Fri, 9am-5pm EAT.
+          <p class="text-sm text-gray-500 dark:text-gray-400 mb-6 flex items-center gap-2">
+            Need more help? Submit a ticket and we’ll reply within 1 business day
+            <span v-if="isPriority" class="inline-flex items-center text-xs font-semibold text-primary-600 gap-1">
+              <BoltIcon class="w-4 h-4" /> Priority lane
+            </span>
           </p>
-          <div class="space-y-3">
-            <AppButton variant="primary" class="w-full justify-center">Email Support</AppButton>
-            <AppButton variant="secondary" class="w-full justify-center">Live Chat</AppButton>
-            <div>
-              For support, email:
-              <span class="text-gray-900 dark:text-white font-medium">support@calendarcreator.app</span>
+          <form class="space-y-4" @submit.prevent="submitTicket">
+            <div class="space-y-2">
+              <label class="text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide">Subject</label>
+              <AppInput v-model="subject" autocomplete="off" placeholder="Brief summary" :disabled="submitting" />
             </div>
-            <div>
-              Include:
-              <span class="text-gray-900 dark:text-white font-medium">project name</span>,
-              <span class="text-gray-900 dark:text-white font-medium">browser</span>, and
-              <span class="text-gray-900 dark:text-white font-medium">steps to reproduce</span>.
+            <div class="space-y-2">
+              <label class="text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide">Details</label>
+              <textarea
+                v-model="message"
+                rows="5"
+                class="textarea w-full"
+                placeholder="Describe the issue, steps to reproduce, or what you need help with."
+                :disabled="submitting"
+              ></textarea>
             </div>
+            <div class="rounded-xl border border-gray-100 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-900/20 p-3 text-xs text-gray-600 dark:text-gray-400 flex items-center gap-2">
+              <InformationCircleIcon class="w-4 h-4 text-primary-500" />
+              <div>
+                <span class="font-semibold text-gray-900 dark:text-white">{{ priorityLabel }}</span>
+                · Include project name, browser, and screenshots for faster resolution.
+              </div>
+            </div>
+            <AppButton
+              type="submit"
+              variant="primary"
+              class="w-full justify-center"
+              :disabled="!canSubmit"
+            >
+              {{ submitting ? 'Sending…' : isPriority ? 'Send Priority Ticket' : 'Send Support Ticket' }}
+            </AppButton>
+            <p v-if="submitSuccess" class="text-xs text-emerald-600 text-center">Thanks! Your ticket is with our team.</p>
+            <p v-if="submitError" class="text-xs text-red-600 text-center">{{ submitError }}</p>
+          </form>
+          <div class="mt-6 text-xs text-gray-500 dark:text-gray-400">
+            Prefer email? Write to <span class="font-semibold text-gray-900 dark:text-white">support@calendarcreator.app</span>
           </div>
         </AppCard>
       </div>

@@ -123,6 +123,7 @@ export const useAuthStore = defineStore('auth', () => {
   const isPro = computed(() => isAdminRole.value || ['pro', 'business', 'enterprise'].includes(subscriptionTier.value))
   const isBusiness = computed(() => ['business', 'enterprise'].includes(subscriptionTier.value))
   const tierLimits = computed(() => TIER_LIMITS[subscriptionTier.value as SubscriptionTier])
+  const hasPrioritySupport = computed(() => tierLimits.value?.hasPrioritySupport ?? false)
 
   // Feature specific access
   const canUsePremiumTemplates = computed(() => tierLimits.value.canUsePremiumTemplates)
@@ -670,6 +671,7 @@ export const useAuthStore = defineStore('auth', () => {
     canUseAPI,
     canUseWhiteLabel,
     canUseAnalytics,
+    hasPrioritySupport,
     canCreateMoreProjects,
     canCreateMoreBrandKits,
     brandKits,

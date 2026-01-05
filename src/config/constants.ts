@@ -16,6 +16,7 @@ export const TIER_LIMITS: Record<SubscriptionTier, {
   canUseAPI: boolean
   canUseWhiteLabel: boolean
   canUseAnalytics: boolean
+  hasPrioritySupport: boolean
 }> = {
   free: {
     projects: 3,
@@ -32,6 +33,7 @@ export const TIER_LIMITS: Record<SubscriptionTier, {
     canUseAPI: false,
     canUseWhiteLabel: false,
     canUseAnalytics: false,
+    hasPrioritySupport: false,
   },
   pro: {
     projects: Infinity,
@@ -48,6 +50,7 @@ export const TIER_LIMITS: Record<SubscriptionTier, {
     canUseAPI: false,
     canUseWhiteLabel: false,
     canUseAnalytics: false,
+    hasPrioritySupport: true,
   },
   business: {
     projects: Infinity,
@@ -64,6 +67,7 @@ export const TIER_LIMITS: Record<SubscriptionTier, {
     canUseAPI: true,
     canUseWhiteLabel: true,
     canUseAnalytics: true,
+    hasPrioritySupport: true,
   },
   enterprise: {
     projects: Infinity,
@@ -80,6 +84,7 @@ export const TIER_LIMITS: Record<SubscriptionTier, {
     canUseAPI: true,
     canUseWhiteLabel: true,
     canUseAnalytics: true,
+    hasPrioritySupport: true,
   },
 }
 

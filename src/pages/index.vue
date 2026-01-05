@@ -361,15 +361,10 @@ const features = [
                 </dd>
 
                 <!-- Premium Action Area -->
-                <div class="mt-auto group/action flex items-center justify-between">
+                <div class="mt-auto">
                   <span class="text-[11px] font-black uppercase tracking-[0.25em] text-primary-600 dark:text-primary-400">
                     System Capability
                   </span>
-                  <div class="w-12 h-12 rounded-full bg-gray-900 dark:bg-white flex items-center justify-center group-hover/action:scale-110 group-hover/action:bg-primary-500 transition-all duration-500">
-                    <svg class="w-5 h-5 text-white dark:text-gray-900 group-hover/action:translate-x-1 transition-transform duration-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                    </svg>
-                  </div>
                 </div>
               </div>
             </div>

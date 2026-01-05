@@ -124,6 +124,12 @@ export const routes: RouteRecordRaw[] = [
     component: () => import('@/pages/admin/users.vue'),
     meta: { layout: 'default', requiresAuth: true, requiresAdmin: true },
   },
+  {
+    path: '/admin/support',
+    name: 'admin-support',
+    component: () => import('@/pages/admin/support.vue'),
+    meta: { layout: 'default', requiresAuth: true, requiresAdmin: true },
+  },
 
   // ═══════════════════════════════════════════════════════════════
   // LEGAL
