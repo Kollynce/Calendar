@@ -155,6 +155,18 @@ const weekStartOptions: { value: 0 | 1 | 2 | 3 | 4 | 5 | 6; label: string }[] = 
         @input="updateCalendarMetadata((draft) => { draft.title = ($event.target as HTMLInputElement).value || undefined })"
       />
     </div>
+    <div>
+      <label class="text-xs font-medium text-white/60 mb-1.5 block">Header alignment</label>
+      <select
+        class="control-glass"
+        :value="calendarMetadata.headerTextAlign ?? 'center'"
+        @change="updateCalendarMetadata((draft) => { draft.headerTextAlign = ($event.target as HTMLSelectElement).value as CalendarGridMetadata['headerTextAlign'] })"
+      >
+        <option value="left">Left</option>
+        <option value="center">Center</option>
+        <option value="right">Right</option>
+      </select>
+    </div>
 
     <div class="grid grid-cols-2 gap-3">
       <div>

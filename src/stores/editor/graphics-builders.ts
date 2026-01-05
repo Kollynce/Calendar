@@ -197,7 +197,7 @@ export function buildCalendarGridGraphics(
         fontFamily: headerFontFamily,
         fontWeight: headerFontWeight,
         fill: headerTextColor,
-        textAlign: 'center',
+        textAlign: metadata.headerTextAlign ?? 'center',
         selectable: false,
       }),
     )
@@ -1418,6 +1418,7 @@ export function buildPlannerNoteGraphics(metadata: PlannerNoteMetadata): Group {
       fontFamily: 'Inter',
       fontWeight: 700,
       fill: titleColor,
+      textAlign: metadata.titleAlign ?? 'left',
       selectable: false,
     }),
   )
@@ -1435,11 +1436,12 @@ export function buildPlannerNoteGraphics(metadata: PlannerNoteMetadata): Group {
 
   if (metadata.pattern === 'ruled') {
     const guideColor = metadata.guideColor ?? '#e2e8f0'
+    const guideWidth = Math.max(0.5, metadata.guideWidth ?? 1)
     for (let y = bodyTop + 16; y < height - 24; y += 26) {
       objects.push(
         new Line([24, y, width - 24, y], {
           stroke: guideColor,
-          strokeWidth: 1,
+          strokeWidth: guideWidth,
           selectable: false,
         }),
       )
@@ -1448,11 +1450,12 @@ export function buildPlannerNoteGraphics(metadata: PlannerNoteMetadata): Group {
 
   if (metadata.pattern === 'grid') {
     const guideColor = metadata.guideColor ?? '#eff6ff'
+    const guideWidth = Math.max(0.5, metadata.guideWidth ?? 1)
     for (let x = 24; x < width - 24; x += 24) {
       objects.push(
         new Line([x, bodyTop + 6, x, height - 24], {
           stroke: guideColor,
-          strokeWidth: 1,
+          strokeWidth: guideWidth,
           selectable: false,
         }),
       )
@@ -1461,7 +1464,7 @@ export function buildPlannerNoteGraphics(metadata: PlannerNoteMetadata): Group {
       objects.push(
         new Line([24, y, width - 24, y], {
           stroke: guideColor,
-          strokeWidth: 1,
+          strokeWidth: guideWidth,
           selectable: false,
         }),
       )
@@ -1469,17 +1472,18 @@ export function buildPlannerNoteGraphics(metadata: PlannerNoteMetadata): Group {
   }
 
   if (metadata.pattern === 'dot') {
-    const dotColor = metadata.dotColor ?? '#cbd5f5'
+    const dotColor = metadata.dotColor ?? metadata.guideColor ?? '#cbd5f5'
+    const dotSize = Math.max(1, Math.min(8, metadata.guideWidth ?? 2))
     for (let x = 28; x < width - 28; x += 20) {
       for (let y = bodyTop + 16; y < height - 28; y += 20) {
         objects.push(
           new Rect({
             left: x,
             top: y,
-            width: 2,
-            height: 2,
-            rx: 1,
-            ry: 1,
+            width: dotSize,
+            height: dotSize,
+            rx: dotSize / 2,
+            ry: dotSize / 2,
             fill: dotColor,
             selectable: false,
           }),
@@ -1555,6 +1559,7 @@ export function buildScheduleGraphics(metadata: ScheduleMetadata): Group {
       fontFamily: 'Inter',
       fontWeight: 700,
       fill: titleColor,
+      textAlign: metadata.titleAlign ?? 'left',
       selectable: false,
     }),
   )
@@ -1606,7 +1611,7 @@ export function buildScheduleGraphics(metadata: ScheduleMetadata): Group {
     objects.push(
       new Line([lineLeft, y, lineRight, y], {
         stroke: lineColor,
-        strokeWidth: 1,
+        strokeWidth: Math.max(0.5, metadata.lineWidth ?? 1),
         selectable: false,
       }),
     )
@@ -1679,6 +1684,7 @@ export function buildChecklistGraphics(metadata: ChecklistMetadata): Group {
       fontFamily: 'Inter',
       fontWeight: 700,
       fill: titleColor,
+      textAlign: metadata.titleAlign ?? 'left',
       selectable: false,
     }),
   )
@@ -1704,6 +1710,7 @@ export function buildChecklistGraphics(metadata: ChecklistMetadata): Group {
   const lineRight = width - paddingX
 
   const lineColor = metadata.lineColor ?? '#e2e8f0'
+  const lineWidth = Math.max(0.5, metadata.lineWidth ?? 1)
   const checkboxColor = metadata.checkboxColor ?? metadata.accentColor
 
   for (let i = 0; i < rows; i++) {
@@ -1729,7 +1736,7 @@ export function buildChecklistGraphics(metadata: ChecklistMetadata): Group {
     objects.push(
       new Line([lineLeft, y + 6, lineRight, y + 6], {
         stroke: lineColor,
-        strokeWidth: 1,
+        strokeWidth: lineWidth,
         selectable: false,
       }),
     )

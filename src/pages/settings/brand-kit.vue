@@ -1031,6 +1031,9 @@ const editingKit = reactive<BrandKit>(createBlankKit())
 onBeforeMount(() => {
   registerFontWatchers()
 })
+onBeforeUnmount(() => {
+  cleanupFontBlobUrls()
+})
 const uploadedFonts = computed<BrandFontSetting[]>(() =>
   Array.isArray(editingKit.fontLibrary)
     ? editingKit.fontLibrary.filter((font) => font?.source === 'upload')

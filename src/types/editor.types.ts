@@ -222,6 +222,7 @@ export interface CalendarGridMetadata {
   headerFontFamily?: string
   headerFontSize?: number
   headerFontWeight?: string | number
+  headerTextAlign?: 'left' | 'center' | 'right'
   weekdayTextColor?: string
   weekdayFontFamily?: string
   weekdayFontSize?: number
@@ -357,6 +358,7 @@ export interface PlannerNoteMetadata {
   title: string
   accentColor: string
   headerStyle?: PlannerHeaderStyle
+  titleAlign?: 'left' | 'center' | 'right'
   backgroundColor?: string
   borderColor?: string
   borderWidth?: number
@@ -367,6 +369,7 @@ export interface PlannerNoteMetadata {
   headerBackgroundColor?: string
   headerBackgroundOpacity?: number
   guideColor?: string
+  guideWidth?: number
   dotColor?: string
   size: {
     width: number
@@ -382,6 +385,7 @@ export interface ScheduleMetadata {
   endHour: number
   intervalMinutes: 30 | 60
   headerStyle?: PlannerHeaderStyle
+  titleAlign?: 'left' | 'center' | 'right'
   backgroundColor?: string
   borderColor?: string
   borderWidth?: number
@@ -392,6 +396,7 @@ export interface ScheduleMetadata {
   headerBackgroundColor?: string
   headerBackgroundOpacity?: number
   lineColor?: string
+  lineWidth?: number
   timeLabelColor?: string
   size: {
     width: number
@@ -406,6 +411,7 @@ export interface ChecklistMetadata {
   rows: number
   showCheckboxes: boolean
   headerStyle?: PlannerHeaderStyle
+  titleAlign?: 'left' | 'center' | 'right'
   backgroundColor?: string
   borderColor?: string
   borderWidth?: number
@@ -416,6 +422,7 @@ export interface ChecklistMetadata {
   headerBackgroundColor?: string
   headerBackgroundOpacity?: number
   lineColor?: string
+  lineWidth?: number
   checkboxColor?: string
   size: {
     width: number

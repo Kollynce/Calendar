@@ -46,6 +46,12 @@ const headerStyleOptions: { value: PlannerHeaderStyle; label: string }[] = [
   { value: 'filled', label: 'Filled' },
 ]
 
+const titleAlignOptions = [
+  { value: 'left', label: 'Left' },
+  { value: 'center', label: 'Center' },
+  { value: 'right', label: 'Right' },
+]
+
 const plannerPatternOptions: { value: PlannerPatternVariant; label: string }[] = [
   { value: 'hero', label: 'Hero Banner' },
   { value: 'ruled', label: 'Ruled Lines' },
@@ -659,15 +665,37 @@ function setAppearanceToggle(target: 'background' | 'border', value: boolean) {
             <option v-for="opt in headerStyleOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
           </select>
         </div>
+        <div>
+          <label class="text-xs font-medium text-white/60 mb-1.5 block">Title alignment</label>
+          <select
+            class="control-glass"
+            :value="scheduleMetadata.titleAlign ?? 'left'"
+            @change="updateScheduleMetadata((draft) => { draft.titleAlign = ($event.target as HTMLSelectElement).value as ScheduleMetadata['titleAlign'] })"
+          >
+            <option v-for="opt in titleAlignOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+          </select>
+        </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="text-xs font-medium text-white/60 mb-1.5 block">Accent</label>
             <ColorPicker :model-value="scheduleMetadata.accentColor" @update:modelValue="(c: string) => updateScheduleMetadata((draft) => { draft.accentColor = c })" />
           </div>
           <div>
-            <label class="text-xs font-medium text-white/60 mb-1.5 block">Lines</label>
+            <label class="text-xs font-medium text-white/60 mb-1.5 block">Line color</label>
             <ColorPicker :model-value="scheduleMetadata.lineColor ?? '#e2e8f0'" @update:modelValue="(c: string) => updateScheduleMetadata((draft) => { draft.lineColor = c })" />
           </div>
+        </div>
+        <div>
+          <label class="text-xs font-medium text-white/60 mb-1.5 block">Line thickness</label>
+          <input
+            type="number"
+            min="0.5"
+            max="8"
+            step="0.5"
+            class="control-glass"
+            :value="scheduleMetadata.lineWidth ?? 1"
+            @change="updateScheduleMetadata((draft) => { draft.lineWidth = Math.max(0.5, Math.min(8, Number(($event.target as HTMLInputElement).value) || 1)) })"
+          />
         </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
@@ -736,6 +764,16 @@ function setAppearanceToggle(target: 'background' | 'border', value: boolean) {
             <option v-for="opt in headerStyleOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
           </select>
         </div>
+        <div>
+          <label class="text-xs font-medium text-white/60 mb-1.5 block">Title alignment</label>
+          <select
+            class="control-glass"
+            :value="checklistMetadata.titleAlign ?? 'left'"
+            @change="updateChecklistMetadata((draft) => { draft.titleAlign = ($event.target as HTMLSelectElement).value as ChecklistMetadata['titleAlign'] })"
+          >
+            <option v-for="opt in titleAlignOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+          </select>
+        </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="text-xs font-medium text-white/60 mb-1.5 block">Accent</label>
@@ -744,6 +782,24 @@ function setAppearanceToggle(target: 'background' | 'border', value: boolean) {
           <div>
             <label class="text-xs font-medium text-white/60 mb-1.5 block">Checkbox</label>
             <ColorPicker :model-value="checklistMetadata.checkboxColor ?? checklistMetadata.accentColor" @update:modelValue="(c: string) => updateChecklistMetadata((draft) => { draft.checkboxColor = c })" />
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs font-medium text-white/60 mb-1.5 block">Line color</label>
+            <ColorPicker :model-value="checklistMetadata.lineColor ?? '#e2e8f0'" @update:modelValue="(c: string) => updateChecklistMetadata((draft) => { draft.lineColor = c })" />
+          </div>
+          <div>
+            <label class="text-xs font-medium text-white/60 mb-1.5 block">Line thickness</label>
+            <input
+              type="number"
+              min="0.5"
+              max="8"
+              step="0.5"
+              class="control-glass"
+              :value="checklistMetadata.lineWidth ?? 1"
+              @change="updateChecklistMetadata((draft) => { draft.lineWidth = Math.max(0.5, Math.min(8, Number(($event.target as HTMLInputElement).value) || 1)) })"
+            />
           </div>
         </div>
         <div class="grid grid-cols-2 gap-3">
@@ -835,8 +891,36 @@ function setAppearanceToggle(target: 'background' | 'border', value: boolean) {
           </select>
         </div>
         <div>
+          <label class="text-xs font-medium text-white/60 mb-1.5 block">Title alignment</label>
+          <select
+            class="control-glass"
+            :value="plannerNoteMetadata.titleAlign ?? 'left'"
+            @change="updatePlannerMetadata((draft) => { draft.titleAlign = ($event.target as HTMLSelectElement).value as PlannerNoteMetadata['titleAlign'] })"
+          >
+            <option v-for="opt in titleAlignOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+          </select>
+        </div>
+        <div>
           <label class="text-xs font-medium text-white/60 mb-1.5 block">Accent</label>
           <ColorPicker :model-value="plannerNoteMetadata.accentColor" @update:modelValue="(c: string) => updatePlannerMetadata((draft) => { draft.accentColor = c })" />
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs font-medium text-white/60 mb-1.5 block">Guide color</label>
+            <ColorPicker :model-value="plannerNoteMetadata.guideColor ?? '#e2e8f0'" @update:modelValue="(c: string) => updatePlannerMetadata((draft) => { draft.guideColor = c })" />
+          </div>
+          <div>
+            <label class="text-xs font-medium text-white/60 mb-1.5 block">Guide thickness</label>
+            <input
+              type="number"
+              min="0.5"
+              max="8"
+              step="0.5"
+              class="control-glass"
+              :value="plannerNoteMetadata.guideWidth ?? 1"
+              @change="updatePlannerMetadata((draft) => { draft.guideWidth = Math.max(0.5, Math.min(8, Number(($event.target as HTMLInputElement).value) || 1)) })"
+            />
+          </div>
         </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
