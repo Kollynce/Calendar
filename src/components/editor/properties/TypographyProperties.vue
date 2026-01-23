@@ -1,12 +1,34 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useEditorStore } from '@/stores/editor.store'
 import FontPicker from '@/components/editor/FontPicker.vue'
 import ColorPicker from '@/components/editor/ColorPicker.vue'
+import PropertySection from './PropertySection.vue'
+import PropertyField from './PropertyField.vue'
+import PropertyRow from './PropertyRow.vue'
+
+// Section management
+const activeSections = ref<Set<string>>(new Set(['content']))
+
+function toggleSection(id: string) {
+  if (activeSections.value.has(id)) {
+    activeSections.value.delete(id)
+  } else {
+    activeSections.value.add(id)
+  }
+}
+
+function isSectionOpen(id: string) {
+  return activeSections.value.has(id)
+}
 
 const editorStore = useEditorStore()
 
-const selectedObject = computed(() => editorStore.selectedObjects[0])
+const selectedObject = computed(() => {
+  // Access selectionVersion to force re-evaluation when properties change
+  void editorStore.selectionVersion
+  return editorStore.selectedObjects[0]
+})
 
 // Font Family
 const fontFamily = computed({
@@ -130,211 +152,140 @@ const textTransform = computed({
 </script>
 
 <template>
-  <div class="space-y-4">
-    <div class="flex items-center justify-between">
-      <p class="text-xs font-semibold uppercase tracking-widest text-white/60">Typography</p>
-    </div>
+  <div class="space-y-0">
+    <!-- Typeface Section (Content) -->
+    <PropertySection 
+      title="Typeface" 
+      :is-open="isSectionOpen('content')"
+      @toggle="toggleSection('content')"
+    >
+      <PropertyField label="Font Family">
+        <FontPicker v-model="fontFamily" />
+      </PropertyField>
 
-    <!-- Font Family -->
-    <div>
-      <label class="text-xs font-medium text-white/60 mb-1.5 block">Font</label>
-      <FontPicker v-model="fontFamily" class="control-glass" />
-    </div>
+      <PropertyRow>
+        <PropertyField label="Weight">
+          <select v-model="fontWeight" class="control-glass text-xs">
+            <option v-for="opt in fontWeightOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+          </select>
+        </PropertyField>
+        <PropertyField label="Size">
+          <div class="flex items-center gap-1">
+            <input v-model.number="fontSize" type="number" min="1" max="500" class="control-glass text-xs flex-1" />
+            <span class="text-[10px] text-white/30 uppercase">px</span>
+          </div>
+        </PropertyField>
+      </PropertyRow>
 
-    <!-- Font Weight & Style Row -->
-    <div class="grid grid-cols-2 gap-3">
-      <div>
-        <label class="text-xs font-medium text-white/60 mb-1.5 block">Weight</label>
-        <select v-model="fontWeight" class="control-glass">
-          <option v-for="opt in fontWeightOptions" :key="opt.value" :value="opt.value">
-            {{ opt.label }}
-          </option>
-        </select>
-      </div>
-      <div>
-        <label class="text-xs font-medium text-white/60 mb-1.5 block">Size</label>
-        <div class="flex items-center gap-1">
-          <input 
-            v-model.number="fontSize" 
-            type="number" 
-            min="1" 
-            max="500" 
-            class="control-glass flex-1" 
-          />
-          <span class="text-xs text-white/40">px</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- Line Height & Letter Spacing -->
-    <div class="grid grid-cols-2 gap-3">
-      <div>
-        <label class="text-xs font-medium text-white/60 mb-1.5 block">Line Height</label>
-        <div class="flex items-center gap-2">
-          <input 
-            v-model.number="lineHeight" 
-            type="number" 
-            min="0.5" 
-            max="5" 
-            step="0.1" 
-            class="control-glass flex-1" 
-          />
-        </div>
-      </div>
-      <div>
-        <label class="text-xs font-medium text-white/60 mb-1.5 block">Letter Spacing</label>
-        <div class="flex items-center gap-1">
-          <input 
-            v-model.number="charSpacing" 
-            type="number" 
-            min="-50" 
-            max="200" 
-            class="control-glass flex-1" 
-          />
-          <span class="text-xs text-white/40">%</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- Text Alignment -->
-    <div>
-      <label class="text-xs font-medium text-white/60 mb-1.5 block">Alignment</label>
-      <div class="flex bg-white/5 rounded-lg p-0.5">
-        <button
-          type="button"
-          @click="textAlign = 'left'"
-          :class="[
-            'flex-1 p-2 rounded-md transition-all',
-            textAlign === 'left' ? 'bg-primary-500/30 text-primary-300' : 'text-white/60 hover:text-white hover:bg-white/10'
-          ]"
-          title="Align Left"
-        >
-          <svg class="w-4 h-4 mx-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="3" y1="6" x2="21" y2="6" />
-            <line x1="3" y1="12" x2="15" y2="12" />
-            <line x1="3" y1="18" x2="18" y2="18" />
-          </svg>
-        </button>
-        <button
-          type="button"
-          @click="textAlign = 'center'"
-          :class="[
-            'flex-1 p-2 rounded-md transition-all',
-            textAlign === 'center' ? 'bg-primary-500/30 text-primary-300' : 'text-white/60 hover:text-white hover:bg-white/10'
-          ]"
-          title="Align Center"
-        >
-          <svg class="w-4 h-4 mx-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="3" y1="6" x2="21" y2="6" />
-            <line x1="6" y1="12" x2="18" y2="12" />
-            <line x1="4" y1="18" x2="20" y2="18" />
-          </svg>
-        </button>
-        <button
-          type="button"
-          @click="textAlign = 'right'"
-          :class="[
-            'flex-1 p-2 rounded-md transition-all',
-            textAlign === 'right' ? 'bg-primary-500/30 text-primary-300' : 'text-white/60 hover:text-white hover:bg-white/10'
-          ]"
-          title="Align Right"
-        >
-          <svg class="w-4 h-4 mx-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="3" y1="6" x2="21" y2="6" />
-            <line x1="9" y1="12" x2="21" y2="12" />
-            <line x1="6" y1="18" x2="21" y2="18" />
-          </svg>
-        </button>
-        <button
-          type="button"
-          @click="textAlign = 'justify'"
-          :class="[
-            'flex-1 p-2 rounded-md transition-all',
-            textAlign === 'justify' ? 'bg-primary-500/30 text-primary-300' : 'text-white/60 hover:text-white hover:bg-white/10'
-          ]"
-          title="Justify"
-        >
-          <svg class="w-4 h-4 mx-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="3" y1="6" x2="21" y2="6" />
-            <line x1="3" y1="12" x2="21" y2="12" />
-            <line x1="3" y1="18" x2="21" y2="18" />
-          </svg>
-        </button>
-      </div>
-    </div>
-
-    <!-- Text Styling (Italic, Underline, Strikethrough) -->
-    <div>
-      <label class="text-xs font-medium text-white/60 mb-1.5 block">Style</label>
-      <div class="flex gap-1">
-        <div class="flex bg-white/5 rounded-lg p-0.5 flex-1">
+      <div class="pt-4 border-t border-white/5">
+        <label class="text-[10px] font-medium text-white/40 mb-2 block uppercase">Style & Decoration</label>
+        <div class="flex bg-white/5 rounded-lg p-0.5">
           <button
             type="button"
             @click="isItalic = !isItalic"
             :class="[
-              'flex-1 p-2 rounded-md transition-all font-serif italic',
-              isItalic ? 'bg-primary-500/30 text-primary-300' : 'text-white/60 hover:text-white hover:bg-white/10'
+              'flex-1 py-1.5 rounded-md transition-all font-serif italic text-sm',
+              isItalic ? 'bg-primary-500/30 text-primary-300' : 'text-white/40 hover:text-white hover:bg-white/10'
             ]"
             title="Italic"
           >
-            <span class="text-sm">I</span>
+            I
           </button>
           <button
             type="button"
             @click="isUnderline = !isUnderline"
             :class="[
-              'flex-1 p-2 rounded-md transition-all underline',
-              isUnderline ? 'bg-primary-500/30 text-primary-300' : 'text-white/60 hover:text-white hover:bg-white/10'
+              'flex-1 py-1.5 rounded-md transition-all underline text-sm',
+              isUnderline ? 'bg-primary-500/30 text-primary-300' : 'text-white/40 hover:text-white hover:bg-white/10'
             ]"
             title="Underline"
           >
-            <span class="text-sm">U</span>
+            U
           </button>
           <button
             type="button"
             @click="isStrikethrough = !isStrikethrough"
             :class="[
-              'flex-1 p-2 rounded-md transition-all line-through',
-              isStrikethrough ? 'bg-primary-500/30 text-primary-300' : 'text-white/60 hover:text-white hover:bg-white/10'
+              'flex-1 py-1.5 rounded-md transition-all line-through text-sm',
+              isStrikethrough ? 'bg-primary-500/30 text-primary-300' : 'text-white/40 hover:text-white hover:bg-white/10'
             ]"
             title="Strikethrough"
           >
-            <span class="text-sm">S</span>
-          </button>
-        </div>
-
-        <!-- Text Transform -->
-        <div class="flex bg-white/5 rounded-lg p-0.5">
-          <button
-            type="button"
-            @click="textTransform = textTransform === 'uppercase' ? 'none' : 'uppercase'"
-            :class="[
-              'px-3 py-2 rounded-md transition-all text-xs font-medium',
-              textTransform === 'uppercase' ? 'bg-primary-500/30 text-primary-300' : 'text-white/60 hover:text-white hover:bg-white/10'
-            ]"
-            title="Uppercase"
-          >
-            AA
-          </button>
-          <button
-            type="button"
-            @click="textTransform = textTransform === 'capitalize' ? 'none' : 'capitalize'"
-            :class="[
-              'px-3 py-2 rounded-md transition-all text-xs font-medium',
-              textTransform === 'capitalize' ? 'bg-primary-500/30 text-primary-300' : 'text-white/60 hover:text-white hover:bg-white/10'
-            ]"
-            title="Capitalize"
-          >
-            Aa
+            S
           </button>
         </div>
       </div>
-    </div>
+    </PropertySection>
 
-    <!-- Color -->
-    <div>
-      <label class="text-xs font-medium text-white/60 mb-1.5 block">Color</label>
-      <ColorPicker v-model="textColor" />
-    </div>
+    <!-- Appearance Section (Paragraph & Color) -->
+    <PropertySection 
+      title="Paragraph & Color" 
+      :is-open="isSectionOpen('appearance')"
+      @toggle="toggleSection('appearance')"
+      is-last
+    >
+      <PropertyField label="Alignment">
+        <div class="flex bg-white/5 rounded-lg p-0.5">
+          <button
+            v-for="align in ['left', 'center', 'right', 'justify']"
+            :key="align"
+            type="button"
+            @click="textAlign = align"
+            :class="[
+              'flex-1 p-1.5 rounded-md transition-all',
+              textAlign === align ? 'bg-primary-500/30 text-primary-300' : 'text-white/40 hover:text-white hover:bg-white/10'
+            ]"
+            :title="`Align ${align}`"
+          >
+            <svg v-if="align === 'left'" class="w-3.5 h-3.5 mx-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="15" y2="12" /><line x1="3" y1="18" x2="18" y2="18" />
+            </svg>
+            <svg v-else-if="align === 'center'" class="w-3.5 h-3.5 mx-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="3" y1="6" x2="21" y2="6" /><line x1="6" y1="12" x2="18" y2="12" /><line x1="4" y1="18" x2="20" y2="18" />
+            </svg>
+            <svg v-else-if="align === 'right'" class="w-3.5 h-3.5 mx-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="3" y1="6" x2="21" y2="6" /><line x1="9" y1="12" x2="21" y2="12" /><line x1="6" y1="18" x2="21" y2="18" />
+            </svg>
+            <svg v-else-if="align === 'justify'" class="w-3.5 h-3.5 mx-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" />
+            </svg>
+          </button>
+        </div>
+      </PropertyField>
+
+      <PropertyRow>
+        <PropertyField label="Line Height">
+          <input v-model.number="lineHeight" type="number" min="0.5" max="5" step="0.1" class="control-glass text-xs w-full" />
+        </PropertyField>
+        <PropertyField label="Spacing">
+          <div class="flex items-center gap-1">
+            <input v-model.number="charSpacing" type="number" min="-50" max="200" class="control-glass text-xs flex-1" />
+            <span class="text-[10px] text-white/30 uppercase">%</span>
+          </div>
+        </PropertyField>
+      </PropertyRow>
+
+      <div class="pt-4 border-t border-white/5">
+        <label class="text-[10px] font-medium text-white/40 mb-2 block uppercase">Transform</label>
+        <div class="flex bg-white/5 rounded-lg p-0.5">
+          <button
+            v-for="mode in ['none', 'uppercase', 'capitalize']"
+            :key="mode"
+            type="button"
+            @click="textTransform = mode"
+            :class="[
+              'flex-1 py-1.5 rounded-md transition-all text-[10px] font-bold',
+              textTransform === mode ? 'bg-primary-500/30 text-primary-300' : 'text-white/40 hover:text-white hover:bg-white/10'
+            ]"
+          >
+            {{ mode === 'none' ? 'None' : (mode === 'uppercase' ? 'AA' : 'Aa') }}
+          </button>
+        </div>
+      </div>
+
+      <PropertyField label="Text Color" class="pt-4 border-t border-white/5">
+        <ColorPicker v-model="textColor" />
+      </PropertyField>
+    </PropertySection>
   </div>
 </template>

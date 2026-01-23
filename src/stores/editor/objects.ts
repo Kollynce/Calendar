@@ -234,6 +234,7 @@ export function createObjectsModule(params: {
   bakeScaledCalendarElementSize: (target: FabricObject) => void
   getArrowParts: (group: Group) => { line: Line | null; startHead: Polygon | null; endHead: Polygon | null }
   refreshArrowGroupGeometry: (group: Group) => void
+  notifySelectionUpdate: () => void
 }) {
   const {
     canvas,
@@ -253,6 +254,7 @@ export function createObjectsModule(params: {
     bakeScaledCalendarElementSize,
     getArrowParts,
     refreshArrowGroupGeometry,
+    notifySelectionUpdate,
   } = params
 
   function addObject(type: ObjectType, options: Partial<any> = {}): void {
@@ -840,7 +842,7 @@ export function createObjectsModule(params: {
     const activeObject = canvas.value.getActiveObject()
     if (!activeObject) return
 
-    activeObject.clone().then((cloned: FabricObject) => {
+    activeObject.clone(['data', 'name']).then((cloned: FabricObject) => {
       const newId = generateObjectId(activeObject.type || 'object')
       cloned.set({
         left: (cloned.left || 0) + 20,
@@ -887,7 +889,7 @@ export function createObjectsModule(params: {
     const activeObject = canvas.value.getActiveObject()
     if (!activeObject) return
 
-    activeObject.clone().then((cloned: FabricObject) => {
+    activeObject.clone(['data', 'name']).then((cloned: FabricObject) => {
       clipboard.value = cloned as unknown as CanvasObject
     })
   }
@@ -896,7 +898,7 @@ export function createObjectsModule(params: {
     if (!canvas.value || !clipboard.value) return
 
     const cloned = clipboard.value as unknown as FabricObject
-    cloned.clone().then((pasted: FabricObject) => {
+    cloned.clone(['data', 'name']).then((pasted: FabricObject) => {
       const newId = generateObjectId(pasted.type || 'object')
       pasted.set({
         left: (pasted.left || 0) + 20,
@@ -1266,7 +1268,19 @@ export function createObjectsModule(params: {
 
     const isArrow = (activeObject as any)?.type === 'group' && (activeObject as any)?.data?.shapeKind === 'arrow'
 
-    if (isArrow) {
+    // If we're updating a property on an ActiveSelection, propagate it to all children
+    if ((activeObject as any).type === 'activeselection') {
+      const selection = activeObject as ActiveSelection
+      selection.getObjects().forEach((obj) => {
+        obj.set({ [property]: value } as any)
+        ;(obj as any).dirty = true
+        if (typeof (obj as any).setCoords === 'function') {
+          ;(obj as any).setCoords()
+        }
+      })
+      // Selection itself needs coords update
+      selection.setCoords?.()
+    } else if (isArrow) {
       const group = activeObject as unknown as Group
       const data = ((group as any).data ?? {}) as any
       const opts = (data.arrowOptions ?? {}) as any
@@ -1335,11 +1349,13 @@ export function createObjectsModule(params: {
       activeObject.set({ [property]: value } as any)
     }
 
+    // Mark as dirty to ensure re-render
+    ;(activeObject as any).dirty = true
+
     // Calendar elements: if the user changes scale (via width/height inspector), convert it into metadata.size
     // so internal layout is recomputed at the new size.
     if (property === 'scaleX' || property === 'scaleY') {
       bakeScaledCalendarElementSize(activeObject)
-      queueHistorySave()
     }
 
     // Fonts: make sure the font is actually available, and force Fabric to re-measure text.
@@ -1351,17 +1367,26 @@ export function createObjectsModule(params: {
         requestFontLoad(family, weight, size)
       }
 
-      ; (activeObject as any).dirty = true
-      if (typeof (activeObject as any).initDimensions === 'function') {
-        ; (activeObject as any).initDimensions()
+      if (activeObject.type === 'textbox' || (activeObject as any).isTextbox) {
+        if (typeof (activeObject as any).initDimensions === 'function') {
+          ; (activeObject as any).initDimensions()
+        }
       }
-      if (typeof (activeObject as any).setCoords === 'function') {
-        ; (activeObject as any).setCoords()
-      }
+    }
+    
+    // Always update coordinates after a property change
+    if (typeof activeObject.setCoords === 'function') {
+      activeObject.setCoords()
     }
 
     canvas.value.requestRenderAll?.()
     isDirty.value = true
+    
+    // Queue a history save for ALL property updates
+    queueHistorySave()
+    
+    // Notify properties panels that something changed (reactivity anchor)
+    notifySelectionUpdate()
   }
 
   function selectObjectById(id: string): void {

@@ -2,6 +2,9 @@
 import { ref, computed, watch } from 'vue'
 import ColorPicker from '../ColorPicker.vue'
 import TableCellEditor from './TableCellEditor.vue'
+import PropertySection from './PropertySection.vue'
+import PropertyField from './PropertyField.vue'
+import PropertyRow from './PropertyRow.vue'
 import type { TableMetadata, TableCellMerge } from '@/types'
 
 interface Props {
@@ -10,6 +13,21 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+
+// Section management
+const activeSections = ref<Set<string>>(new Set(['content']))
+
+function toggleSection(id: string) {
+  if (activeSections.value.has(id)) {
+    activeSections.value.delete(id)
+  } else {
+    activeSections.value.add(id)
+  }
+}
+
+function isSectionOpen(id: string) {
+  return activeSections.value.has(id)
+}
 
 const fontOptions = [
   'Inter',
@@ -291,10 +309,6 @@ function removeCell(row: number, column: number) {
   })
 }
 
-function clearCell() {
-  cellText.value = ''
-  applyCellEdit()
-}
 
 function applyMergeEdit() {
   const rowIndex = normalizeMergeRow() - 1
@@ -332,476 +346,421 @@ function removeMerge(row: number, column: number) {
 </script>
 
 <template>
-  <div class="pt-4 border-t border-white/10 space-y-6">
-    <div class="flex items-center justify-between">
-      <p class="text-xs font-semibold uppercase tracking-widest text-white/60">Table</p>
-      <span class="text-[11px] text-white/50">Rows × Columns</span>
-    </div>
-
-    <TableCellEditor
-      :open="isCellEditorOpen"
-      :table-metadata="tableMetadata"
-      :update-table-metadata="updateTableMetadata"
-      @close="isCellEditorOpen = false"
-    />
-
-    <div class="grid grid-cols-2 gap-3">
-      <div>
-        <label class="text-xs font-medium text-white/60 mb-1.5 block">Rows</label>
-        <input
-          type="number"
-          min="1"
-          max="30"
-          class="control-glass"
-          :value="tableMetadata.rows"
-          @change="updateTableMetadata((draft) => { draft.rows = clamp(Number(($event.target as HTMLInputElement).value) || draft.rows, 1, 30); sanitizeTableMetadata(draft) })"
-        />
-      </div>
-      <div>
-        <label class="text-xs font-medium text-white/60 mb-1.5 block">Columns</label>
-        <input
-          type="number"
-          min="1"
-          max="12"
-          class="control-glass"
-          :value="tableMetadata.columns"
-          @change="updateTableMetadata((draft) => { draft.columns = clamp(Number(($event.target as HTMLInputElement).value) || draft.columns, 1, 12); sanitizeTableMetadata(draft) })"
-        />
-      </div>
-    </div>
-
-    <div class="grid grid-cols-3 gap-3">
-      <div>
-        <label class="text-xs font-medium text-white/60 mb-1.5 block">Header rows</label>
-        <input
-          type="number"
-          min="0"
-          :max="tableMetadata.rows - (tableMetadata.footerRows ?? 0)"
-          class="control-glass"
-          :value="tableMetadata.headerRows ?? 1"
-          @change="updateTableMetadata((draft) => { 
-            const max = Math.max(0, draft.rows - (draft.footerRows ?? 0))
-            draft.headerRows = clamp(Number(($event.target as HTMLInputElement).value) || 0, 0, max)
-          })"
-        />
-      </div>
-      <div>
-        <label class="text-xs font-medium text-white/60 mb-1.5 block">Footer rows</label>
-        <input
-          type="number"
-          min="0"
-          :max="tableMetadata.rows - (tableMetadata.headerRows ?? 0)"
-          class="control-glass"
-          :value="tableMetadata.footerRows ?? 0"
-          @change="updateTableMetadata((draft) => { 
-            const max = Math.max(0, draft.rows - (draft.headerRows ?? 0))
-            draft.footerRows = clamp(Number(($event.target as HTMLInputElement).value) || 0, 0, max)
-          })"
-        />
-      </div>
-      <div>
-        <label class="text-xs font-medium text-white/60 mb-1.5 block">Cell padding</label>
-        <input
-          type="number"
-          min="0"
-          max="60"
-          class="control-glass"
-          :value="tableMetadata.cellPadding ?? 12"
-          @change="updateTableMetadata((draft) => { draft.cellPadding = clamp(Number(($event.target as HTMLInputElement).value) || 12, 0, 60) })"
-        />
-      </div>
-    </div>
-
-    <div class="grid grid-cols-2 gap-3">
-      <div>
-        <label class="text-xs font-medium text-white/60 mb-1.5 block">Background</label>
-        <ColorPicker
-          :model-value="tableMetadata.backgroundColor ?? '#ffffff'"
-          @update:modelValue="(color) => updateTableMetadata((draft) => { draft.backgroundColor = color })"
-        />
-      </div>
-      <div>
-        <label class="text-xs font-medium text-white/60 mb-1.5 block">Cell fill</label>
-        <ColorPicker
-          :model-value="tableMetadata.cellBackgroundColor ?? '#ffffff'"
-          @update:modelValue="(color) => updateTableMetadata((draft) => { draft.cellBackgroundColor = color })"
-        />
-      </div>
-    </div>
-    <div class="flex flex-wrap items-center gap-4 text-xs text-white/80">
-      <label class="flex items-center gap-2">
-        <input
-          type="checkbox"
-          class="accent-primary-400"
-          :checked="tableMetadata.showBackground !== false"
-          @change="updateTableMetadata((draft) => {
-            draft.showBackground = ($event.target as HTMLInputElement).checked
-            syncOuterFrame(draft)
-          })"
-        />
-        <span>Show outer background</span>
-      </label>
-      <label class="flex items-center gap-2">
-        <input
-          type="checkbox"
-          class="accent-primary-400"
-          :checked="tableMetadata.showBorder !== false"
-          @change="updateTableMetadata((draft) => {
-            draft.showBorder = ($event.target as HTMLInputElement).checked
-            syncOuterFrame(draft)
-          })"
-        />
-        <span>Show outer border</span>
-      </label>
-    </div>
-
-    <div class="grid grid-cols-3 gap-3">
-      <div>
-        <label class="text-xs font-medium text-white/60 mb-1.5 block">Header</label>
-        <ColorPicker
-          :model-value="tableMetadata.headerBackgroundColor ?? '#111827'"
-          @update:modelValue="(color) => updateTableMetadata((draft) => { draft.headerBackgroundColor = color })"
-        />
-      </div>
-      <div>
-        <label class="text-xs font-medium text-white/60 mb-1.5 block">Header text</label>
-        <ColorPicker
-          :model-value="tableMetadata.headerTextColor ?? '#ffffff'"
-          @update:modelValue="(color) => updateTableMetadata((draft) => { draft.headerTextColor = color })"
-        />
-      </div>
-      <div>
-        <label class="text-xs font-medium text-white/60 mb-1.5 block">Footer</label>
-        <ColorPicker
-          :model-value="tableMetadata.footerBackgroundColor ?? '#f3f4f6'"
-          @update:modelValue="(color) => updateTableMetadata((draft) => { draft.footerBackgroundColor = color })"
-        />
-      </div>
-    </div>
-
-    <div class="grid grid-cols-2 gap-3">
-      <div>
-        <label class="text-xs font-medium text-white/60 mb-1.5 block">Stripe rows</label>
-        <label class="flex items-center gap-2 text-sm text-white/80 control-toggle">
+  <div class="space-y-0">
+    <!-- Table Structure (Content) -->
+    <PropertySection 
+      title="Table Structure" 
+      :is-open="isSectionOpen('content')"
+      @toggle="toggleSection('content')"
+    >
+      <PropertyRow>
+        <PropertyField label="Rows">
           <input
-            type="checkbox"
-            class="accent-primary-400"
-            :checked="tableMetadata.stripeEvenRows ?? false"
-            @change="updateTableMetadata((draft) => { draft.stripeEvenRows = ($event.target as HTMLInputElement).checked })"
-          />
-          <span>Enable zebra striping</span>
-        </label>
-      </div>
-      <div v-if="tableMetadata.stripeEvenRows">
-        <label class="text-xs font-medium text-white/60 mb-1.5 block">Stripe color</label>
-        <ColorPicker
-          :model-value="tableMetadata.stripeColor ?? '#f9fafb'"
-          @update:modelValue="(color) => updateTableMetadata((draft) => { draft.stripeColor = color })"
-        />
-      </div>
-    </div>
-
-    <div class="grid grid-cols-2 gap-3">
-      <div>
-        <label class="text-xs font-medium text-white/60 mb-1.5 block">Border</label>
-        <ColorPicker
-          :model-value="tableMetadata.borderColor ?? '#d1d5db'"
-          @update:modelValue="(color) => updateTableMetadata((draft) => { draft.borderColor = color })"
-        />
-      </div>
-      <div>
-        <label class="text-xs font-medium text-white/60 mb-1.5 block">Border width</label>
-        <input
-          type="number"
-          min="0"
-          max="12"
-          class="control-glass"
-          :value="tableMetadata.borderWidth ?? 1"
-          @change="updateTableMetadata((draft) => { draft.borderWidth = clamp(Number(($event.target as HTMLInputElement).value) || 1, 0, 12) })"
-        />
-      </div>
-    </div>
-
-    <div class="grid grid-cols-2 gap-3">
-      <div>
-        <label class="text-xs font-medium text-white/60 mb-1.5 block">Grid lines</label>
-        <label class="flex items-center gap-2 text-sm text-white/80 control-toggle">
-          <input
-            type="checkbox"
+            type="number"
             min="1"
-            class="control-glass"
-            :checked="tableMetadata.showGridLines !== false"
-            @change="updateTableMetadata((draft) => { draft.showGridLines = ($event.target as HTMLInputElement).checked })"
+            max="30"
+            class="control-glass text-xs"
+            :value="tableMetadata.rows"
+            @change="updateTableMetadata((draft) => { draft.rows = clamp(Number(($event.target as HTMLInputElement).value) || draft.rows, 1, 30); sanitizeTableMetadata(draft) })"
           />
-          <span>Show internal lines</span>
-        </label>
-      </div>
-      <div v-if="tableMetadata.showGridLines !== false" class="grid grid-cols-2 gap-3 col-span-2">
-        <div>
-          <label class="text-xs font-medium text-white/60 mb-1.5 block">Line color</label>
-          <ColorPicker
-            :model-value="tableMetadata.gridLineColor ?? '#e5e7eb'"
-            @update:modelValue="(color) => updateTableMetadata((draft) => { draft.gridLineColor = color })"
+        </PropertyField>
+        <PropertyField label="Columns">
+          <input
+            type="number"
+            min="1"
+            max="12"
+            class="control-glass text-xs"
+            :value="tableMetadata.columns"
+            @change="updateTableMetadata((draft) => { draft.columns = clamp(Number(($event.target as HTMLInputElement).value) || draft.columns, 1, 12); sanitizeTableMetadata(draft) })"
           />
-        </div>
-        <div>
-          <label class="text-xs font-medium text-white/60 mb-1.5 block">Line width</label>
+        </PropertyField>
+      </PropertyRow>
+
+      <PropertyRow cols="3">
+        <PropertyField label="Header Rows">
           <input
             type="number"
             min="0"
-            max="8"
-            class="control-glass"
-            :value="tableMetadata.gridLineWidth ?? 1"
-            @change="updateTableMetadata((draft) => { draft.gridLineWidth = clamp(Number(($event.target as HTMLInputElement).value) || 1, 0, 8) })"
+            :max="tableMetadata.rows - (tableMetadata.footerRows ?? 0)"
+            class="control-glass text-xs"
+            :value="tableMetadata.headerRows ?? 1"
+            @change="updateTableMetadata((draft) => { 
+              const max = Math.max(0, draft.rows - (draft.footerRows ?? 0))
+              draft.headerRows = clamp(Number(($event.target as HTMLInputElement).value) || 0, 0, max)
+            })"
           />
-        </div>
-      </div>
-    </div>
+        </PropertyField>
+        <PropertyField label="Footer Rows">
+          <input
+            type="number"
+            min="0"
+            :max="tableMetadata.rows - (tableMetadata.headerRows ?? 0)"
+            class="control-glass text-xs"
+            :value="tableMetadata.footerRows ?? 0"
+            @change="updateTableMetadata((draft) => { 
+              const max = Math.max(0, draft.rows - (draft.headerRows ?? 0))
+              draft.footerRows = clamp(Number(($event.target as HTMLInputElement).value) || 0, 0, max)
+            })"
+          />
+        </PropertyField>
+        <PropertyField label="Cell Padding">
+          <input
+            type="number"
+            min="0"
+            max="60"
+            class="control-glass text-xs"
+            :value="tableMetadata.cellPadding ?? 12"
+            @change="updateTableMetadata((draft) => { draft.cellPadding = clamp(Number(($event.target as HTMLInputElement).value) || 12, 0, 60) })"
+          />
+        </PropertyField>
+      </PropertyRow>
+    </PropertySection>
 
-    <div class="space-y-3">
-      <p class="text-xs font-semibold uppercase tracking-widest text-white/60">Typography</p>
-      <div class="grid grid-cols-2 gap-3">
-        <div>
-          <label class="text-xs font-medium text-white/60 mb-1.5 block">Font</label>
+    <!-- Appearance Section -->
+    <PropertySection 
+      title="Appearance" 
+      :is-open="isSectionOpen('appearance')"
+      @toggle="toggleSection('appearance')"
+    >
+      <PropertyRow>
+        <label class="flex items-center gap-2 text-[11px] text-white/60 cursor-pointer">
+          <input
+            type="checkbox"
+            class="accent-primary-400"
+            :checked="tableMetadata.showBackground !== false"
+            @change="updateTableMetadata((draft) => { draft.showBackground = ($event.target as HTMLInputElement).checked; syncOuterFrame(draft) })"
+          />
+          <span>Show Background</span>
+        </label>
+        <label class="flex items-center gap-2 text-[11px] text-white/60 cursor-pointer">
+          <input
+            type="checkbox"
+            class="accent-primary-400"
+            :checked="tableMetadata.showBorder !== false"
+            @change="updateTableMetadata((draft) => { draft.showBorder = ($event.target as HTMLInputElement).checked; syncOuterFrame(draft) })"
+          />
+          <span>Show Border</span>
+        </label>
+      </PropertyRow>
+
+      <PropertyRow>
+        <PropertyField label="Table Background">
+          <ColorPicker
+            :model-value="tableMetadata.backgroundColor ?? '#ffffff'"
+            @update:modelValue="(color) => updateTableMetadata((draft) => { draft.backgroundColor = color })"
+          />
+        </PropertyField>
+        <PropertyField label="Cell Background">
+          <ColorPicker
+            :model-value="tableMetadata.cellBackgroundColor ?? '#ffffff'"
+            @update:modelValue="(color) => updateTableMetadata((draft) => { draft.cellBackgroundColor = color })"
+          />
+        </PropertyField>
+      </PropertyRow>
+
+      <div class="pt-4 border-t border-white/5 space-y-3">
+        <span class="text-[10px] font-medium text-white/40 uppercase">Header & Footer</span>
+        <PropertyRow cols="3" gap="2">
+          <PropertyField label="Hdr BG">
+            <ColorPicker
+              :model-value="tableMetadata.headerBackgroundColor ?? '#111827'"
+              @update:modelValue="(color) => updateTableMetadata((draft) => { draft.headerBackgroundColor = color })"
+            />
+          </PropertyField>
+          <PropertyField label="Hdr Text">
+            <ColorPicker
+              :model-value="tableMetadata.headerTextColor ?? '#ffffff'"
+              @update:modelValue="(color) => updateTableMetadata((draft) => { draft.headerTextColor = color })"
+            />
+          </PropertyField>
+          <PropertyField label="Ftr BG">
+            <ColorPicker
+              :model-value="tableMetadata.footerBackgroundColor ?? '#f3f4f6'"
+              @update:modelValue="(color) => updateTableMetadata((draft) => { draft.footerBackgroundColor = color })"
+            />
+          </PropertyField>
+        </PropertyRow>
+      </div>
+
+      <div class="pt-4 border-t border-white/5 space-y-4">
+        <div class="flex items-center justify-between">
+          <span class="text-[10px] font-medium text-white/40 uppercase">Zebra Striping</span>
+          <label class="flex items-center gap-2 text-[11px] text-white/60 cursor-pointer">
+            <input
+              type="checkbox"
+              class="accent-primary-400"
+              :checked="tableMetadata.stripeEvenRows ?? false"
+              @change="updateTableMetadata((draft) => { draft.stripeEvenRows = ($event.target as HTMLInputElement).checked })"
+            />
+            <span>Enabled</span>
+          </label>
+        </div>
+        <PropertyField v-if="tableMetadata.stripeEvenRows" label="Stripe Color">
+          <ColorPicker
+            :model-value="tableMetadata.stripeColor ?? '#f9fafb'"
+            @update:modelValue="(color) => updateTableMetadata((draft) => { draft.stripeColor = color })"
+          />
+        </PropertyField>
+      </div>
+
+      <div class="pt-4 border-t border-white/5 space-y-4">
+        <span class="text-[10px] font-medium text-white/40 uppercase">Borders & Grid</span>
+        <PropertyRow>
+          <PropertyField label="Border Color">
+            <ColorPicker
+              :model-value="tableMetadata.borderColor ?? '#d1d5db'"
+              @update:modelValue="(color) => updateTableMetadata((draft) => { draft.borderColor = color })"
+            />
+          </PropertyField>
+          <PropertyField label="Border Width">
+            <input
+              type="number"
+              min="0"
+              max="12"
+              class="control-glass text-xs"
+              :value="tableMetadata.borderWidth ?? 1"
+              @change="updateTableMetadata((draft) => { draft.borderWidth = clamp(Number(($event.target as HTMLInputElement).value) || 1, 0, 12) })"
+            />
+          </PropertyField>
+        </PropertyRow>
+
+        <div class="flex items-center justify-between">
+          <span class="text-[10px] font-medium text-white/40 uppercase">Internal Grid</span>
+          <label class="flex items-center gap-2 text-[11px] text-white/60 cursor-pointer">
+            <input
+              type="checkbox"
+              class="accent-primary-400"
+              :checked="tableMetadata.showGridLines !== false"
+              @change="updateTableMetadata((draft) => { draft.showGridLines = ($event.target as HTMLInputElement).checked })"
+            />
+            <span>Enabled</span>
+          </label>
+        </div>
+        <PropertyRow v-if="tableMetadata.showGridLines !== false">
+          <PropertyField label="Line Color">
+            <ColorPicker
+              :model-value="tableMetadata.gridLineColor ?? '#e5e7eb'"
+              @update:modelValue="(color) => updateTableMetadata((draft) => { draft.gridLineColor = color })"
+            />
+          </PropertyField>
+          <PropertyField label="Line Width">
+            <input
+              type="number"
+              min="0"
+              max="8"
+              class="control-glass text-xs"
+              :value="tableMetadata.gridLineWidth ?? 1"
+              @change="updateTableMetadata((draft) => { draft.gridLineWidth = clamp(Number(($event.target as HTMLInputElement).value) || 1, 0, 8) })"
+            />
+          </PropertyField>
+        </PropertyRow>
+      </div>
+    </PropertySection>
+
+    <!-- Typography Section -->
+    <PropertySection 
+      title="Typography" 
+      :is-open="isSectionOpen('typography')"
+      @toggle="toggleSection('typography')"
+    >
+      <PropertyRow>
+        <PropertyField label="Font Family">
           <select
-            class="control-glass"
+            class="control-glass text-xs"
             :value="tableMetadata.cellFontFamily ?? 'Inter'"
             @change="updateTableMetadata((draft) => { draft.cellFontFamily = ($event.target as HTMLSelectElement).value })"
           >
-            <option
-              v-for="font in fontOptions"
-              :key="font"
-              :value="font"
-            >
-              {{ font }}
-            </option>
+            <option v-for="font in fontOptions" :key="font" :value="font">{{ font }}</option>
           </select>
-        </div>
-        <div>
-          <label class="text-xs font-medium text-white/60 mb-1.5 block">Font size</label>
+        </PropertyField>
+        <PropertyField label="Font Size">
           <input
             type="number"
             min="8"
             max="64"
-            class="control-glass"
+            class="control-glass text-xs"
             :value="tableMetadata.cellFontSize ?? 14"
             @change="updateTableMetadata((draft) => { draft.cellFontSize = clamp(Number(($event.target as HTMLInputElement).value) || 14, 8, 64) })"
           />
-        </div>
-      </div>
-      <div class="grid grid-cols-2 gap-3">
-        <div>
-          <label class="text-xs font-medium text-white/60 mb-1.5 block">Weight</label>
+        </PropertyField>
+      </PropertyRow>
+      <PropertyRow>
+        <PropertyField label="Weight">
           <input
             type="number"
             min="100"
             max="900"
             step="100"
-            class="control-glass"
+            class="control-glass text-xs"
             :value="Number(tableMetadata.cellFontWeight ?? 500)"
             @change="updateTableMetadata((draft) => { draft.cellFontWeight = clamp(Number(($event.target as HTMLInputElement).value) || 500, 100, 900) })"
           />
-        </div>
-        <div>
-          <label class="text-xs font-medium text-white/60 mb-1.5 block">Text color</label>
+        </PropertyField>
+        <PropertyField label="Body Text">
           <ColorPicker
             :model-value="tableMetadata.cellTextColor ?? '#111827'"
             @update:modelValue="(color) => updateTableMetadata((draft) => { draft.cellTextColor = color })"
           />
-        </div>
-      </div>
-    </div>
+        </PropertyField>
+      </PropertyRow>
+    </PropertySection>
 
-    <div class="space-y-3">
-      <div class="flex items-center justify-between">
-        <p class="text-xs font-semibold uppercase tracking-widest text-white/60">Column widths</p>
-        <span class="text-[11px] text-white/50">{{ tableMetadata.columns }} cols</span>
-      </div>
-      <div class="overflow-x-auto">
-        <div class="flex gap-2">
-          <div
-            v-for="(value, index) in columnWidthDisplay"
-            :key="`col-${index}`"
-            class="flex flex-col gap-1 min-w-[90px]"
-          >
-            <label class="text-[10px] uppercase tracking-wide text-white/40">Col {{ index + 1 }}</label>
-            <div class="flex gap-1">
-              <input
-                type="number"
-                min="20"
-                class="control-glass flex-1"
-                :value="value"
-                placeholder="Auto"
-                @change="commitColumnWidth(index, ($event.target as HTMLInputElement).value)"
-              />
-              <button
-                type="button"
-                class="btn-glass-sm px-2"
-                title="Auto width"
-                @click="resetColumnWidth(index)"
-              >
-                Auto
-              </button>
+    <!-- Layout Section (Dimensions) -->
+    <PropertySection 
+      title="Column & Row Sizing" 
+      :is-open="isSectionOpen('layout')"
+      @toggle="toggleSection('layout')"
+    >
+      <div class="space-y-6">
+        <div class="space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-[10px] font-medium text-white/40 uppercase">Column Widths</span>
+            <span class="text-[10px] text-white/30">{{ tableMetadata.columns }} cols</span>
+          </div>
+          <div class="overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-white/10">
+            <div class="flex gap-2 min-w-max">
+              <div v-for="(value, index) in columnWidthDisplay" :key="`col-${index}`" class="flex flex-col gap-1 w-24">
+                <label class="text-[9px] uppercase tracking-wide text-white/30">Col {{ index + 1 }}</label>
+                <div class="flex flex-col gap-1">
+                  <input
+                    type="number"
+                    min="20"
+                    class="control-glass text-[10px] py-1 h-7"
+                    :value="value"
+                    placeholder="Auto"
+                    @change="commitColumnWidth(index, ($event.target as HTMLInputElement).value)"
+                  />
+                  <button type="button" class="btn-glass-sm py-0.5 text-[9px] h-5" @click="resetColumnWidth(index)">Auto</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="space-y-3 pt-4 border-t border-white/5">
+          <div class="flex items-center justify-between">
+            <span class="text-[10px] font-medium text-white/40 uppercase">Row Heights</span>
+            <span class="text-[10px] text-white/30">{{ tableMetadata.rows }} rows</span>
+          </div>
+          <div class="overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-white/10">
+            <div class="flex gap-2 min-w-max">
+              <div v-for="(value, index) in rowHeightDisplay" :key="`row-${index}`" class="flex flex-col gap-1 w-24">
+                <label class="text-[9px] uppercase tracking-wide text-white/30">Row {{ index + 1 }}</label>
+                <div class="flex flex-col gap-1">
+                  <input
+                    type="number"
+                    min="20"
+                    class="control-glass text-[10px] py-1 h-7"
+                    :value="value"
+                    placeholder="Auto"
+                    @change="commitRowHeight(index, ($event.target as HTMLInputElement).value)"
+                  />
+                  <button type="button" class="btn-glass-sm py-0.5 text-[9px] h-5" @click="resetRowHeight(index)">Auto</button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
+    </PropertySection>
 
-    <div class="space-y-3">
-      <div class="flex items-center justify-between">
-        <p class="text-xs font-semibold uppercase tracking-widest text-white/60">Row heights</p>
-        <span class="text-[11px] text-white/50">{{ tableMetadata.rows }} rows</span>
-      </div>
-      <div class="overflow-x-auto">
-        <div class="flex gap-2">
-          <div
-            v-for="(value, index) in rowHeightDisplay"
-            :key="`row-${index}`"
-            class="flex flex-col gap-1 min-w-[90px]"
-          >
-            <label class="text-[10px] uppercase tracking-wide text-white/40">Row {{ index + 1 }}</label>
-            <div class="flex gap-1">
-              <input
-                type="number"
-                min="20"
-                class="control-glass flex-1"
-                :value="value"
-                placeholder="Auto"
-                @change="commitRowHeight(index, ($event.target as HTMLInputElement).value)"
-              />
-              <button
-                type="button"
-                class="btn-glass-sm px-2"
-                title="Auto height"
-                @click="resetRowHeight(index)"
-              >
-                Auto
-              </button>
-            </div>
+    <!-- Data & Merges Section -->
+    <PropertySection 
+      title="Data & Cell Merges" 
+      :is-open="isSectionOpen('data')"
+      @toggle="toggleSection('data')"
+      is-last
+    >
+      <TableCellEditor
+        :open="isCellEditorOpen"
+        :table-metadata="tableMetadata"
+        :update-table-metadata="updateTableMetadata"
+        @close="isCellEditorOpen = false"
+      />
+
+      <div class="space-y-4">
+        <div class="flex items-center justify-between">
+          <span class="text-[10px] font-medium text-white/40 uppercase">Quick Cell Access</span>
+          <button type="button" class="btn-glass-sm px-2 py-1 text-[10px]" @click="isCellEditorOpen = true">Open Main Editor</button>
+        </div>
+        
+        <PropertyRow>
+          <PropertyField label="Row">
+            <input v-model.number="rowInput" type="number" min="1" class="control-glass text-xs" />
+          </PropertyField>
+          <PropertyField label="Col">
+            <input v-model.number="columnInput" type="number" min="1" class="control-glass text-xs" />
+          </PropertyField>
+        </PropertyRow>
+        
+        <PropertyRow class="items-end">
+          <PropertyField label="Align">
+            <select v-model="cellAlign" class="control-glass text-xs">
+              <option value="left">Left</option>
+              <option value="center">Center</option>
+              <option value="right">Right</option>
+            </select>
+          </PropertyField>
+          <button type="button" class="btn-glass-sm h-9" @click="applyCellEdit">Update Content</button>
+        </PropertyRow>
+        
+        <PropertyField label="Content">
+          <textarea
+            v-model="cellText"
+            rows="2"
+            class="control-glass text-xs resize-none"
+            placeholder="Static text for this cell..."
+          ></textarea>
+        </PropertyField>
+
+        <div v-if="cellEntries.length" class="space-y-2 max-h-32 overflow-y-auto pr-1 scrollbar-thin">
+          <div v-for="entry in cellEntries" :key="`${entry.row}-${entry.column}`" class="flex items-center justify-between gap-3 px-3 py-1.5 rounded-lg border border-white/5 bg-white/5">
+            <button class="text-left flex-1 group" @click="loadCell(entry)">
+              <p class="text-[10px] text-white/40 group-hover:text-white/60 transition-colors">R{{ entry.row + 1 }}, C{{ entry.column + 1 }}</p>
+              <p class="text-[11px] text-white/60 truncate">{{ entry.text || '—' }}</p>
+            </button>
+            <button class="text-[10px] text-red-400/60 hover:text-red-400 transition-colors" @click="removeCell(entry.row, entry.column)">Remove</button>
           </div>
         </div>
       </div>
-    </div>
 
-    <div class="space-y-3">
-      <div class="flex items-center justify-between">
-        <p class="text-xs font-semibold uppercase tracking-widest text-white/60">Cell content</p>
-        <div class="flex items-center gap-2">
-          <span class="text-[11px] text-white/50">{{ cellEntries.length }} entries</span>
-          <button type="button" class="btn-glass-sm" @click="isCellEditorOpen = true">Open Editor</button>
+      <div class="space-y-4 pt-6 border-t border-white/5">
+        <div class="flex items-center justify-between">
+          <span class="text-[10px] font-medium text-white/40 uppercase">Cell Merges</span>
+          <span class="text-[10px] text-white/30">{{ mergeEntries.length }} active</span>
         </div>
-      </div>
-      <div class="grid grid-cols-2 gap-3">
-        <div>
-          <label class="text-xs font-medium text-white/60 mb-1.5 block">Row (#)</label>
-          <input v-model.number="rowInput" type="number" min="1" class="control-glass" />
-        </div>
-        <div>
-          <label class="text-xs font-medium text-white/60 mb-1.5 block">Column (#)</label>
-          <input v-model.number="columnInput" type="number" min="1" class="control-glass" />
-        </div>
-      </div>
-      <div class="grid grid-cols-2 gap-3">
-        <div>
-          <label class="text-xs font-medium text-white/60 mb-1.5 block">Align</label>
-          <select v-model="cellAlign" class="control-glass">
-            <option value="left">Left</option>
-            <option value="center">Center</option>
-            <option value="right">Right</option>
-          </select>
-        </div>
-      </div>
-      <textarea
-        v-model="cellText"
-        rows="3"
-        class="control-glass resize-none"
-        placeholder="Cell text..."
-      ></textarea>
-      <div class="flex items-center gap-3">
-        <button type="button" class="btn-glass-sm flex-1" @click="applyCellEdit">Save Cell</button>
-        <button
-          type="button"
-          class="btn-glass-sm flex-1"
-          @click="clearCell"
-        >
-          Clear Cell
-        </button>
-      </div>
-      <div
-        v-if="cellEntries.length"
-        class="space-y-2 max-h-48 overflow-y-auto"
-      >
-        <div
-          v-for="entry in cellEntries"
-          :key="`${entry.row}-${entry.column}`"
-          class="flex items-center justify-between gap-3 rounded-xl border border-white/10 px-3 py-2 bg-white/5"
-        >
-          <button class="text-left flex-1" @click="loadCell(entry)">
-            <p class="text-xs text-white/70 font-semibold">Row {{ entry.row + 1 }}, Col {{ entry.column + 1 }}</p>
-            <p class="text-[11px] text-white/60 truncate">{{ entry.text || '—' }}</p>
-          </button>
-          <button
-            class="text-xs text-red-300 hover:text-red-100 transition-colors"
-            @click="removeCell(entry.row, entry.column)"
-          >
-            Remove
-          </button>
-        </div>
-      </div>
-      <p v-else class="text-[11px] text-white/40">No custom cell content yet.</p>
-    </div>
+        
+        <PropertyRow cols="4" gap="2">
+          <PropertyField label="Row">
+            <input v-model.number="mergeRowInput" type="number" min="1" class="control-glass text-[10px] px-1 h-7" />
+          </PropertyField>
+          <PropertyField label="Col">
+            <input v-model.number="mergeColumnInput" type="number" min="1" class="control-glass text-[10px] px-1 h-7" />
+          </PropertyField>
+          <PropertyField label="R Span">
+            <input v-model.number="mergeRowSpanInput" type="number" min="1" class="control-glass text-[10px] px-1 h-7" />
+          </PropertyField>
+          <PropertyField label="C Span">
+            <input v-model.number="mergeColSpanInput" type="number" min="1" class="control-glass text-[10px] px-1 h-7" />
+          </PropertyField>
+        </PropertyRow>
+        
+        <PropertyRow>
+          <button type="button" class="btn-glass-sm flex-1 h-8 text-[10px]" @click="applyMergeEdit">Save Merge</button>
+          <button type="button" class="btn-glass-sm flex-1 h-8 text-[10px]" @click="resetMergeSpan">Reset</button>
+        </PropertyRow>
 
-    <div class="space-y-3">
-      <div class="flex items-center justify-between">
-        <p class="text-xs font-semibold uppercase tracking-widest text-white/60">Cell merges</p>
-        <span class="text-[11px] text-white/50">{{ mergeEntries.length }} active</span>
+        <div v-if="mergeEntries.length" class="space-y-2 max-h-32 overflow-y-auto pr-1 scrollbar-thin">
+          <div v-for="merge in mergeEntries" :key="`${merge.row}-${merge.column}`" class="flex items-center justify-between gap-3 px-3 py-1.5 rounded-lg border border-white/5 bg-white/5">
+            <button class="text-left flex-1 group" @click="loadMerge(merge)">
+              <p class="text-[10px] text-white/40 group-hover:text-white/60 transition-colors">Start R{{ merge.row + 1 }}, C{{ merge.column + 1 }}</p>
+              <p class="text-[11px] text-white/60">Span {{ merge.rowSpan }}×{{ merge.colSpan }}</p>
+            </button>
+            <button class="text-[10px] text-red-400/60 hover:text-red-400 transition-colors" @click="removeMerge(merge.row, merge.column)">Remove</button>
+          </div>
+        </div>
+        <p v-else class="text-[11px] text-white/40 mt-2">No merged cells yet.</p>
       </div>
-      <div class="grid grid-cols-4 gap-3">
-        <div>
-          <label class="text-xs font-medium text-white/60 mb-1.5 block">Row (#)</label>
-          <input v-model.number="mergeRowInput" type="number" min="1" class="control-glass" />
-        </div>
-        <div>
-          <label class="text-xs font-medium text-white/60 mb-1.5 block">Column (#)</label>
-          <input v-model.number="mergeColumnInput" type="number" min="1" class="control-glass" />
-        </div>
-        <div>
-          <label class="text-xs font-medium text-white/60 mb-1.5 block">Row span</label>
-          <input v-model.number="mergeRowSpanInput" type="number" min="1" class="control-glass" />
-        </div>
-        <div>
-          <label class="text-xs font-medium text-white/60 mb-1.5 block">Col span</label>
-          <input v-model.number="mergeColSpanInput" type="number" min="1" class="control-glass" />
-        </div>
-      </div>
-      <div class="flex items-center gap-3">
-        <button type="button" class="btn-glass-sm flex-1" @click="applyMergeEdit">Save Merge</button>
-        <button type="button" class="btn-glass-sm flex-1" @click="resetMergeSpan">
-          Reset Span
-        </button>
-      </div>
-      <div v-if="mergeEntries.length" class="space-y-2 max-h-48 overflow-y-auto">
-        <div
-          v-for="merge in mergeEntries"
-          :key="`${merge.row}-${merge.column}`"
-          class="flex items-center justify-between gap-3 rounded-xl border border-white/10 px-3 py-2 bg-white/5"
-        >
-          <button class="text-left flex-1" @click="loadMerge(merge)">
-            <p class="text-xs text-white/70 font-semibold">
-              Start (r{{ merge.row + 1 }}, c{{ merge.column + 1 }})
-            </p>
-            <p class="text-[11px] text-white/60">Span {{ merge.rowSpan }}×{{ merge.colSpan }}</p>
-          </button>
-          <button
-            class="text-xs text-red-300 hover:text-red-100 transition-colors"
-            @click="removeMerge(merge.row, merge.column)"
-          >
-            Remove
-          </button>
-        </div>
-      </div>
-      <p v-else class="text-[11px] text-white/40">No merged cells yet.</p>
-    </div>
+    </PropertySection>
   </div>
 </template>

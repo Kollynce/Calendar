@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import ColorPicker from '../ColorPicker.vue'
+import PropertySection from './PropertySection.vue'
+import PropertyField from './PropertyField.vue'
+import PropertyRow from './PropertyRow.vue'
 import type { CollageMetadata, CollageLayoutType } from '@/types'
 
 interface Props {
@@ -12,6 +15,21 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   disabled: false,
 })
+
+// Section management
+const activeSections = ref<Set<string>>(new Set(['content', 'images', 'appearance']))
+
+function toggleSection(id: string) {
+  if (activeSections.value.has(id)) {
+    activeSections.value.delete(id)
+  } else {
+    activeSections.value.add(id)
+  }
+}
+
+function isSectionOpen(id: string) {
+  return activeSections.value.has(id)
+}
 
 const layoutOptions: { value: CollageLayoutType; label: string }[] = [
   { value: 'grid-2x2', label: '2×2 Grid' },
@@ -69,219 +87,208 @@ function removeImage(slotIndex: number) {
 </script>
 
 <template>
-  <div class="space-y-6">
-    <!-- Header/Title section - no border-t as it's handled by parent -->
-    <div class="space-y-4">
-      <div class="flex items-center justify-between">
-        <p class="text-[11px] font-bold uppercase tracking-wider text-white/40">Layout & Style</p>
-      </div>
+  <div class="space-y-0">
+    <!-- Layout & Content Section -->
+    <PropertySection 
+      title="Layout & Content" 
+      :is-open="isSectionOpen('content')"
+      @toggle="toggleSection('content')"
+    >
+      <PropertyField label="Layout Preset">
+        <select
+          class="control-glass text-xs w-full"
+          :value="collageMetadata.layout"
+          :disabled="disabled"
+          @change="updateCollageMetadata({ layout: ($event.target as HTMLSelectElement).value as CollageLayoutType })"
+        >
+          <option v-for="opt in layoutOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+        </select>
+      </PropertyField>
 
-      <div class="grid grid-cols-1 gap-4">
-        <div>
-          <label class="text-[11px] font-medium text-white/50 mb-1.5 block">Collage Layout</label>
-          <select
-            class="control-glass-sm w-full"
-            :value="collageMetadata.layout"
-            :disabled="disabled"
-            @change="updateCollageMetadata({ layout: ($event.target as HTMLSelectElement).value as CollageLayoutType })"
-          >
-            <option v-for="opt in layoutOptions" :key="opt.value" :value="opt.value">
-              {{ opt.label }}
-            </option>
-          </select>
-        </div>
+      <PropertyField label="Display Title">
+        <input
+          type="text"
+          class="control-glass text-xs w-full"
+          placeholder="Add a title..."
+          :value="collageMetadata.title ?? ''"
+          :disabled="disabled"
+          @input="updateCollageMetadata({ title: ($event.target as HTMLInputElement).value || undefined })"
+        />
+      </PropertyField>
 
-        <div>
-          <label class="text-[11px] font-medium text-white/50 mb-1.5 block">Title (optional)</label>
-          <input
-            type="text"
-            class="control-glass-sm w-full"
-            placeholder="Add a title..."
-            :value="collageMetadata.title ?? ''"
-            :disabled="disabled"
-            @input="updateCollageMetadata({ title: ($event.target as HTMLInputElement).value || undefined })"
-          />
-        </div>
-      </div>
-
-      <div class="space-y-4">
-        <div>
-          <label class="text-[11px] font-medium text-white/50 mb-1.5 block">Gap</label>
+      <PropertyRow>
+        <PropertyField label="Gap">
           <div class="flex items-center gap-2">
             <input
               type="range"
               min="0"
               max="40"
               step="2"
-              class="flex-1 accent-primary-500 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+              class="flex-1 accent-primary-500"
               :value="collageMetadata.gap ?? 8"
               :disabled="disabled"
               @input="updateCollageMetadata({ gap: Number(($event.target as HTMLInputElement).value) })"
             />
-            <span class="text-[10px] font-mono text-white/60 w-7 text-right">{{ collageMetadata.gap ?? 8 }}</span>
+            <span class="text-[10px] font-mono text-white/40 w-5">{{ collageMetadata.gap ?? 8 }}</span>
           </div>
-        </div>
-        <div>
-          <label class="text-[11px] font-medium text-white/50 mb-1.5 block">Padding</label>
+        </PropertyField>
+        <PropertyField label="Padding">
           <div class="flex items-center gap-2">
             <input
               type="range"
               min="0"
               max="60"
               step="2"
-              class="flex-1 accent-primary-500 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+              class="flex-1 accent-primary-500"
               :value="collageMetadata.padding ?? 12"
               :disabled="disabled"
               @input="updateCollageMetadata({ padding: Number(($event.target as HTMLInputElement).value) })"
             />
-            <span class="text-[10px] font-mono text-white/60 w-7 text-right">{{ collageMetadata.padding ?? 12 }}</span>
+            <span class="text-[10px] font-mono text-white/40 w-5">{{ collageMetadata.padding ?? 12 }}</span>
           </div>
-        </div>
-      </div>
-    </div>
+        </PropertyField>
+      </PropertyRow>
+    </PropertySection>
 
-    <!-- Frame Style -->
-    <div class="pt-5 border-t border-white/5 space-y-4">
+    <!-- Appearance Section (Frame Style) -->
+    <PropertySection 
+      title="Appearance" 
+      :is-open="isSectionOpen('appearance')"
+      @toggle="toggleSection('appearance')"
+    >
       <div class="flex items-center justify-between">
-        <p class="text-[11px] font-bold uppercase tracking-wider text-white/40">Frame Style</p>
-        <button
-          class="text-[10px] font-medium px-2 py-0.5 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          :class="collageMetadata.showFrame !== false ? 'bg-primary-500/20 text-primary-400 hover:bg-primary-500/30' : 'bg-white/5 text-white/40 hover:bg-white/10'"
-          :disabled="disabled"
-          @click="updateCollageMetadata({ showFrame: collageMetadata.showFrame === false })"
-        >
-          {{ collageMetadata.showFrame !== false ? 'Hide Frame' : 'Show Frame' }}
-        </button>
+         <span class="text-[10px] font-medium text-white/40 uppercase">Canvas Frame</span>
+         <label class="flex items-center gap-2 text-[11px] text-white/60 cursor-pointer">
+           <input 
+            type="checkbox"
+            class="accent-primary-400"
+            :checked="collageMetadata.showFrame !== false"
+            :disabled="disabled"
+            @change="updateCollageMetadata({ showFrame: ($event.target as HTMLInputElement).checked })"
+          >
+          <span>Enabled</span>
+        </label>
       </div>
-      
-      <div v-if="collageMetadata.showFrame !== false" class="space-y-4">
-        <div class="grid grid-cols-2 gap-4">
-          <div class="space-y-1.5">
-            <label class="text-[11px] font-medium text-white/50 block">Background</label>
+
+      <div v-show="collageMetadata.showFrame !== false" class="space-y-4 pt-4 border-t border-white/5">
+        <PropertyRow>
+          <PropertyField label="Background">
             <ColorPicker
               :model-value="collageMetadata.backgroundColor ?? '#ffffff'"
               :disabled="disabled"
               @update:modelValue="(c) => updateCollageMetadata({ backgroundColor: c })"
             />
-          </div>
-          <div class="space-y-1.5">
-            <label class="text-[11px] font-medium text-white/50 block">Border</label>
+          </PropertyField>
+          <PropertyField label="Border Color">
             <ColorPicker
               :model-value="collageMetadata.borderColor ?? '#e2e8f0'"
               :disabled="disabled"
               @update:modelValue="(c) => updateCollageMetadata({ borderColor: c })"
             />
-          </div>
-        </div>
+          </PropertyField>
+        </PropertyRow>
 
-        <div class="space-y-4">
-          <div>
-            <label class="text-[11px] font-medium text-white/50 mb-1.5 block">Border Width</label>
+        <PropertyRow>
+          <PropertyField label="Border Width">
             <div class="flex items-center gap-2">
               <input
                 type="range"
                 min="0"
                 max="20"
                 step="1"
-                class="flex-1 accent-primary-500 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                class="flex-1 accent-primary-500"
                 :value="collageMetadata.borderWidth ?? 1"
                 :disabled="disabled"
                 @input="updateCollageMetadata({ borderWidth: Number(($event.target as HTMLInputElement).value) })"
               />
-              <span class="text-[10px] font-mono text-white/60 w-7 text-right">{{ collageMetadata.borderWidth ?? 1 }}</span>
+              <span class="text-[10px] font-mono text-white/40 w-5">{{ collageMetadata.borderWidth ?? 1 }}</span>
             </div>
-          </div>
-          <div>
-            <label class="text-[11px] font-medium text-white/50 mb-1.5 block">Corner Radius</label>
+          </PropertyField>
+          <PropertyField label="Corner Radius">
             <div class="flex items-center gap-2">
               <input
                 type="range"
                 min="0"
                 max="100"
                 step="2"
-                class="flex-1 accent-primary-500 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                class="flex-1 accent-primary-500"
                 :value="collageMetadata.cornerRadius ?? 16"
                 :disabled="disabled"
                 @input="updateCollageMetadata({ cornerRadius: Number(($event.target as HTMLInputElement).value) })"
               />
-              <span class="text-[10px] font-mono text-white/60 w-7 text-right">{{ collageMetadata.cornerRadius ?? 16 }}</span>
+              <span class="text-[10px] font-mono text-white/40 w-5">{{ collageMetadata.cornerRadius ?? 16 }}</span>
             </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Photo Slots -->
-    <div class="pt-5 border-t border-white/5 space-y-4">
-      <p class="text-[11px] font-bold uppercase tracking-wider text-white/40">Photo Slots</p>
-      
-      <div class="grid grid-cols-2 gap-4">
-        <div class="space-y-1.5">
-          <label class="text-[11px] font-medium text-white/50 block">Slot BG</label>
-          <ColorPicker
-            :model-value="collageMetadata.slotBackgroundColor ?? '#f3f4f6'"
-            :disabled="disabled"
-            @update:modelValue="(c) => updateCollageMetadata({ slotBackgroundColor: c })"
-          />
-        </div>
-        <div class="space-y-1.5">
-          <label class="text-[11px] font-medium text-white/50 block">Slot Border</label>
-          <ColorPicker
-            :model-value="collageMetadata.slotBorderColor ?? '#e5e7eb'"
-            :disabled="disabled"
-            @update:modelValue="(c) => updateCollageMetadata({ slotBorderColor: c })"
-          />
-        </div>
+          </PropertyField>
+        </PropertyRow>
       </div>
 
-      <div class="space-y-4">
-        <div>
-          <label class="text-[11px] font-medium text-white/50 mb-1.5 block">Slot Border</label>
-          <div class="flex items-center gap-2">
-            <input
-              type="range"
-              min="0"
-              max="10"
-              step="1"
-              class="flex-1 accent-primary-500 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
-              :value="collageMetadata.slotBorderWidth ?? 1"
+      <div class="pt-4 border-t border-white/5 space-y-4">
+        <span class="text-[10px] font-medium text-white/40 uppercase">Slot Styles</span>
+        <PropertyRow>
+          <PropertyField label="Slot BG">
+            <ColorPicker
+              :model-value="collageMetadata.slotBackgroundColor ?? '#f3f4f6'"
               :disabled="disabled"
-              @input="updateCollageMetadata({ slotBorderWidth: Number(($event.target as HTMLInputElement).value) })"
+              @update:modelValue="(c) => updateCollageMetadata({ slotBackgroundColor: c })"
             />
-            <span class="text-[10px] font-mono text-white/60 w-7 text-right">{{ collageMetadata.slotBorderWidth ?? 1 }}</span>
-          </div>
-        </div>
-        <div>
-          <label class="text-[11px] font-medium text-white/50 mb-1.5 block">Slot Radius</label>
-          <div class="flex items-center gap-2">
-            <input
-              type="range"
-              min="0"
-              max="60"
-              step="2"
-              class="flex-1 accent-primary-500 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
-              :value="collageMetadata.slotCornerRadius ?? 8"
+          </PropertyField>
+          <PropertyField label="Slot Border">
+            <ColorPicker
+              :model-value="collageMetadata.slotBorderColor ?? '#e5e7eb'"
               :disabled="disabled"
-              @input="updateCollageMetadata({ slotCornerRadius: Number(($event.target as HTMLInputElement).value) })"
+              @update:modelValue="(c) => updateCollageMetadata({ slotBorderColor: c })"
             />
-            <span class="text-[10px] font-mono text-white/60 w-7 text-right">{{ collageMetadata.slotCornerRadius ?? 8 }}</span>
-          </div>
-        </div>
-      </div>
-    </div>
+          </PropertyField>
+        </PropertyRow>
 
-    <!-- Images Management -->
-    <div class="pt-5 border-t border-white/5 space-y-4">
-      <div class="flex items-center justify-between">
-        <p class="text-[11px] font-bold uppercase tracking-wider text-white/40">Images ({{ collageMetadata.slots.length }})</p>
+        <PropertyRow>
+          <PropertyField label="Border Width">
+            <div class="flex items-center gap-2">
+              <input
+                type="range"
+                min="0"
+                max="10"
+                step="1"
+                class="flex-1 accent-primary-500"
+                :value="collageMetadata.slotBorderWidth ?? 1"
+                :disabled="disabled"
+                @input="updateCollageMetadata({ slotBorderWidth: Number(($event.target as HTMLInputElement).value) })"
+              />
+              <span class="text-[10px] font-mono text-white/40 w-5">{{ collageMetadata.slotBorderWidth ?? 1 }}</span>
+            </div>
+          </PropertyField>
+          <PropertyField label="Radius">
+            <div class="flex items-center gap-2">
+              <input
+                type="range"
+                min="0"
+                max="60"
+                step="2"
+                class="flex-1 accent-primary-500"
+                :value="collageMetadata.slotCornerRadius ?? 8"
+                :disabled="disabled"
+                @input="updateCollageMetadata({ slotCornerRadius: Number(($event.target as HTMLInputElement).value) })"
+              />
+              <span class="text-[10px] font-mono text-white/40 w-5">{{ collageMetadata.slotCornerRadius ?? 8 }}</span>
+            </div>
+          </PropertyField>
+        </PropertyRow>
       </div>
-      
-      <div class="grid grid-cols-4 gap-2.5">
+    </PropertySection>
+
+    <!-- Images Management Section -->
+    <PropertySection 
+      title="Manage Photos" 
+      :is-open="isSectionOpen('images')"
+      @toggle="toggleSection('images')"
+      is-last
+    >
+      <div class="grid grid-cols-4 gap-2">
         <div
           v-for="(slot, idx) in collageMetadata.slots"
           :key="idx"
-          class="relative aspect-square rounded-lg border-2 border-dashed border-white/10 transition-all overflow-hidden"
-          :class="disabled ? 'cursor-not-allowed opacity-50' : 'hover:border-primary-500/50 hover:bg-white/5 group cursor-pointer'"
+          class="relative aspect-square rounded-xl border-2 border-dashed border-white/5 transition-all overflow-hidden bg-white/5"
+          :class="disabled ? 'cursor-not-allowed opacity-30' : 'hover:border-primary-500/50 hover:bg-white/10 group cursor-pointer'"
           @click="!disabled && triggerFileInput(Number(idx))"
         >
           <input
@@ -293,34 +300,31 @@ function removeImage(slotIndex: number) {
           />
           
           <template v-if="slot.imageUrl">
-            <img
-              :src="slot.imageUrl"
-              class="w-full h-full object-cover"
-            />
+            <img :src="slot.imageUrl" class="w-full h-full object-cover" />
             <div class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
               <button
                 type="button"
                 class="w-6 h-6 flex items-center justify-center rounded-full bg-red-500/80 hover:bg-red-500 text-white transition-colors"
                 @click.stop="removeImage(Number(idx))"
               >
-                <span class="text-xs">✕</span>
+                <span class="text-[10px]">✕</span>
               </button>
             </div>
           </template>
           <template v-else>
             <div class="absolute inset-0 flex flex-col items-center justify-center text-white/20 group-hover:text-white/40 transition-colors">
-              <span class="text-xs font-bold">{{ Number(idx) + 1 }}</span>
-              <span class="text-[8px] mt-0.5">Add</span>
+              <span class="text-[10px] font-bold">{{ Number(idx) + 1 }}</span>
+              <span class="text-[8px] uppercase tracking-tighter mt-0.5">Add</span>
             </div>
           </template>
         </div>
       </div>
       
-      <div class="p-3 rounded-lg bg-primary-500/5 border border-primary-500/10">
-        <p class="text-[10px] text-white/40 leading-relaxed text-center italic">
-          Tip: Click any slot above to upload an image. Photos are automatically clipped to slot shapes.
+      <div class="mt-4 p-3 rounded-xl bg-primary-500/5 border border-primary-500/10">
+        <p class="text-[9px] text-white/30 leading-relaxed text-center uppercase tracking-widest italic">
+          Tip: Click slots to upload. Photos clip to shapes.
         </p>
       </div>
-    </div>
+    </PropertySection>
   </div>
 </template>

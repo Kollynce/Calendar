@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import ColorPicker from '../ColorPicker.vue'
 import AppSearchableSelect from '@/components/ui/AppSearchableSelect.vue'
+import PropertySection from './PropertySection.vue'
+import PropertyField from './PropertyField.vue'
+import PropertyRow from './PropertyRow.vue'
 import { localizationService } from '@/services/calendar/localization.service'
 import { countries } from '@/data/countries'
 import type { DateCellMetadata } from '@/types'
@@ -16,6 +19,21 @@ interface Props {
 
 const props = defineProps<Props>()
 const authStore = useAuthStore()
+
+// Section management
+const activeSections = ref<Set<string>>(new Set(['content']))
+
+function toggleSection(id: string) {
+  if (activeSections.value.has(id)) {
+    activeSections.value.delete(id)
+  } else {
+    activeSections.value.add(id)
+  }
+}
+
+function isSectionOpen(id: string) {
+  return activeSections.value.has(id)
+}
 
 const holidayMarkerOptions: { value: string; label: string; requiredTier?: 'pro' | 'business' }[] = [
   { value: 'bar', label: 'Bar (Bottom)' },
@@ -61,245 +79,245 @@ const dateCellDateValue = computed(() =>
 </script>
 
 <template>
-  <div class="pt-4 border-t border-white/10 space-y-4">
-    <p class="text-xs font-semibold uppercase tracking-widest text-white/60">Date Cell</p>
-
-    <div class="grid grid-cols-2 gap-3">
-      <div>
-        <label class="text-xs font-medium text-white/60 mb-1.5 block">Date</label>
+  <div class="space-y-0">
+    <!-- Date Data (Content) -->
+    <PropertySection 
+      title="Date Data" 
+      :is-open="isSectionOpen('content')"
+      @toggle="toggleSection('content')"
+    >
+      <PropertyField label="Date">
         <input
           type="date"
-          class="control-glass"
+          class="control-glass text-xs"
           :value="dateCellDateValue"
           @change="updateDateCellMetadata((draft) => { const v = ($event.target as HTMLInputElement).value; if (v) draft.date = v })"
         />
-      </div>
-      <div>
-        <label class="text-xs font-medium text-white/60 mb-1.5 block">Accent</label>
-        <ColorPicker
-          :model-value="dateCellMetadata.highlightAccent"
-          @update:modelValue="(c) => updateDateCellMetadata((draft) => { draft.highlightAccent = c })"
-        />
-      </div>
-    </div>
+      </PropertyField>
 
-    <div>
-      <label class="text-xs font-medium text-white/60 mb-1.5 block">Country</label>
-      <AppSearchableSelect
-        :model-value="dateCellMetadata.country ?? 'US'"
-        :options="countryOptions"
-        placeholder="Select country..."
-        @update:model-value="(val: string | number | null) => updateDateCellMetadata((draft) => { draft.country = val as any })"
-      />
-    </div>
-
-    <div>
-      <label class="text-xs font-medium text-white/60 mb-1.5 block">Language</label>
-      <AppSearchableSelect
-        :model-value="dateCellMetadata.language ?? 'en'"
-        :options="languageOptions"
-        placeholder="Select language..."
-        @update:model-value="(val: string | number | null) => updateDateCellMetadata((draft) => { draft.language = val as any })"
-      />
-    </div>
-
-    <div>
-      <label class="text-xs font-medium text-white/60 mb-1.5 block">Placeholder</label>
-      <input
-        type="text"
-        class="control-glass"
-        :value="dateCellMetadata.notePlaceholder"
-        @input="updateDateCellMetadata((draft) => { draft.notePlaceholder = ($event.target as HTMLInputElement).value })"
-      />
-    </div>
-
-    <div>
-      <label class="text-xs font-medium text-white/60 mb-1.5 block">Accent height</label>
-      <div class="flex items-center gap-3">
+      <PropertyField label="Placeholder">
         <input
-          type="range"
-          min="0.1"
-          max="0.8"
-          step="0.01"
-          class="flex-1 accent-primary-400"
-          :value="dateCellMetadata.accentHeightRatio ?? 0.4"
-          @input="updateDateCellMetadata((draft) => { draft.accentHeightRatio = Number(($event.target as HTMLInputElement).value) })"
+          type="text"
+          placeholder="No notes..."
+          class="control-glass text-xs"
+          :value="dateCellMetadata.notePlaceholder"
+          @input="updateDateCellMetadata((draft) => { draft.notePlaceholder = ($event.target as HTMLInputElement).value })"
         />
-        <span class="text-xs text-white/70 w-12 text-right">{{ Math.round(((dateCellMetadata.accentHeightRatio ?? 0.4) as number) * 100) }}%</span>
-      </div>
-    </div>
+      </PropertyField>
 
-    <div class="grid grid-cols-2 gap-3">
-      <div>
-        <label class="text-xs font-medium text-white/60 mb-1.5 block">Background</label>
-        <ColorPicker
-          :model-value="dateCellMetadata.backgroundColor ?? '#ffffff'"
-          @update:modelValue="(c) => updateDateCellMetadata((draft) => { draft.backgroundColor = c })"
+      <PropertyField label="Country">
+        <AppSearchableSelect
+          :model-value="dateCellMetadata.country ?? 'US'"
+          :options="countryOptions"
+          placeholder="Select country..."
+          @update:model-value="(val: string | number | null) => updateDateCellMetadata((draft) => { draft.country = val as any })"
         />
-      </div>
-      <div>
-        <label class="text-xs font-medium text-white/60 mb-1.5 block">Border</label>
-        <ColorPicker
-          :model-value="dateCellMetadata.borderColor ?? '#e2e8f0'"
-          @update:modelValue="(c) => updateDateCellMetadata((draft) => { draft.borderColor = c })"
-        />
-      </div>
-    </div>
-    <div class="flex flex-wrap items-center gap-4 text-xs text-white/80">
-      <label class="flex items-center gap-2">
-        <input
-          type="checkbox"
-          class="accent-primary-400"
-          :checked="dateCellMetadata.showBackground !== false"
-          @change="updateDateCellMetadata((draft) => { draft.showBackground = ($event.target as HTMLInputElement).checked })"
-        />
-        <span>Show background</span>
-      </label>
-      <label class="flex items-center gap-2">
-        <input
-          type="checkbox"
-          class="accent-primary-400"
-          :checked="dateCellMetadata.showBorder !== false"
-          @change="updateDateCellMetadata((draft) => { draft.showBorder = ($event.target as HTMLInputElement).checked })"
-        />
-        <span>Show border</span>
-      </label>
-    </div>
+      </PropertyField>
 
-    <div class="grid grid-cols-2 gap-3">
-      <div>
-        <label class="text-xs font-medium text-white/60 mb-1.5 block">Radius</label>
-        <input
-          type="number"
-          min="0"
-          max="80"
-          class="control-glass"
-          :value="dateCellMetadata.cornerRadius ?? 24"
-          @change="updateDateCellMetadata((draft) => { draft.cornerRadius = Math.max(0, Math.min(80, Number(($event.target as HTMLInputElement).value) || 0)) })"
+      <PropertyField label="Language">
+        <AppSearchableSelect
+          :model-value="dateCellMetadata.language ?? 'en'"
+          :options="languageOptions"
+          placeholder="Select language..."
+          @update:model-value="(val: string | number | null) => updateDateCellMetadata((draft) => { draft.language = val as any })"
         />
-      </div>
-      <div>
-        <label class="text-xs font-medium text-white/60 mb-1.5 block">Border Width</label>
-        <input
-          type="number"
-          min="0"
-          max="10"
-          class="control-glass"
-          :value="dateCellMetadata.borderWidth ?? 1"
-          @change="updateDateCellMetadata((draft) => { draft.borderWidth = Math.max(0, Math.min(10, Number(($event.target as HTMLInputElement).value) || 0)) })"
-        />
-      </div>
-    </div>
+      </PropertyField>
+    </PropertySection>
 
-    <div class="grid grid-cols-3 gap-3">
-      <div>
-        <label class="text-xs font-medium text-white/60 mb-1.5 block">Weekday</label>
-        <ColorPicker
-          :model-value="dateCellMetadata.weekdayColor ?? '#78350f'"
-          @update:modelValue="(c) => updateDateCellMetadata((draft) => { draft.weekdayColor = c })"
-        />
-      </div>
-      <div>
-        <label class="text-xs font-medium text-white/60 mb-1.5 block">Number</label>
-        <ColorPicker
-          :model-value="dateCellMetadata.dayNumberColor ?? '#92400e'"
-          @update:modelValue="(c) => updateDateCellMetadata((draft) => { draft.dayNumberColor = c })"
-        />
-      </div>
-      <div>
-        <label class="text-xs font-medium text-white/60 mb-1.5 block">Text</label>
-        <ColorPicker
-          :model-value="dateCellMetadata.placeholderColor ?? '#475569'"
-          @update:modelValue="(c) => updateDateCellMetadata((draft) => { draft.placeholderColor = c })"
-        />
-      </div>
-    </div>
+    <!-- Appearance Section -->
+    <PropertySection 
+      title="Appearance" 
+      :is-open="isSectionOpen('appearance')"
+      @toggle="toggleSection('appearance')"
+    >
+      <PropertyRow>
+        <label class="flex items-center gap-2 text-[11px] text-white/60 cursor-pointer">
+          <input
+            type="checkbox"
+            class="accent-primary-400"
+            :checked="dateCellMetadata.showBackground"
+            @change="updateDateCellMetadata((draft) => { draft.showBackground = ($event.target as HTMLInputElement).checked })"
+          >
+          <span>Show Background</span>
+        </label>
+        <label class="flex items-center gap-2 text-[11px] text-white/60 cursor-pointer">
+          <input
+            type="checkbox"
+            class="accent-primary-400"
+            :checked="dateCellMetadata.showBorder"
+            @change="updateDateCellMetadata((draft) => { draft.showBorder = ($event.target as HTMLInputElement).checked })"
+          >
+          <span>Show Border</span>
+        </label>
+      </PropertyRow>
 
-    <div class="pt-3 border-t border-white/10 space-y-4">
+      <PropertyRow>
+        <PropertyField label="Background">
+          <ColorPicker
+            :model-value="dateCellMetadata.backgroundColor ?? '#ffffff'"
+            @update:modelValue="(c) => updateDateCellMetadata((draft) => { draft.backgroundColor = c })"
+          />
+        </PropertyField>
+        <PropertyField label="Border Color">
+          <ColorPicker
+            :model-value="dateCellMetadata.borderColor ?? '#e2e8f0'"
+            @update:modelValue="(c) => updateDateCellMetadata((draft) => { draft.borderColor = c })"
+          />
+        </PropertyField>
+      </PropertyRow>
+
+      <PropertyRow>
+        <PropertyField label="Corner Radius">
+          <input
+            type="number"
+            min="0"
+            max="80"
+            class="control-glass text-xs"
+            :value="dateCellMetadata.cornerRadius ?? 24"
+            @change="updateDateCellMetadata((draft) => { draft.cornerRadius = Math.max(0, Math.min(80, Number(($event.target as HTMLInputElement).value) || 0)) })"
+          />
+        </PropertyField>
+        <PropertyField label="Border Width">
+          <input
+            type="number"
+            min="0"
+            max="10"
+            class="control-glass text-xs"
+            :value="dateCellMetadata.borderWidth ?? 1"
+            @change="updateDateCellMetadata((draft) => { draft.borderWidth = Math.max(0, Math.min(10, Number(($event.target as HTMLInputElement).value) || 0)) })"
+          />
+        </PropertyField>
+      </PropertyRow>
+
+      <div class="pt-4 border-t border-white/5 space-y-3">
+        <span class="text-[10px] font-medium text-white/40 uppercase">Accent Highlight</span>
+        <div class="flex items-center gap-3">
+          <ColorPicker
+            :model-value="dateCellMetadata.highlightAccent"
+            class="w-10 h-10"
+            @update:modelValue="(c) => updateDateCellMetadata((draft) => { draft.highlightAccent = c })"
+          />
+          <div class="flex-1">
+            <label class="text-[9px] font-medium text-white/30 mb-1 block uppercase px-1">Height Ratio</label>
+            <div class="flex items-center gap-2">
+              <input
+                type="range"
+                min="0.1"
+                max="0.8"
+                step="0.01"
+                class="flex-1 accent-primary-400"
+                :value="dateCellMetadata.accentHeightRatio ?? 0.4"
+                @input="updateDateCellMetadata((draft) => { draft.accentHeightRatio = Number(($event.target as HTMLInputElement).value) })"
+              />
+              <span class="text-[10px] text-white/40 w-8 text-right">{{ Math.round(((dateCellMetadata.accentHeightRatio ?? 0.4) as number) * 100) }}%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pt-4 border-t border-white/5 space-y-3">
+        <span class="text-[10px] font-medium text-white/40 uppercase">Element Colors</span>
+        <PropertyRow cols="3" gap="2">
+          <PropertyField label="Weekday">
+            <ColorPicker
+              :model-value="dateCellMetadata.weekdayColor ?? '#78350f'"
+              @update:modelValue="(c) => updateDateCellMetadata((draft) => { draft.weekdayColor = c })"
+            />
+          </PropertyField>
+          <PropertyField label="Day">
+            <ColorPicker
+              :model-value="dateCellMetadata.dayNumberColor ?? '#92400e'"
+              @update:modelValue="(c) => updateDateCellMetadata((draft) => { draft.dayNumberColor = c })"
+            />
+          </PropertyField>
+          <PropertyField label="Text">
+            <ColorPicker
+              :model-value="dateCellMetadata.placeholderColor ?? '#475569'"
+              @update:modelValue="(c) => updateDateCellMetadata((draft) => { draft.placeholderColor = c })"
+            />
+          </PropertyField>
+        </PropertyRow>
+      </div>
+    </PropertySection>
+
+    <!-- Holidays Section -->
+    <PropertySection 
+      title="Holidays" 
+      :is-open="isSectionOpen('holidays')"
+      @toggle="toggleSection('holidays')"
+      is-last
+    >
       <div class="flex items-center justify-between">
-        <p class="text-[11px] font-semibold text-white/60">Holidays</p>
-        <label class="flex items-center gap-2 text-sm text-white/80">
+        <span class="text-[10px] font-medium text-white/40 uppercase">Markers</span>
+        <label class="flex items-center gap-2 text-[11px] text-white/60 cursor-pointer">
           <input
             type="checkbox"
             class="accent-primary-400"
             :checked="dateCellMetadata.showHolidayMarkers ?? true"
             @change="updateDateCellMetadata((draft) => { draft.showHolidayMarkers = ($event.target as HTMLInputElement).checked })"
           >
-          <span>Show</span>
+          <span>Enabled</span>
         </label>
       </div>
 
-      <div v-if="dateCellMetadata.showHolidayMarkers !== false" class="space-y-3">
-        <div>
-          <div class="flex items-center justify-between mb-1.5">
-            <label class="text-xs font-medium text-white/60">Marker Style</label>
-            <div v-if="isMarkerLocked(holidayMarkerOptions.find(o => o.value === dateCellMetadata.holidayMarkerStyle))" class="flex items-center gap-1">
-              <AppTierBadge tier="pro" size="sm" />
-            </div>
-          </div>
+      <div v-if="dateCellMetadata.showHolidayMarkers !== false" class="space-y-4 pt-4 border-t border-white/5">
+        <PropertyField label="Marker Style" :is-pro="isMarkerLocked(holidayMarkerOptions.find(o => o.value === dateCellMetadata.holidayMarkerStyle))">
           <select
-            class="control-glass"
+            class="control-glass text-xs"
             :value="dateCellMetadata.holidayMarkerStyle ?? 'text'"
             @change="updateDateCellMetadata((draft) => { 
-              const val = ($event.target as HTMLSelectElement).value;
-              const option = holidayMarkerOptions.find(o => o.value === val);
-              if (option && !isMarkerLocked(option)) {
-                draft.holidayMarkerStyle = val as any;
-              }
-            })"
+                const val = ($event.target as HTMLSelectElement).value;
+                const option = holidayMarkerOptions.find(o => o.value === val);
+                if (option && !isMarkerLocked(option)) draft.holidayMarkerStyle = val as any;
+              })"
           >
-            <option 
-              v-for="option in holidayMarkerOptions" 
-              :key="option.value" 
-              :value="option.value"
-              :disabled="isMarkerLocked(option)"
-            >
+            <option v-for="option in holidayMarkerOptions" :key="option.value" :value="option.value" :disabled="isMarkerLocked(option)">
               {{ option.label }}{{ isMarkerLocked(option) ? ' (Pro)' : '' }}
             </option>
           </select>
-        </div>
+        </PropertyField>
 
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="text-xs font-medium text-white/60 mb-1.5 block">Color</label>
+        <PropertyRow>
+          <PropertyField label="Color">
             <ColorPicker
               :model-value="dateCellMetadata.holidayMarkerColor ?? '#ef4444'"
               @update:modelValue="(c) => updateDateCellMetadata((draft) => { draft.holidayMarkerColor = c })"
             />
-          </div>
-          <div v-if="!['background', 'text'].includes(dateCellMetadata.holidayMarkerStyle ?? 'text')">
-            <label class="text-xs font-medium text-white/60 mb-1.5 block">{{ (dateCellMetadata.holidayMarkerStyle === 'dot' || dateCellMetadata.holidayMarkerStyle === 'square' || dateCellMetadata.holidayMarkerStyle === 'triangle') ? 'Size' : (dateCellMetadata.holidayMarkerStyle === 'border' ? 'Width' : 'Height') }}</label>
+          </PropertyField>
+          <PropertyField 
+            v-if="!['background', 'text'].includes(dateCellMetadata.holidayMarkerStyle ?? 'text')"
+            label="Size"
+          >
             <input
               type="number"
               min="1"
               max="20"
-              class="control-glass"
+              class="control-glass text-xs"
               :value="dateCellMetadata.holidayMarkerHeight ?? 4"
               @change="updateDateCellMetadata((draft) => { draft.holidayMarkerHeight = Math.max(1, Math.min(20, Number(($event.target as HTMLInputElement).value) || 4)) })"
             />
-          </div>
-        </div>
+          </PropertyField>
+        </PropertyRow>
       </div>
 
-      <div class="pt-3 border-t border-white/10 space-y-3">
-        <div class="flex items-center justify-between gap-4">
-          <label class="flex items-center gap-2 text-sm text-white/80">
+      <div class="pt-4 border-t border-white/5 space-y-4">
+        <div class="flex items-center justify-between">
+          <span class="text-[10px] font-medium text-white/40 uppercase">Holiday Info</span>
+          <label class="flex items-center gap-2 text-[11px] text-white/60 cursor-pointer">
             <input
               type="checkbox"
               class="accent-primary-400"
               :checked="dateCellMetadata.showHolidayInfo !== false"
               @change="updateDateCellMetadata((draft) => { draft.showHolidayInfo = ($event.target as HTMLInputElement).checked })"
             >
-            <span>Show holiday info</span>
+            <span>Show</span>
           </label>
-          <span class="text-[11px] text-white/50">If date is a holiday</span>
         </div>
 
-        <template v-if="dateCellMetadata.showHolidayInfo !== false">
-          <div>
-            <label class="text-xs font-medium text-white/60 mb-1.5 block">Info position</label>
+        <div v-if="dateCellMetadata.showHolidayInfo !== false" class="space-y-4">
+          <PropertyField label="Position">
             <select
-              class="control-glass"
+              class="control-glass-sm text-[10px] w-full"
               :value="dateCellMetadata.holidayInfoPosition ?? 'bottom'"
               @change="updateDateCellMetadata((draft) => { draft.holidayInfoPosition = ($event.target as HTMLSelectElement).value as any })"
             >
@@ -307,38 +325,28 @@ const dateCellDateValue = computed(() =>
               <option value="bottom">Bottom</option>
               <option value="overlay">Overlay</option>
             </select>
-          </div>
+          </PropertyField>
 
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="text-xs font-medium text-white/60 mb-1.5 block">Text color</label>
+          <PropertyRow>
+            <PropertyField label="Text Color">
               <ColorPicker
                 :model-value="dateCellMetadata.holidayInfoTextColor ?? '#4b5563'"
                 @update:modelValue="(c) => updateDateCellMetadata((draft) => { draft.holidayInfoTextColor = c })"
               />
-            </div>
-            <div>
-              <label class="text-xs font-medium text-white/60 mb-1.5 block">Accent color</label>
-              <ColorPicker
-                :model-value="dateCellMetadata.holidayInfoAccentColor ?? dateCellMetadata.holidayMarkerColor ?? '#ef4444'"
-                @update:modelValue="(c) => updateDateCellMetadata((draft) => { draft.holidayInfoAccentColor = c })"
+            </PropertyField>
+            <PropertyField label="Font Size">
+              <input
+                type="number"
+                min="8"
+                max="24"
+                class="control-glass text-xs"
+                :value="dateCellMetadata.holidayInfoFontSize ?? 12"
+                @change="updateDateCellMetadata((draft) => { draft.holidayInfoFontSize = Math.max(8, Math.min(24, Number(($event.target as HTMLInputElement).value) || 12)) })"
               />
-            </div>
-          </div>
-
-          <div>
-            <label class="text-xs font-medium text-white/60 mb-1.5 block">Font size</label>
-            <input
-              type="number"
-              min="8"
-              max="24"
-              class="control-glass"
-              :value="dateCellMetadata.holidayInfoFontSize ?? 12"
-              @change="updateDateCellMetadata((draft) => { draft.holidayInfoFontSize = Math.max(8, Math.min(24, Number(($event.target as HTMLInputElement).value) || 12)) })"
-            />
-          </div>
-        </template>
+            </PropertyField>
+          </PropertyRow>
+        </div>
       </div>
-    </div>
+    </PropertySection>
   </div>
 </template>

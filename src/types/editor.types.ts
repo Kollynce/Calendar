@@ -197,25 +197,39 @@ export interface TableMetadata {
 
 export interface CalendarGridMetadata {
   kind: 'calendar-grid'
+  
+  // Layout
+  size: {
+    width: number
+    height: number
+  }
+  headerHeight?: number
+  weekdayHeight?: number
+  cellGap?: number
+  dayNumberInsetX?: number
+  dayNumberInsetY?: number
+
+  // Content
   mode: 'blank' | 'month'
   year: number
   month: number
   startDay: WeekDay
-  showHeader: boolean
-  showWeekdays: boolean
-  weekdayFormat?: 'long' | 'short' | 'narrow'
   title?: string
+  country?: CountryCode
+  language?: LanguageCode
+
+  // Appearance - General
   backgroundColor?: string
   borderColor?: string
   borderWidth?: number
   showBackground?: boolean
   showBorder?: boolean
   cornerRadius?: number
-  headerHeight?: number
-  weekdayHeight?: number
-  cellGap?: number
-  dayNumberInsetX?: number
-  dayNumberInsetY?: number
+  gridLineColor?: string
+  gridLineWidth?: number
+
+  // Appearance - Header
+  showHeader: boolean
   headerBackgroundColor?: string
   headerBackgroundOpacity?: number
   headerTextColor?: string
@@ -223,12 +237,16 @@ export interface CalendarGridMetadata {
   headerFontSize?: number
   headerFontWeight?: string | number
   headerTextAlign?: 'left' | 'center' | 'right'
+
+  // Appearance - Weekdays
+  showWeekdays: boolean
+  weekdayFormat?: 'long' | 'short' | 'narrow'
   weekdayTextColor?: string
   weekdayFontFamily?: string
   weekdayFontSize?: number
   weekdayFontWeight?: string | number
-  gridLineColor?: string
-  gridLineWidth?: number
+
+  // Appearance - Day Numbers
   dayNumberColor?: string
   dayNumberMutedColor?: string
   dayNumberFontFamily?: string
@@ -236,6 +254,8 @@ export interface CalendarGridMetadata {
   dayNumberFontWeight?: string | number
   weekendBackgroundColor?: string
   todayBackgroundColor?: string
+
+  // Holidays
   showHolidayMarkers?: boolean
   holidayMarkerStyle?: 'bar' | 'dot' | 'square' | 'background' | 'text' | 'border' | 'triangle'
   holidayMarkerColor?: string
@@ -248,34 +268,37 @@ export interface CalendarGridMetadata {
   holidayListHeight?: number
   holidayListTitleFontSize?: number
   holidayListEntryFontSize?: number
-  country?: CountryCode
-  language?: LanguageCode
-  size: {
-    width: number
-    height: number
-  }
 }
 
 export interface WeekStripMetadata {
   kind: 'week-strip'
-  /**
-   * mode:
-   * - 'month' renders the actual week range for the startDate/month
-   * - 'blank' renders an empty grid without dates
-   */
+  
+  // Layout
+  size: {
+    width: number
+    height: number
+  }
+  cornerRadius?: number
+
+  // Content
   mode?: 'month' | 'blank'
   startDate: string
   startDay: WeekDay
   label?: string
-  showHeader?: boolean
+  country?: CountryCode
+  language?: LanguageCode
+
+  // Appearance - General
   backgroundColor?: string
   borderColor?: string
   borderWidth?: number
   showBackground?: boolean
   showBorder?: boolean
-  cornerRadius?: number
   cellBorderColor?: string
   cellBorderWidth?: number
+
+  // Appearance - Labels & Typography
+  showHeader?: boolean
   labelColor?: string
   labelFontFamily?: string
   labelFontSize?: number
@@ -288,6 +311,8 @@ export interface WeekStripMetadata {
   dayNumberFontFamily?: string
   dayNumberFontSize?: number
   dayNumberFontWeight?: string | number
+
+  // Holidays
   showHolidayMarkers?: boolean
   holidayMarkerStyle?: 'bar' | 'dot' | 'square' | 'background' | 'text' | 'border' | 'triangle'
   holidayMarkerColor?: string
@@ -298,26 +323,34 @@ export interface WeekStripMetadata {
   holidayListHeight?: number
   holidayListTextColor?: string
   holidayListAccentColor?: string
-  country?: CountryCode
-  language?: LanguageCode
-  size: {
-    width: number
-    height: number
-  }
 }
 
 export interface DateCellMetadata {
   kind: 'date-cell'
+
+  // Layout
+  size: {
+    width: number
+    height: number
+  }
+  cornerRadius?: number
+  accentHeightRatio?: number
+
+  // Content
   date: string
   highlightAccent: string
   notePlaceholder: string
+  country?: CountryCode
+  language?: LanguageCode
+
+  // Appearance - General
   backgroundColor?: string
   borderColor?: string
   borderWidth?: number
   showBackground?: boolean
   showBorder?: boolean
-  cornerRadius?: number
-  accentHeightRatio?: number
+
+  // Appearance - Typography
   weekdayColor?: string
   weekdayFontFamily?: string
   weekdayFontSize?: number
@@ -330,6 +363,8 @@ export interface DateCellMetadata {
   placeholderFontFamily?: string
   placeholderFontSize?: number
   placeholderFontWeight?: string | number
+
+  // Holidays
   showHolidayMarkers?: boolean
   holidayMarkerStyle?: 'bar' | 'dot' | 'square' | 'background' | 'text' | 'border' | 'triangle'
   holidayMarkerColor?: string
@@ -345,96 +380,114 @@ export interface DateCellMetadata {
   holidayInfoTextColor?: string
   holidayInfoAccentColor?: string
   holidayInfoFontSize?: number
-  country?: CountryCode
-  language?: LanguageCode
-  size: {
-    width: number
-    height: number
-  }
 }
 
 export interface PlannerNoteMetadata {
   kind: 'planner-note'
-  pattern: PlannerPatternVariant
-  title: string
-  accentColor: string
-  headerStyle?: PlannerHeaderStyle
-  showHeader?: boolean
+
+  // Layout
+  size: {
+    width: number
+    height: number
+  }
   headerHeight?: number
-  titleAlign?: 'left' | 'center' | 'right'
+  cornerRadius?: number
+
+  // Content
+  title: string
+  pattern: PlannerPatternVariant
+
+  // Appearance - General
+  accentColor: string
   backgroundColor?: string
   borderColor?: string
   borderWidth?: number
   showBackground?: boolean
   showBorder?: boolean
-  cornerRadius?: number
-  titleColor?: string
-  headerBackgroundColor?: string
-  headerBackgroundOpacity?: number
   guideColor?: string
   guideWidth?: number
   dotColor?: string
-  size: {
-    width: number
-    height: number
-  }
+
+  // Appearance - Header
+  showHeader?: boolean
+  headerStyle?: PlannerHeaderStyle
+  headerBackgroundColor?: string
+  headerBackgroundOpacity?: number
+  titleColor?: string
+  titleAlign?: 'left' | 'center' | 'right'
 }
 
 export interface ScheduleMetadata {
   kind: 'schedule'
+
+  // Layout
+  size: {
+    width: number
+    height: number
+  }
+  headerHeight?: number
+  cornerRadius?: number
+
+  // Content
   title: string
-  accentColor: string
   startHour: number
   endHour: number
   intervalMinutes: 30 | 60
-  headerStyle?: PlannerHeaderStyle
-  showHeader?: boolean
-  headerHeight?: number
-  titleAlign?: 'left' | 'center' | 'right'
+
+  // Appearance - General
+  accentColor: string
   backgroundColor?: string
   borderColor?: string
   borderWidth?: number
   showBackground?: boolean
   showBorder?: boolean
-  cornerRadius?: number
-  titleColor?: string
-  headerBackgroundColor?: string
-  headerBackgroundOpacity?: number
   lineColor?: string
   lineWidth?: number
   timeLabelColor?: string
-  size: {
-    width: number
-    height: number
-  }
+
+  // Appearance - Header
+  showHeader?: boolean
+  headerStyle?: PlannerHeaderStyle
+  headerBackgroundColor?: string
+  headerBackgroundOpacity?: number
+  titleColor?: string
+  titleAlign?: 'left' | 'center' | 'right'
 }
 
 export interface ChecklistMetadata {
   kind: 'checklist'
+
+  // Layout
+  size: {
+    width: number
+    height: number
+  }
+  headerHeight?: number
+  cornerRadius?: number
+
+  // Content
   title: string
-  accentColor: string
   rows: number
   showCheckboxes: boolean
-  headerStyle?: PlannerHeaderStyle
-  showHeader?: boolean
-  headerHeight?: number
-  titleAlign?: 'left' | 'center' | 'right'
+
+  // Appearance - General
+  accentColor: string
   backgroundColor?: string
   borderColor?: string
   borderWidth?: number
   showBackground?: boolean
   showBorder?: boolean
-  cornerRadius?: number
-  titleColor?: string
-  headerBackgroundColor?: string
-  headerBackgroundOpacity?: number
   lineColor?: string
   lineWidth?: number
   checkboxColor?: string
-  size: {
-    width: number
-    height: number
-  }
+
+  // Appearance - Header
+  showHeader?: boolean
+  headerStyle?: PlannerHeaderStyle
+  headerBackgroundColor?: string
+  headerBackgroundOpacity?: number
+  titleColor?: string
+  titleAlign?: 'left' | 'center' | 'right'
 }
 
 export type CollageLayoutType =

@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import ColorPicker from '../ColorPicker.vue'
 import FontPicker from '../FontPicker.vue'
 import AppSearchableSelect from '@/components/ui/AppSearchableSelect.vue'
+import PropertySection from './PropertySection.vue'
+import PropertyField from './PropertyField.vue'
+import PropertyRow from './PropertyRow.vue'
 import { localizationService } from '@/services/calendar/localization.service'
 import { countries } from '@/data/countries'
 import type { CalendarGridMetadata } from '@/types'
@@ -17,6 +20,21 @@ interface Props {
 
 const props = defineProps<Props>()
 const authStore = useAuthStore()
+
+// Section management
+const activeSections = ref<Set<string>>(new Set(['content']))
+
+function toggleSection(id: string) {
+  if (activeSections.value.has(id)) {
+    activeSections.value.delete(id)
+  } else {
+    activeSections.value.add(id)
+  }
+}
+
+function isSectionOpen(id: string) {
+  return activeSections.value.has(id);
+}
 
 const holidayMarkerOptions: { value: string; label: string; requiredTier?: 'pro' | 'business' }[] = [
   { value: 'bar', label: 'Bar (Bottom)' },
@@ -61,557 +79,414 @@ const weekStartOptions: { value: 0 | 1 | 2 | 3 | 4 | 5 | 6; label: string }[] = 
 </script>
 
 <template>
-  <div class="pt-4 border-t border-white/10 space-y-4">
-    <div class="flex items-center justify-between">
-      <p class="text-xs font-semibold uppercase tracking-widest text-white/60">Month Grid</p>
-      <select
-        class="control-glass-sm"
-        :value="calendarMetadata.mode"
-        @change="updateCalendarMetadata((draft) => { draft.mode = ($event.target as HTMLSelectElement).value as CalendarGridMetadata['mode'] })"
-      >
-        <option value="month">Actual Month</option>
-        <option value="blank">Blank Grid</option>
-      </select>
-    </div>
-
-    <div>
-      <label class="text-xs font-medium text-white/60 mb-1.5 block">Date</label>
-      <input
-        type="date"
-        class="control-glass"
-        :value="`${calendarMetadata.year}-${String(calendarMetadata.month).padStart(2, '0')}-01`"
-        @change="(e) => {
-          const val = (e.target as HTMLInputElement).value
-          if (val) {
-            const [year, month] = val.split('-').map(Number)
-            updateCalendarMetadata((draft) => {
-              draft.year = year || draft.year
-              draft.month = month || draft.month
-            })
-          }
-        }"
-      />
-    </div>
-
-    <div>
-      <label class="text-xs font-medium text-white/60 mb-1.5 block">Country</label>
-      <AppSearchableSelect
-        :model-value="calendarMetadata.country ?? 'US'"
-        :options="countryOptions"
-        placeholder="Select country..."
-        @update:model-value="(val: string | number | null) => updateCalendarMetadata((draft) => { draft.country = val as any })"
-      />
-    </div>
-
-    <div>
-      <label class="text-xs font-medium text-white/60 mb-1.5 block">Language</label>
-      <AppSearchableSelect
-        :model-value="calendarMetadata.language ?? 'en'"
-        :options="languageOptions"
-        placeholder="Select language..."
-        @update:model-value="(val: string | number | null) => updateCalendarMetadata((draft) => { draft.language = val as any })"
-      />
-    </div>
-
-    <div>
-      <label class="text-xs font-medium text-white/60 mb-1.5 block">Week starts on</label>
-      <select
-        class="control-glass"
-        :value="calendarMetadata.startDay"
-        @change="updateCalendarMetadata((draft) => { draft.startDay = Number(($event.target as HTMLSelectElement).value) as CalendarGridMetadata['startDay'] })"
-      >
-        <option v-for="d in weekStartOptions" :key="d.value" :value="d.value">{{ d.label }}</option>
-      </select>
-    </div>
-
-    <div class="flex items-center justify-between gap-4">
-      <label class="flex items-center gap-2 text-sm text-white/80">
-        <input
-          type="checkbox"
-          class="accent-primary-400"
-          :checked="calendarMetadata.showHeader"
-          @change="updateCalendarMetadata((draft) => { draft.showHeader = ($event.target as HTMLInputElement).checked })"
+  <div class="space-y-0">
+    <!-- Grid Data (Content) -->
+    <PropertySection 
+      title="Calendar Data" 
+      :is-open="isSectionOpen('content')"
+      @toggle="toggleSection('content')"
+    >
+      <PropertyField label="Mode">
+        <select
+          class="control-glass-sm text-[10px] w-full"
+          :value="calendarMetadata.mode"
+          @change="updateCalendarMetadata((draft) => { draft.mode = ($event.target as HTMLSelectElement).value as CalendarGridMetadata['mode'] })"
         >
-        <span>Header</span>
-      </label>
-      <label class="flex items-center gap-2 text-sm text-white/80">
+          <option value="month">Actual Month</option>
+          <option value="blank">Blank Grid</option>
+        </select>
+      </PropertyField>
+
+      <PropertyField label="Start Month">
         <input
-          type="checkbox"
-          class="accent-primary-400"
-          :checked="calendarMetadata.showWeekdays"
-          @change="updateCalendarMetadata((draft) => { draft.showWeekdays = ($event.target as HTMLInputElement).checked })"
+          type="date"
+          class="control-glass text-xs"
+          :value="`${calendarMetadata.year}-${String(calendarMetadata.month).padStart(2, '0')}-01`"
+          @change="(e) => {
+            const val = (e.target as HTMLInputElement).value
+            if (val) {
+              const [year, month] = val.split('-').map(Number)
+              updateCalendarMetadata((draft) => {
+                draft.year = year || draft.year
+                draft.month = month || draft.month
+              })
+            }
+          }"
+        />
+      </PropertyField>
+
+      <PropertyField label="Country">
+        <AppSearchableSelect
+          :model-value="calendarMetadata.country ?? 'US'"
+          :options="countryOptions"
+          placeholder="Select country..."
+          @update:model-value="(val: string | number | null) => updateCalendarMetadata((draft) => { draft.country = val as any })"
+        />
+      </PropertyField>
+
+      <PropertyField label="Language">
+        <AppSearchableSelect
+          :model-value="calendarMetadata.language ?? 'en'"
+          :options="languageOptions"
+          placeholder="Select language..."
+          @update:model-value="(val: string | number | null) => updateCalendarMetadata((draft) => { draft.language = val as any })"
+        />
+      </PropertyField>
+
+      <PropertyField label="Week Start">
+        <select
+          class="control-glass-sm text-[10px] w-full"
+          :value="calendarMetadata.startDay"
+          @change="updateCalendarMetadata((draft) => { draft.startDay = Number(($event.target as HTMLSelectElement).value) as CalendarGridMetadata['startDay'] })"
         >
-        <span>Weekdays</span>
-      </label>
-    </div>
+          <option v-for="d in weekStartOptions" :key="d.value" :value="d.value">{{ d.label }}</option>
+        </select>
+      </PropertyField>
+    </PropertySection>
 
-    <div>
-      <label class="text-xs font-medium text-white/60 mb-1.5 block">Title override</label>
-      <input
-        type="text"
-        placeholder="(optional)"
-        class="control-glass"
-        :value="calendarMetadata.title ?? ''"
-        @input="updateCalendarMetadata((draft) => { draft.title = ($event.target as HTMLInputElement).value || undefined })"
-      />
-    </div>
-    <div>
-      <label class="text-xs font-medium text-white/60 mb-1.5 block">Header alignment</label>
-      <select
-        class="control-glass"
-        :value="calendarMetadata.headerTextAlign ?? 'center'"
-        @change="updateCalendarMetadata((draft) => { draft.headerTextAlign = ($event.target as HTMLSelectElement).value as CalendarGridMetadata['headerTextAlign'] })"
-      >
-        <option value="left">Left</option>
-        <option value="center">Center</option>
-        <option value="right">Right</option>
-      </select>
-    </div>
+    <!-- Header & Weekdays (Appearance) -->
+    <PropertySection 
+      title="Header & Labels" 
+      :is-open="isSectionOpen('header')"
+      @toggle="toggleSection('header')"
+    >
+      <PropertyRow>
+        <label class="flex items-center gap-2 text-[11px] text-white/60 cursor-pointer">
+          <input
+            type="checkbox"
+            class="accent-primary-400"
+            :checked="calendarMetadata.showHeader"
+            @change="updateCalendarMetadata((draft) => { draft.showHeader = ($event.target as HTMLInputElement).checked })"
+          >
+          <span>Show Header</span>
+        </label>
+        <label class="flex items-center gap-2 text-[11px] text-white/60 cursor-pointer">
+          <input
+            type="checkbox"
+            class="accent-primary-400"
+            :checked="calendarMetadata.showWeekdays"
+            @change="updateCalendarMetadata((draft) => { draft.showWeekdays = ($event.target as HTMLInputElement).checked })"
+          >
+          <span>Show Weekdays</span>
+        </label>
+      </PropertyRow>
 
-    <div class="grid grid-cols-2 gap-3">
-      <div>
-        <label class="text-xs font-medium text-white/60 mb-1.5 block">Background</label>
-        <ColorPicker
-          :model-value="calendarMetadata.backgroundColor ?? '#ffffff'"
-          @update:modelValue="(c) => updateCalendarMetadata((draft) => { draft.backgroundColor = c })"
-        />
-      </div>
-      <div>
-        <label class="text-xs font-medium text-white/60 mb-1.5 block">Border</label>
-        <ColorPicker
-          :model-value="calendarMetadata.borderColor ?? '#e5e7eb'"
-          @update:modelValue="(c) => updateCalendarMetadata((draft) => { draft.borderColor = c })"
-        />
-      </div>
-    </div>
-    <div class="flex flex-wrap items-center gap-4 text-xs text-white/80">
-      <label class="flex items-center gap-2">
-        <input
-          type="checkbox"
-          class="accent-primary-400"
-          :checked="calendarMetadata.showBackground !== false"
-          @change="updateCalendarMetadata((draft) => { draft.showBackground = ($event.target as HTMLInputElement).checked })"
-        />
-        <span>Show background</span>
-      </label>
-      <label class="flex items-center gap-2">
-        <input
-          type="checkbox"
-          class="accent-primary-400"
-          :checked="calendarMetadata.showBorder !== false"
-          @change="updateCalendarMetadata((draft) => { draft.showBorder = ($event.target as HTMLInputElement).checked })"
-        />
-        <span>Show border</span>
-      </label>
-    </div>
+      <div v-if="calendarMetadata.showHeader" class="space-y-4 pt-4 border-t border-white/5">
+        <PropertyField label="Title Override">
+          <input
+            type="text"
+            placeholder="(Optional)"
+            class="control-glass text-xs"
+            :value="calendarMetadata.title ?? ''"
+            @input="updateCalendarMetadata((draft) => { draft.title = ($event.target as HTMLInputElement).value || undefined })"
+          />
+        </PropertyField>
 
-    <div class="grid grid-cols-2 gap-3">
-      <div>
-        <label class="text-xs font-medium text-white/60 mb-1.5 block">Radius</label>
-        <input
-          type="number"
-          min="0"
-          max="80"
-          class="control-glass"
-          :value="calendarMetadata.cornerRadius ?? 26"
-          @change="updateCalendarMetadata((draft) => { draft.cornerRadius = Math.max(0, Math.min(80, Number(($event.target as HTMLInputElement).value) || 0)) })"
-        />
-      </div>
-      <div>
-        <label class="text-xs font-medium text-white/60 mb-1.5 block">Border Width</label>
-        <input
-          type="number"
-          min="0"
-          max="10"
-          class="control-glass"
-          :value="calendarMetadata.borderWidth ?? 1"
-          @change="updateCalendarMetadata((draft) => { draft.borderWidth = Math.max(0, Math.min(10, Number(($event.target as HTMLInputElement).value) || 0)) })"
-        />
-      </div>
-    </div>
+        <PropertyRow>
+          <PropertyField label="Background">
+            <ColorPicker
+              :model-value="calendarMetadata.headerBackgroundColor ?? '#111827'"
+              @update:modelValue="(c) => updateCalendarMetadata((draft) => { draft.headerBackgroundColor = c })"
+            />
+          </PropertyField>
+          <PropertyField label="Header Text">
+            <ColorPicker
+              :model-value="calendarMetadata.headerTextColor ?? '#ffffff'"
+              @update:modelValue="(c) => updateCalendarMetadata((draft) => { draft.headerTextColor = c })"
+            />
+          </PropertyField>
+        </PropertyRow>
 
-    <div class="grid grid-cols-2 gap-3">
-      <div>
-        <label class="text-xs font-medium text-white/60 mb-1.5 block">Header bg</label>
-        <ColorPicker
-          :model-value="calendarMetadata.headerBackgroundColor ?? '#111827'"
-          @update:modelValue="(c) => updateCalendarMetadata((draft) => { draft.headerBackgroundColor = c })"
-        />
+        <PropertyField label="Alignment">
+          <select
+            class="control-glass-sm text-[10px] w-full"
+            :value="calendarMetadata.headerTextAlign ?? 'center'"
+            @change="updateCalendarMetadata((draft) => { draft.headerTextAlign = ($event.target as HTMLSelectElement).value as CalendarGridMetadata['headerTextAlign'] })"
+          >
+            <option value="left">Left</option>
+            <option value="center">Center</option>
+            <option value="right">Right</option>
+          </select>
+        </PropertyField>
       </div>
-      <div>
-        <label class="text-xs font-medium text-white/60 mb-1.5 block">Header text</label>
-        <ColorPicker
-          :model-value="calendarMetadata.headerTextColor ?? '#ffffff'"
-          @update:modelValue="(c) => updateCalendarMetadata((draft) => { draft.headerTextColor = c })"
-        />
-      </div>
-    </div>
+    </PropertySection>
 
-    <div class="grid grid-cols-2 gap-3">
-      <div>
-        <label class="text-xs font-medium text-white/60 mb-1.5 block">Grid lines</label>
-        <ColorPicker
-          :model-value="calendarMetadata.gridLineColor ?? '#e5e7eb'"
-          @update:modelValue="(c) => updateCalendarMetadata((draft) => { draft.gridLineColor = c })"
-        />
-      </div>
-      <div>
-        <label class="text-xs font-medium text-white/60 mb-1.5 block">Line width</label>
-        <input
-          type="number"
-          min="0"
-          max="6"
-          class="control-glass"
-          :value="calendarMetadata.gridLineWidth ?? 1"
-          @change="updateCalendarMetadata((draft) => { draft.gridLineWidth = Math.max(0, Math.min(6, Number(($event.target as HTMLInputElement).value) || 0)) })"
-        />
-      </div>
-    </div>
+    <!-- Grid & Cells (Appearance) -->
+    <PropertySection 
+      title="Grid & Cells" 
+      :is-open="isSectionOpen('grid')"
+      @toggle="toggleSection('grid')"
+    >
+      <PropertyRow>
+        <label class="flex items-center gap-2 text-[11px] text-white/60 cursor-pointer">
+          <input
+            type="checkbox"
+            class="accent-primary-400"
+            :checked="calendarMetadata.showBackground"
+            @change="updateCalendarMetadata((draft) => { draft.showBackground = ($event.target as HTMLInputElement).checked })"
+          >
+          <span>Show Background</span>
+        </label>
+        <label class="flex items-center gap-2 text-[11px] text-white/60 cursor-pointer">
+          <input
+            type="checkbox"
+            class="accent-primary-400"
+            :checked="calendarMetadata.showBorder"
+            @change="updateCalendarMetadata((draft) => { draft.showBorder = ($event.target as HTMLInputElement).checked })"
+          >
+          <span>Show Border</span>
+        </label>
+      </PropertyRow>
 
-    <div class="grid grid-cols-2 gap-3">
-      <div>
-        <label class="text-xs font-medium text-white/60 mb-1.5 block">Day color</label>
-        <ColorPicker
-          :model-value="calendarMetadata.dayNumberColor ?? '#1f2937'"
-          @update:modelValue="(c) => updateCalendarMetadata((draft) => { draft.dayNumberColor = c })"
-        />
-      </div>
-      <div>
-        <label class="text-xs font-medium text-white/60 mb-1.5 block">Muted</label>
-        <ColorPicker
-          :model-value="calendarMetadata.dayNumberMutedColor ?? '#9ca3af'"
-          @update:modelValue="(c) => updateCalendarMetadata((draft) => { draft.dayNumberMutedColor = c })"
-        />
-      </div>
-    </div>
+      <PropertyRow>
+        <PropertyField label="Background">
+          <ColorPicker
+            :model-value="calendarMetadata.backgroundColor ?? '#ffffff'"
+            @update:modelValue="(c) => updateCalendarMetadata((draft) => { draft.backgroundColor = c })"
+          />
+        </PropertyField>
+        <PropertyField label="Border">
+          <ColorPicker
+            :model-value="calendarMetadata.borderColor ?? '#e5e7eb'"
+            @update:modelValue="(c) => updateCalendarMetadata((draft) => { draft.borderColor = c })"
+          />
+        </PropertyField>
+      </PropertyRow>
 
-    <div class="grid grid-cols-2 gap-3">
-      <div>
-        <label class="text-xs font-medium text-white/60 mb-1.5 block">Weekend bg</label>
-        <ColorPicker
-          :model-value="calendarMetadata.weekendBackgroundColor ?? 'rgba(0,0,0,0)'"
-          @update:modelValue="(c) => updateCalendarMetadata((draft) => { draft.weekendBackgroundColor = c })"
-        />
-      </div>
-      <div>
-        <label class="text-xs font-medium text-white/60 mb-1.5 block">Today bg</label>
-        <ColorPicker
-          :model-value="calendarMetadata.todayBackgroundColor ?? 'rgba(0,0,0,0)'"
-          @update:modelValue="(c) => updateCalendarMetadata((draft) => { draft.todayBackgroundColor = c })"
-        />
-      </div>
-    </div>
-
-    <div class="pt-3 border-t border-white/10 space-y-3">
-      <p class="text-[11px] font-semibold text-white/60">Layout</p>
-
-      <div class="grid grid-cols-2 gap-3">
-        <div>
-          <label class="text-xs font-medium text-white/60 mb-1.5 block">Header height</label>
+      <PropertyRow>
+        <PropertyField label="Corner Radius">
           <input
             type="number"
             min="0"
-            max="200"
-            class="control-glass"
-            :value="calendarMetadata.headerHeight ?? 60"
-            @change="updateCalendarMetadata((draft) => { draft.headerHeight = Math.max(0, Math.min(200, Number(($event.target as HTMLInputElement).value) || 0)) })"
+            max="80"
+            class="control-glass text-xs"
+            :value="calendarMetadata.cornerRadius ?? 26"
+            @change="updateCalendarMetadata((draft) => { draft.cornerRadius = Math.max(0, Math.min(80, Number(($event.target as HTMLInputElement).value) || 0)) })"
           />
-        </div>
-        <div>
-          <label class="text-xs font-medium text-white/60 mb-1.5 block">Weekday height</label>
-          <input
-            type="number"
-            min="0"
-            max="120"
-            class="control-glass"
-            :value="calendarMetadata.weekdayHeight ?? 36"
-            @change="updateCalendarMetadata((draft) => { draft.weekdayHeight = Math.max(0, Math.min(120, Number(($event.target as HTMLInputElement).value) || 0)) })"
-          />
-        </div>
-      </div>
-
-      <div class="grid grid-cols-2 gap-3">
-        <div>
-          <label class="text-xs font-medium text-white/60 mb-1.5 block">Cell gap</label>
+        </PropertyField>
+        <PropertyField label="Cell Gap">
           <input
             type="number"
             min="0"
             max="30"
-            class="control-glass"
+            class="control-glass text-xs"
             :value="calendarMetadata.cellGap ?? 0"
             @change="updateCalendarMetadata((draft) => { draft.cellGap = Math.max(0, Math.min(30, Number(($event.target as HTMLInputElement).value) || 0)) })"
           />
-        </div>
-        <div>
-          <label class="text-xs font-medium text-white/60 mb-1.5 block">Grid line width</label>
-          <input
-            type="number"
-            min="0"
-            max="6"
-            class="control-glass"
-            :value="calendarMetadata.gridLineWidth ?? 1"
-            @change="updateCalendarMetadata((draft) => { draft.gridLineWidth = Math.max(0, Math.min(6, Number(($event.target as HTMLInputElement).value) || 0)) })"
-          />
-        </div>
-      </div>
+        </PropertyField>
+      </PropertyRow>
 
-      <div class="grid grid-cols-2 gap-3">
-        <div>
-          <label class="text-xs font-medium text-white/60 mb-1.5 block">Day padding X</label>
-          <input
-            type="number"
-            min="0"
-            max="60"
-            class="control-glass"
-            :value="calendarMetadata.dayNumberInsetX ?? 12"
-            @change="updateCalendarMetadata((draft) => { draft.dayNumberInsetX = Math.max(0, Math.min(60, Number(($event.target as HTMLInputElement).value) || 0)) })"
-          />
-        </div>
-        <div>
-          <label class="text-xs font-medium text-white/60 mb-1.5 block">Day padding Y</label>
-          <input
-            type="number"
-            min="0"
-            max="60"
-            class="control-glass"
-            :value="calendarMetadata.dayNumberInsetY ?? 8"
-            @change="updateCalendarMetadata((draft) => { draft.dayNumberInsetY = Math.max(0, Math.min(60, Number(($event.target as HTMLInputElement).value) || 0)) })"
-          />
-        </div>
-      </div>
-    </div>
+      <div class="pt-4 border-t border-white/5 space-y-4">
+        <PropertyRow>
+          <PropertyField label="Grid Lines">
+            <ColorPicker
+              :model-value="calendarMetadata.gridLineColor ?? '#e5e7eb'"
+              @update:modelValue="(c) => updateCalendarMetadata((draft) => { draft.gridLineColor = c })"
+            />
+          </PropertyField>
+          <PropertyField label="Line Width">
+            <input
+              type="number"
+              min="0"
+              max="6"
+              class="control-glass text-xs"
+              :value="calendarMetadata.gridLineWidth ?? 1"
+              @change="updateCalendarMetadata((draft) => { draft.gridLineWidth = Math.max(0, Math.min(6, Number(($event.target as HTMLInputElement).value) || 0)) })"
+            />
+          </PropertyField>
+        </PropertyRow>
 
-    <div class="pt-3 border-t border-white/10 space-y-4">
+        <PropertyRow>
+          <PropertyField label="Day Color">
+            <ColorPicker
+              :model-value="calendarMetadata.dayNumberColor ?? '#1f2937'"
+              @update:modelValue="(c) => updateCalendarMetadata((draft) => { draft.dayNumberColor = c })"
+            />
+          </PropertyField>
+          <PropertyField label="Weekend BG">
+            <ColorPicker
+              :model-value="calendarMetadata.weekendBackgroundColor ?? 'rgba(0,0,0,0)'"
+              @update:modelValue="(c) => updateCalendarMetadata((draft) => { draft.weekendBackgroundColor = c })"
+            />
+          </PropertyField>
+        </PropertyRow>
+      </div>
+    </PropertySection>
+
+    <!-- Holidays Section -->
+    <PropertySection 
+      title="Holidays" 
+      :is-open="isSectionOpen('holidays')"
+      @toggle="toggleSection('holidays')"
+    >
       <div class="flex items-center justify-between">
-        <p class="text-[11px] font-semibold text-white/60">Holidays</p>
-        <label class="flex items-center gap-2 text-sm text-white/80">
+        <span class="text-[10px] font-medium text-white/40 uppercase">Markers</span>
+        <label class="flex items-center gap-2 text-[11px] text-white/60 cursor-pointer">
           <input
             type="checkbox"
             class="accent-primary-400"
             :checked="calendarMetadata.showHolidayMarkers ?? true"
             @change="updateCalendarMetadata((draft) => { draft.showHolidayMarkers = ($event.target as HTMLInputElement).checked })"
           >
-          <span>Show</span>
+          <span>Enabled</span>
         </label>
       </div>
 
-      <div v-if="calendarMetadata.showHolidayMarkers !== false" class="space-y-3">
-        <div>
-          <div class="flex items-center justify-between mb-1.5">
-            <label class="text-xs font-medium text-white/60">Marker Style</label>
-            <div v-if="isMarkerLocked(holidayMarkerOptions.find(o => o.value === calendarMetadata.holidayMarkerStyle))" class="flex items-center gap-1">
-              <AppTierBadge tier="pro" size="sm" />
-            </div>
-          </div>
+      <div v-if="calendarMetadata.showHolidayMarkers !== false" class="space-y-4 pt-4 border-t border-white/5">
+        <PropertyField label="Marker Style" :is-pro="isMarkerLocked(holidayMarkerOptions.find(o => o.value === calendarMetadata.holidayMarkerStyle))">
           <select
-            class="control-glass"
+            class="control-glass text-xs"
             :value="calendarMetadata.holidayMarkerStyle ?? 'text'"
             @change="updateCalendarMetadata((draft) => { 
-              const val = ($event.target as HTMLSelectElement).value;
-              const option = holidayMarkerOptions.find(o => o.value === val);
-              if (option && !isMarkerLocked(option)) {
-                draft.holidayMarkerStyle = val as any;
-              }
-            })"
+                const val = ($event.target as HTMLSelectElement).value;
+                const option = holidayMarkerOptions.find(o => o.value === val);
+                if (option && !isMarkerLocked(option)) draft.holidayMarkerStyle = val as any;
+              })"
           >
-            <option 
-              v-for="option in holidayMarkerOptions" 
-              :key="option.value" 
-              :value="option.value"
-              :disabled="isMarkerLocked(option)"
-            >
+            <option v-for="option in holidayMarkerOptions" :key="option.value" :value="option.value" :disabled="isMarkerLocked(option)">
               {{ option.label }}{{ isMarkerLocked(option) ? ' (Pro)' : '' }}
             </option>
           </select>
-        </div>
+        </PropertyField>
 
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="text-xs font-medium text-white/60 mb-1.5 block">Color</label>
+        <PropertyRow>
+          <PropertyField label="Color">
             <ColorPicker
               :model-value="calendarMetadata.holidayMarkerColor ?? '#ef4444'"
               @update:modelValue="(c) => updateCalendarMetadata((draft) => { draft.holidayMarkerColor = c })"
             />
-          </div>
-          <div v-if="!['background', 'text'].includes(calendarMetadata.holidayMarkerStyle ?? 'text')">
-            <label class="text-xs font-medium text-white/60 mb-1.5 block">{{ (calendarMetadata.holidayMarkerStyle === 'dot' || calendarMetadata.holidayMarkerStyle === 'square' || calendarMetadata.holidayMarkerStyle === 'triangle') ? 'Size' : (calendarMetadata.holidayMarkerStyle === 'border' ? 'Width' : 'Height') }}</label>
+          </PropertyField>
+          <PropertyField 
+            v-if="!['background', 'text'].includes(calendarMetadata.holidayMarkerStyle ?? 'text')"
+            label="Size"
+          >
             <input
               type="number"
               min="1"
               max="20"
-              class="control-glass"
+              class="control-glass text-xs"
               :value="calendarMetadata.holidayMarkerHeight ?? 4"
               @change="updateCalendarMetadata((draft) => { draft.holidayMarkerHeight = Math.max(1, Math.min(20, Number(($event.target as HTMLInputElement).value) || 4)) })"
             />
-          </div>
-        </div>
+          </PropertyField>
+        </PropertyRow>
       </div>
 
-      <div class="pt-3 border-t border-white/10 space-y-3">
-        <div class="flex items-center justify-between gap-4">
-          <label class="flex items-center gap-2 text-sm text-white/80">
+      <div class="pt-4 border-t border-white/5 space-y-4">
+        <div class="flex items-center justify-between">
+          <span class="text-[10px] font-medium text-white/40 uppercase">Holiday List</span>
+          <label class="flex items-center gap-2 text-[11px] text-white/60 cursor-pointer">
             <input
               type="checkbox"
               class="accent-primary-400"
               :checked="calendarMetadata.showHolidayList !== false"
               @change="updateCalendarMetadata((draft) => { draft.showHolidayList = ($event.target as HTMLInputElement).checked })"
             >
-            <span>Show holiday list</span>
+            <span>Show</span>
           </label>
-          <span class="text-[11px] text-white/50">Uses space below grid</span>
         </div>
 
-        <template v-if="calendarMetadata.showHolidayList !== false">
-          <div>
-            <label class="text-xs font-medium text-white/60 mb-1.5 block">List title</label>
+        <div v-if="calendarMetadata.showHolidayList !== false" class="space-y-4">
+          <PropertyField label="List Title">
             <input
               type="text"
-              class="control-glass"
+              class="control-glass text-xs"
               :value="calendarMetadata.holidayListTitle ?? 'Holidays'"
               @input="updateCalendarMetadata((draft) => { draft.holidayListTitle = ($event.target as HTMLInputElement).value })"
             />
-          </div>
+          </PropertyField>
 
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="text-xs font-medium text-white/60 mb-1.5 block">Max items</label>
+          <PropertyRow>
+            <PropertyField label="Max Items">
               <input
                 type="number"
                 min="1"
                 max="8"
-                class="control-glass"
+                class="control-glass text-xs"
                 :value="calendarMetadata.holidayListMaxItems ?? 4"
                 @change="updateCalendarMetadata((draft) => { draft.holidayListMaxItems = Math.max(1, Math.min(8, Number(($event.target as HTMLInputElement).value) || 4)) })"
               />
-            </div>
-            <div>
-              <label class="text-xs font-medium text-white/60 mb-1.5 block">List height</label>
+            </PropertyField>
+            <PropertyField label="Height">
               <input
                 type="number"
                 min="40"
                 max="220"
-                class="control-glass"
+                class="control-glass text-xs"
                 :value="calendarMetadata.holidayListHeight ?? 96"
                 @change="updateCalendarMetadata((draft) => { draft.holidayListHeight = Math.max(40, Math.min(220, Number(($event.target as HTMLInputElement).value) || 96)) })"
               />
-            </div>
+            </PropertyField>
+          </PropertyRow>
+        </div>
+      </div>
+    </PropertySection>
+
+    <!-- Typography Section -->
+    <PropertySection 
+      title="Typography" 
+      :is-open="isSectionOpen('typography')"
+      @toggle="toggleSection('typography')"
+      is-last
+    >
+      <div class="space-y-4">
+        <PropertyField label="Header Font">
+          <PropertyRow>
+            <FontPicker
+              :model-value="calendarMetadata.headerFontFamily ?? 'Outfit'"
+              @update:modelValue="(v) => updateCalendarMetadata((draft) => { draft.headerFontFamily = v })"
+            />
+            <input
+              type="number"
+              min="8"
+              max="96"
+              class="control-glass text-xs"
+              :value="calendarMetadata.headerFontSize ?? 24"
+              @change="updateCalendarMetadata((draft) => { draft.headerFontSize = Math.max(8, Math.min(96, Number(($event.target as HTMLInputElement).value) || 24)) })"
+            />
+          </PropertyRow>
+        </PropertyField>
+
+        <PropertyField label="Weekday Font" class="pt-4 border-t border-white/5">
+          <PropertyRow>
+            <FontPicker
+              :model-value="calendarMetadata.weekdayFontFamily ?? 'Inter'"
+              @update:modelValue="(v) => updateCalendarMetadata((draft) => { draft.weekdayFontFamily = v })"
+            />
+            <input
+              type="number"
+              min="8"
+              max="40"
+              class="control-glass text-xs"
+              :value="calendarMetadata.weekdayFontSize ?? 12"
+              @change="updateCalendarMetadata((draft) => { draft.weekdayFontSize = Math.max(8, Math.min(40, Number(($event.target as HTMLInputElement).value) || 12)) })"
+            />
+          </PropertyRow>
+          <div class="mt-2">
+            <ColorPicker
+              :model-value="calendarMetadata.weekdayTextColor ?? '#6b7280'"
+              @update:modelValue="(c) => updateCalendarMetadata((draft) => { draft.weekdayTextColor = c })"
+            />
           </div>
+        </PropertyField>
 
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="text-xs font-medium text-white/60 mb-1.5 block">Text color</label>
-              <ColorPicker
-                :model-value="calendarMetadata.holidayListTextColor ?? '#4b5563'"
-                @update:modelValue="(c) => updateCalendarMetadata((draft) => { draft.holidayListTextColor = c })"
-              />
-            </div>
-            <div>
-              <label class="text-xs font-medium text-white/60 mb-1.5 block">Accent color</label>
-              <ColorPicker
-                :model-value="calendarMetadata.holidayListAccentColor ?? calendarMetadata.holidayMarkerColor ?? '#ef4444'"
-                @update:modelValue="(c) => updateCalendarMetadata((draft) => { draft.holidayListAccentColor = c })"
-              />
-            </div>
-          </div>
-        </template>
+        <PropertyField label="Day Number Font" class="pt-4 border-t border-white/5">
+          <PropertyRow>
+            <FontPicker
+              :model-value="calendarMetadata.dayNumberFontFamily ?? 'Inter'"
+              @update:modelValue="(v) => updateCalendarMetadata((draft) => { draft.dayNumberFontFamily = v })"
+            />
+            <input
+              type="number"
+              min="8"
+              max="60"
+              class="control-glass text-xs"
+              :value="calendarMetadata.dayNumberFontSize ?? 16"
+              @change="updateCalendarMetadata((draft) => { draft.dayNumberFontSize = Math.max(8, Math.min(60, Number(($event.target as HTMLInputElement).value) || 16)) })"
+            />
+          </PropertyRow>
+        </PropertyField>
       </div>
-    </div>
-
-    <div class="pt-3 border-t border-white/10 space-y-3">
-      <p class="text-[11px] font-semibold text-white/60">Typography</p>
-
-      <div class="grid grid-cols-2 gap-3">
-        <div>
-          <label class="text-xs font-medium text-white/60 mb-1.5 block">Header font</label>
-          <FontPicker
-            :model-value="calendarMetadata.headerFontFamily ?? 'Outfit'"
-            @update:modelValue="(v) => updateCalendarMetadata((draft) => { draft.headerFontFamily = v })"
-          />
-        </div>
-        <div>
-          <label class="text-xs font-medium text-white/60 mb-1.5 block">Header size</label>
-          <input
-            type="number"
-            min="8"
-            max="96"
-            class="control-glass"
-            :value="calendarMetadata.headerFontSize ?? 24"
-            @change="updateCalendarMetadata((draft) => { draft.headerFontSize = Math.max(8, Math.min(96, Number(($event.target as HTMLInputElement).value) || 24)) })"
-          />
-        </div>
-      </div>
-
-      <div>
-        <label class="text-xs font-medium text-white/60 mb-1.5 block">Header weight</label>
-        <input
-          type="text"
-          class="control-glass"
-          :value="String(calendarMetadata.headerFontWeight ?? 600)"
-          @input="updateCalendarMetadata((draft) => { const v = (($event.target as HTMLInputElement).value || '').trim(); draft.headerFontWeight = /^\d+$/.test(v) ? Number(v) : (v || 600) })"
-        />
-      </div>
-
-      <div class="grid grid-cols-2 gap-3">
-        <div>
-          <label class="text-xs font-medium text-white/60 mb-1.5 block">Weekday font</label>
-          <FontPicker
-            :model-value="calendarMetadata.weekdayFontFamily ?? 'Inter'"
-            @update:modelValue="(v) => updateCalendarMetadata((draft) => { draft.weekdayFontFamily = v })"
-          />
-        </div>
-        <div>
-          <label class="text-xs font-medium text-white/60 mb-1.5 block">Weekday size</label>
-          <input
-            type="number"
-            min="8"
-            max="40"
-            class="control-glass"
-            :value="calendarMetadata.weekdayFontSize ?? 12"
-            @change="updateCalendarMetadata((draft) => { draft.weekdayFontSize = Math.max(8, Math.min(40, Number(($event.target as HTMLInputElement).value) || 12)) })"
-          />
-        </div>
-      </div>
-
-      <div>
-        <label class="text-xs font-medium text-white/60 mb-1.5 block">Weekday weight</label>
-        <input
-          type="text"
-          class="control-glass"
-          :value="String(calendarMetadata.weekdayFontWeight ?? 600)"
-          @input="updateCalendarMetadata((draft) => { const v = (($event.target as HTMLInputElement).value || '').trim(); draft.weekdayFontWeight = /^\d+$/.test(v) ? Number(v) : (v || 600) })"
-        />
-      </div>
-
-      <div class="grid grid-cols-2 gap-3">
-        <div>
-          <label class="text-xs font-medium text-white/60 mb-1.5 block">Day font</label>
-          <FontPicker
-            :model-value="calendarMetadata.dayNumberFontFamily ?? 'Inter'"
-            @update:modelValue="(v) => updateCalendarMetadata((draft) => { draft.dayNumberFontFamily = v })"
-          />
-        </div>
-        <div>
-          <label class="text-xs font-medium text-white/60 mb-1.5 block">Day size</label>
-          <input
-            type="number"
-            min="8"
-            max="60"
-            class="control-glass"
-            :value="calendarMetadata.dayNumberFontSize ?? 16"
-            @change="updateCalendarMetadata((draft) => { draft.dayNumberFontSize = Math.max(8, Math.min(60, Number(($event.target as HTMLInputElement).value) || 16)) })"
-          />
-        </div>
-      </div>
-
-      <div>
-        <label class="text-xs font-medium text-white/60 mb-1.5 block">Day weight</label>
-        <input
-          type="text"
-          class="control-glass"
-          :value="String(calendarMetadata.dayNumberFontWeight ?? 600)"
-          @input="updateCalendarMetadata((draft) => { const v = (($event.target as HTMLInputElement).value || '').trim(); draft.dayNumberFontWeight = /^\d+$/.test(v) ? Number(v) : (v || 600) })"
-        />
-      </div>
-    </div>
+    </PropertySection>
   </div>
 </template>

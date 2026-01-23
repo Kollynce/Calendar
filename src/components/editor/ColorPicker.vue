@@ -11,7 +11,17 @@ const emit = defineEmits<{
 
 const safeColorInputValue = computed(() => {
   const value = (props.modelValue ?? '').trim()
-  if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(value)) return value
+  // Handle 3-digit hex: #f00 -> #ff0000
+  if (/^#([0-9a-fA-F]{3})$/.test(value)) {
+    const r = value[1]
+    const g = value[2]
+    const b = value[3]
+    return `#${r}${r}${g}${g}${b}${b}`.toLowerCase()
+  }
+  // Handle 6-digit hex
+  if (/^#([0-9a-fA-F]{6})$/.test(value)) {
+    return value.toLowerCase()
+  }
   return '#000000'
 })
 

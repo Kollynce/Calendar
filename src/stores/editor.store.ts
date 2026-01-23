@@ -67,6 +67,11 @@ export const useEditorStore = defineStore('editor', () => {
   const zoom = ref(1)
   const panOffset = ref({ x: 0, y: 0 })
 
+  const selectionVersion = ref(0)
+  function notifySelectionUpdate() {
+    selectionVersion.value++
+  }
+
   // History for undo/redo
   const history = ref<CanvasState[]>([])
   const redoHistory = ref<CanvasState[]>([])
@@ -386,6 +391,7 @@ export const useEditorStore = defineStore('editor', () => {
     bakeScaledCalendarElementSize,
     getArrowParts,
     refreshArrowGroupGeometry,
+    notifySelectionUpdate,
   })
 
   const {
@@ -1052,5 +1058,7 @@ export const useEditorStore = defineStore('editor', () => {
     requestRender,
     withCanvasBatch,
     rebuildActiveCollage,
+    selectionVersion,
+    notifySelectionUpdate,
   }
 })

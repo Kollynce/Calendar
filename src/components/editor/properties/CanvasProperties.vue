@@ -4,6 +4,9 @@ import { storeToRefs } from 'pinia'
 import { useEditorStore, useAuthStore, useCalendarStore } from '@/stores'
 import AppSelect from '@/components/ui/AppSelect.vue'
 import ColorPicker from '../ColorPicker.vue'
+import PropertySection from './PropertySection.vue'
+import PropertyField from './PropertyField.vue'
+import PropertyRow from './PropertyRow.vue'
 import {
   CANVAS_SIZE_PRESETS,
   getPresetByCanvasSize,
@@ -12,6 +15,7 @@ import {
   type CanvasPreset,
 } from '@/config/canvas-presets'
 import { LockClosedIcon, LockOpenIcon } from '@heroicons/vue/24/outline'
+
 import type {
   CanvasBackgroundPattern,
   CanvasPatternConfig,
@@ -477,483 +481,311 @@ function resetToCurrentCanvas(): void {
 watch([selectedPattern, patternColor, patternSpacing, patternOpacity], () => {
   scheduleApplyCanvasPattern()
 })
+
+// Section management
+const activeSections = ref<Set<string>>(new Set(['structure']))
+
+function toggleSection(id: string) {
+  if (activeSections.value.has(id)) {
+    activeSections.value.delete(id)
+  } else {
+    activeSections.value.add(id)
+  }
+}
+
+function isSectionOpen(id: string) {
+  return activeSections.value.has(id)
+}
 </script>
 
 <template>
-  <div class="space-y-6">
-    <div class="flex items-center justify-between">
+  <div class="space-y-0">
+    <!-- Header Summary (Always visible) -->
+    <div class="flex items-center justify-between pb-3 mb-3 border-b border-white/5">
       <div>
-        <h3 class="text-sm font-semibold text-white uppercase tracking-wider">Canvas setup</h3>
-        <p class="text-[11px] text-white/50">
-          {{ detectedPreset?.label ?? 'Custom size' }} · {{ orientation === 'portrait' ? 'Portrait' : 'Landscape' }}
+        <h3 class="text-[11px] font-bold text-white uppercase tracking-widest leading-none">Canvas</h3>
+        <p class="text-[10px] text-white/40 mt-1 uppercase tracking-wider">
+          {{ detectedPreset?.label ?? 'Custom' }} · {{ orientation }}
         </p>
       </div>
-      <button type="button" class="text-xs font-medium text-primary-400 hover:text-primary-300" @click="resetToCurrentCanvas">Reset</button>
+      <button type="button" class="text-[10px] font-bold text-primary-400 hover:text-primary-300 uppercase tracking-widest transition-colors" @click="resetToCurrentCanvas">Reset</button>
     </div>
 
-    <!-- Canvas Background Color -->
-    <section class="space-y-3">
-      <p class="text-[11px] font-semibold text-white/40 uppercase tracking-widest">Background</p>
+    <!-- Canvas Structure Section (Content) -->
+    <PropertySection 
+      title="Canvas Structure" 
+      :is-open="isSectionOpen('structure')"
+      @toggle="toggleSection('structure')"
+    >
+      <!-- Quick Sizes -->
       <div class="space-y-3">
-        <div>
-          <label class="text-[10px] font-medium text-white/40 uppercase mb-1.5 block">Color</label>
-          <ColorPicker 
-            v-model="canvasBackgroundColor" 
-          />
+        <div class="flex flex-wrap gap-1.5">
+          <button
+            v-for="tab in presetTabs"
+            :key="tab"
+            type="button"
+            class="px-2 py-1 rounded-md text-[9px] font-bold uppercase tracking-wider transition"
+            :class="tab === selectedPresetTab ? 'bg-primary-500 text-white' : 'bg-white/5 text-white/40 hover:bg-white/10'"
+            @click="selectedPresetTab = tab"
+          >
+            {{ tab }}
+          </button>
         </div>
+        <div v-if="activePresetGroup" class="grid grid-cols-2 gap-2">
+          <button
+            v-for="preset in activePresetGroup.items"
+            :key="preset.key"
+            type="button"
+            class="rounded-xl border p-2.5 text-left transition-all flex flex-col justify-between h-16 group/preset"
+            :class="[
+              detectedPreset?.key === preset.key
+                ? 'border-primary-500 bg-primary-500/10'
+                : 'border-white/5 bg-white/5 hover:border-white/20'
+            ]"
+            @click="handlePresetSelect(preset.key)"
+          >
+            <p class="text-[10px] font-bold text-white leading-tight truncate uppercase tracking-wide group-hover/preset:text-primary-300 transition-colors">{{ preset.label }}</p>
+            <p class="text-[9px] text-white/30 uppercase">
+              {{ formatPresetSize(preset.widthMm, preset.heightMm) }}
+            </p>
+          </button>
+        </div>
+      </div>
+
+      <!-- Orientation -->
+      <div class="pt-4 border-t border-white/5 space-y-2">
+        <label class="text-[10px] font-medium text-white/40 uppercase mb-1 block">Orientation</label>
+        <div class="grid grid-cols-2 gap-2">
+          <button
+            v-for="o in ['portrait', 'landscape']"
+            :key="o"
+            type="button"
+            class="rounded-xl border px-3 py-2 text-center text-[10px] font-bold uppercase tracking-widest transition"
+            :class="orientation === o ? 'border-primary-500 bg-primary-500/10 text-primary-300' : 'border-white/5 bg-white/5 text-white/40 hover:border-white/20'"
+            @click="handleOrientationChange(o as any)"
+          >
+            {{ o }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Dimensions -->
+      <div class="pt-4 border-t border-white/5 space-y-4">
+        <PropertyRow>
+          <PropertyField :label="`Width (${selectedUnitAbbr})`">
+            <input :value="widthDisplay" type="number" min="0.1" step="0.1" class="control-glass text-xs w-full" @input="handleWidthInput" />
+          </PropertyField>
+          <PropertyField :label="`Height (${selectedUnitAbbr})`">
+            <input :value="heightDisplay" type="number" min="0.1" step="0.1" class="control-glass text-xs w-full" @input="handleHeightInput" />
+          </PropertyField>
+        </PropertyRow>
         
-        <!-- Quick Color Presets -->
-        <div>
-          <label class="text-[10px] font-medium text-white/40 uppercase mb-2 block">Quick Presets</label>
-          <div class="grid grid-cols-6 gap-1.5">
+        <PropertyRow class="items-end">
+          <PropertyField label="Units">
+            <AppSelect v-model="selectedUnit" variant="glass" class="w-full text-[10px] h-9">
+              <option v-for="option in UNIT_OPTIONS" :key="option.value" :value="option.value">{{ option.label }}</option>
+            </AppSelect>
+          </PropertyField>
+          <PropertyField label="Aspect Ratio">
+             <button
+              type="button"
+              class="flex items-center justify-between gap-1.5 rounded-xl border px-3 h-9 text-[10px] font-bold uppercase tracking-widest transition"
+              :class="aspectLocked ? 'border-primary-500 text-primary-300 bg-primary-500/10' : 'border-white/5 text-white/40 bg-white/5 hover:border-white/20'"
+              @click="toggleAspectLock"
+            >
+              <div class="flex items-center gap-2">
+                <component :is="aspectLocked ? LockClosedIcon : LockOpenIcon" class="w-3.5 h-3.5" />
+                <span>{{ aspectLocked ? 'Locked' : 'Unlocked' }}</span>
+              </div>
+              <span class="text-[9px] opacity-40">{{ (width / height).toFixed(2) }}:1</span>
+            </button>
+          </PropertyField>
+        </PropertyRow>
+      </div>
+    </PropertySection>
+
+    <!-- Appearance Section -->
+    <PropertySection 
+      title="Appearance" 
+      :is-open="isSectionOpen('appearance')"
+      @toggle="toggleSection('appearance')"
+    >
+      <div class="space-y-4">
+        <PropertyField label="Canvas Background">
+          <ColorPicker v-model="canvasBackgroundColor" />
+          
+          <div class="grid grid-cols-7 gap-1.5 pt-2">
             <button
-              v-for="color in CANVAS_COLOR_PRESETS"
+              v-for="color in CANVAS_COLOR_PRESETS.slice(0, 14)"
               :key="color"
               @click="canvasBackgroundColor = color"
               class="w-full aspect-square rounded-md border-2 transition-all hover:scale-110"
               :class="canvasBackgroundColor === color ? 'border-primary-400 ring-2 ring-primary-400/30' : 'border-white/10'"
               :style="{ backgroundColor: color }"
-              :title="color"
             />
+          </div>
+        </PropertyField>
+
+        <div class="pt-4 border-t border-white/5 space-y-4">
+          <label class="text-[10px] font-medium text-white/40 uppercase mb-2 block">Background Pattern</label>
+          <div class="grid grid-cols-4 gap-2">
+            <button
+              v-for="option in PATTERN_OPTIONS"
+              :key="option.value"
+              type="button"
+              class="flex flex-col items-center justify-center gap-1.5 rounded-xl border py-3 transition-all"
+              :class="selectedPattern === option.value
+                ? 'border-primary-500 bg-primary-500/10 text-primary-300'
+                : 'border-white/5 text-white/40 hover:border-white/20 bg-white/5'"
+              @click="selectedPattern = option.value"
+            >
+              <span class="text-sm">{{ option.icon }}</span>
+              <span class="text-[9px] font-bold uppercase tracking-widest">{{ option.label }}</span>
+            </button>
+          </div>
+
+          <div v-if="selectedPattern !== 'none'" class="space-y-4 pt-2">
+            <PropertyRow>
+              <PropertyField label="Pattern Color">
+                <ColorPicker v-model="patternColor" />
+              </PropertyField>
+              <PropertyField label="Spacing">
+                <input v-model.number="patternSpacing" type="number" min="8" max="100" step="4" class="control-glass text-xs w-full" />
+              </PropertyField>
+            </PropertyRow>
+            <div>
+              <label class="text-[9px] text-white/30 uppercase mb-1.5 block">Opacity ({{ (patternOpacity * 100).toFixed(0) }}%)</label>
+              <input v-model.number="patternOpacity" type="range" min="0.1" max="1" step="0.1" class="w-full h-1.5 accent-primary-500 bg-white/5 rounded-lg appearance-none cursor-pointer" />
+            </div>
           </div>
         </div>
       </div>
-    </section>
+    </PropertySection>
 
-    <!-- Quick Sizes -->
-    <section class="space-y-3">
-      <div class="flex items-center justify-between">
-        <h4 class="text-[11px] font-semibold text-white/40 uppercase tracking-widest">Quick sizes</h4>
-      </div>
-      <div class="flex flex-wrap gap-1.5">
-        <button
-          v-for="tab in presetTabs"
-          :key="tab"
-          type="button"
-          class="px-2 py-1 rounded-md text-[10px] font-semibold transition"
-          :class="tab === selectedPresetTab ? 'bg-primary-500 text-white' : 'bg-white/5 text-white/50 hover:bg-white/10'"
-          @click="selectedPresetTab = tab"
-        >
-          {{ tab }}
-        </button>
-      </div>
-      <div v-if="activePresetGroup" class="grid grid-cols-2 gap-2">
-        <button
-          v-for="preset in activePresetGroup.items"
-          :key="preset.key"
-          type="button"
-          class="rounded-lg border p-2 text-left transition-all h-16 flex flex-col justify-between"
-          :class="[
-            detectedPreset?.key === preset.key
-              ? 'border-primary-500 bg-primary-500/10'
-              : 'border-white/10 hover:border-white/20 bg-white/5'
-          ]"
-          @click="handlePresetSelect(preset.key)"
-        >
-          <p class="text-[11px] font-semibold text-white leading-tight truncate">{{ preset.label }}</p>
-          <p class="text-[10px] text-white/40">
-            {{ formatPresetSize(preset.widthMm, preset.heightMm) }}
-          </p>
-        </button>
-      </div>
-    </section>
-
-    <!-- Orientation -->
-    <section class="space-y-2">
-      <p class="text-[11px] font-semibold text-white/40 uppercase tracking-widest">Orientation</p>
-      <div class="grid grid-cols-2 gap-2">
-        <button
-          type="button"
-          class="rounded-lg border px-3 py-2 text-center text-xs font-medium transition"
-          :class="orientation === 'portrait' ? 'border-primary-500 bg-primary-500/10 text-primary-300' : 'border-white/10 text-white/60 hover:border-white/20 bg-white/5'"
-          @click="handleOrientationChange('portrait')"
-        >
-          Portrait
-        </button>
-        <button
-          type="button"
-          class="rounded-lg border px-3 py-2 text-center text-xs font-medium transition"
-          :class="orientation === 'landscape' ? 'border-primary-500 bg-primary-500/10 text-primary-300' : 'border-white/10 text-white/60 hover:border-white/20 bg-white/5'"
-          @click="handleOrientationChange('landscape')"
-        >
-          Landscape
-        </button>
-      </div>
-    </section>
-
-    <!-- Custom Dimensions -->
-    <section class="space-y-3">
-      <p class="text-[11px] font-semibold text-white/40 uppercase tracking-widest">Custom dimensions</p>
-      <div class="grid gap-3 grid-cols-1 sm:grid-cols-2">
-        <div class="space-y-1">
-          <label class="text-[10px] font-medium text-white/40 uppercase">Width ({{ selectedUnitAbbr }})</label>
-          <input
-            :value="widthDisplay"
-            type="number"
-            min="0.1"
-            step="0.1"
-            class="control-glass w-full"
-            @input="handleWidthInput"
-          />
-        </div>
-        <div class="space-y-1">
-          <label class="text-[10px] font-medium text-white/40 uppercase">Height ({{ selectedUnitAbbr }})</label>
-          <input
-            :value="heightDisplay"
-            type="number"
-            min="0.1"
-            step="0.1"
-            class="control-glass w-full"
-            @input="handleHeightInput"
-          />
-        </div>
-      </div>
-      <div class="space-y-1">
-        <label class="text-[10px] font-medium text-white/40 uppercase">Units</label>
-        <AppSelect
-          v-model="selectedUnit"
-          variant="glass"
-          class="w-full text-xs"
-        >
-          <option v-for="option in UNIT_OPTIONS" :key="option.value" :value="option.value">
-            {{ option.label }}
-          </option>
-        </AppSelect>
-      </div>
-
-      <div class="flex items-center justify-between rounded-lg border border-white/10 px-3 py-2 bg-white/5">
-        <div>
-          <p class="text-xs font-medium text-white">Aspect ratio</p>
-          <p class="text-[10px] text-white/40">{{ (width / height).toFixed(2) }} : 1</p>
-        </div>
-        <button
-          type="button"
-          class="inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[10px] font-medium transition"
-          :class="aspectLocked ? 'border-primary-500 text-primary-300 bg-primary-500/10' : 'border-white/10 text-white/50 hover:border-white/20'"
-          @click="toggleAspectLock"
-        >
-          <component :is="aspectLocked ? LockClosedIcon : LockOpenIcon" class="w-3.5 h-3.5" />
-          {{ aspectLocked ? 'Locked' : 'Unlocked' }}
-        </button>
-      </div>
-    </section>
-
-    <!-- Background pattern -->
-    <section class="space-y-3">
-      <p class="text-[11px] font-semibold text-white/40 uppercase tracking-widest">Background pattern</p>
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-        <button
-          v-for="option in PATTERN_OPTIONS"
-          :key="option.value"
-          type="button"
-          class="flex flex-col items-center justify-center gap-1 rounded-lg border p-2 transition-all"
-          :class="selectedPattern === option.value
-            ? 'border-primary-500 bg-primary-500/10 text-primary-300'
-            : 'border-white/10 text-white/50 hover:border-white/20 bg-white/5'"
-          @click="selectedPattern = option.value"
-        >
-          <span class="text-base">{{ option.icon }}</span>
-          <span class="text-[10px] font-medium">{{ option.label }}</span>
-        </button>
-      </div>
-      <div v-if="selectedPattern !== 'none'" class="space-y-3 pt-1">
-        <div class="grid grid-cols-1 gap-2">
-          <label class="space-y-1">
-            <span class="text-[10px] text-white/40 uppercase">Color</span>
-            <div class="flex items-center gap-2">
-              <input
-                v-model="patternColor"
-                type="color"
-                class="w-6 h-6 rounded border border-white/10 cursor-pointer p-0 bg-transparent"
-              />
-              <input
-                v-model="patternColor"
-                type="text"
-                class="flex-1 control-glass"
-              />
-            </div>
-          </label>
-        </div>
-        <div class="grid gap-2 grid-cols-1 sm:grid-cols-2">
-          <label class="space-y-1">
-            <span class="text-[10px] text-white/40 uppercase">Spacing</span>
-            <input
-              v-model.number="patternSpacing"
-              type="number"
-              min="8"
-              max="100"
-              step="4"
-              class="w-full control-glass"
-            />
-          </label>
-          <label class="space-y-1">
-            <span class="text-[10px] text-white/40 uppercase">Opacity</span>
-            <input
-              v-model.number="patternOpacity"
-              type="range"
-              min="0.1"
-              max="1"
-              step="0.1"
-              class="w-full h-6 accent-primary-500"
-            />
-          </label>
-        </div>
-      </div>
-    </section>
-
-    <!-- Watermark Controls -->
-    <section class="space-y-4 border-t border-white/10 pt-6">
-      <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-        <div>
-          <p class="text-[11px] font-semibold text-white/40 uppercase tracking-widest">Watermark</p>
-          <p class="text-[11px] text-white/60">Choose how credit or logos appear on your canvas and exports.</p>
-        </div>
+    <!-- Watermark Section -->
+    <PropertySection 
+      title="Watermark" 
+      :is-open="isSectionOpen('watermark')"
+      @toggle="toggleSection('watermark')"
+      is-last
+    >
+      <template #title-append>
         <AppTierBadge v-if="!authStore.isPro" tier="pro" size="sm" />
-      </div>
+      </template>
 
-      <div class="rounded-2xl border border-white/10 bg-white/5 divide-y divide-white/5">
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 py-3">
-          <div>
-            <p class="text-xs font-medium text-white flex items-center gap-1.5">
-              Watermark visibility
+      <div class="rounded-2xl border border-white/5 bg-white/5 divide-y divide-white/5 overflow-hidden">
+        <div class="flex items-center justify-between px-4 py-3">
+          <div class="flex-1 pr-4">
+            <p class="text-[11px] font-bold text-white uppercase tracking-wide flex items-center gap-1.5">
+              Visibility
               <LockClosedIcon v-if="requiresWatermark" class="w-3 h-3 text-white/40" />
             </p>
-            <p class="text-[10px] text-white/40">
-              {{ requiresWatermark ? 'Required on the Free tier' : 'Toggle watermark overlay on canvas and exports' }}
-            </p>
+            <p class="text-[10px] text-white/30 mt-0.5">{{ requiresWatermark ? 'Required on Free' : 'Toggle overlay' }}</p>
           </div>
           <button
             type="button"
             role="switch"
             :aria-checked="watermarkVisible"
             :disabled="!canToggleWatermarkVisibility"
-            class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none self-start sm:self-auto"
+            class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none"
             :class="[
               watermarkVisible ? 'bg-primary-500' : 'bg-white/10',
-              !canToggleWatermarkVisibility ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
+              !canToggleWatermarkVisibility ? 'cursor-not-allowed opacity-30' : 'cursor-pointer'
             ]"
             @click="toggleWatermarkVisibility()"
           >
-            <span 
-              class="inline-block h-3 w-3 transform rounded-full bg-white transition-transform"
-              :class="watermarkVisible ? 'translate-x-5' : 'translate-x-1'"
-            />
+            <span class="inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform" :class="watermarkVisible ? 'translate-x-5' : 'translate-x-0.5'" />
           </button>
         </div>
 
-        <div v-if="requiresWatermark" class="px-4 py-3 text-[11px] text-amber-100 bg-amber-500/10">
-          Free exports include the CalendarCreator watermark. Upgrade to unlock full customization.
+        <div v-if="requiresWatermark" class="px-4 py-2 text-[10px] text-amber-200/80 bg-amber-500/10 italic">
+          Upgrade to customize or remove watermarks.
         </div>
 
-        <div class="space-y-4 px-4 py-4" :class="{ 'opacity-50 pointer-events-none': !canCustomizeWatermark }">
+        <div class="p-4 space-y-5" :class="{ 'opacity-40 pointer-events-none grayscale': !canCustomizeWatermark }">
           <div class="space-y-2">
-            <p class="text-[10px] font-semibold text-white/40 uppercase">Mode</p>
+            <p class="text-[10px] font-bold text-white/40 uppercase tracking-widest">Mode</p>
             <div class="grid grid-cols-2 gap-2">
               <button
                 v-for="option in WATERMARK_MODE_OPTIONS"
                 :key="option.id"
                 type="button"
-                class="rounded-xl border px-3 py-2 text-left transition-all"
+                class="rounded-xl border p-2.5 text-left transition-all group/mode"
                 :class="watermarkMode === option.id
-                  ? 'border-primary-500 bg-primary-500/10 text-white'
-                  : 'border-white/10 text-white/70 hover:border-white/30'"
+                  ? 'border-primary-500 bg-primary-500/10'
+                  : 'border-white/5 text-white/60 hover:border-white/20 bg-white/5'"
                 @click="setWatermarkMode(option.id)"
               >
-                <p class="text-xs font-semibold">{{ option.label }}</p>
-                <p class="text-[10px] text-white/40">{{ option.subtitle }}</p>
+                <p class="text-[10px] font-bold uppercase tracking-wide group-hover/mode:text-primary-300 transition-colors" :class="watermarkMode === option.id ? 'text-primary-300' : 'text-white/80'">{{ option.label }}</p>
+                <p class="text-[9px] text-white/30 uppercase mt-0.5">{{ option.subtitle }}</p>
               </button>
             </div>
           </div>
 
           <div v-if="watermarkMode === 'text'" class="space-y-2">
-            <label class="text-[10px] font-semibold text-white/40 uppercase">Watermark text</label>
-            <textarea
-              v-model="watermarkTextValue"
-              rows="2"
-              class="control-glass resize-none"
-              placeholder="Created with CalendarCreator"
-            ></textarea>
-            <p class="text-[10px] text-white/40">Appears in a clean sans-serif font on top of your design.</p>
+            <label class="text-[10px] font-bold text-white/40 uppercase tracking-widest">Watermark Text</label>
+            <textarea v-model="watermarkTextValue" rows="2" class="control-glass text-xs resize-none" placeholder="Enter text..."></textarea>
           </div>
 
           <div v-else class="space-y-3">
-            <label class="text-[10px] font-semibold text-white/40 uppercase">Watermark logo</label>
-            <div class="flex flex-col gap-3 md:flex-row">
-              <div class="flex-1">
-                <div class="aspect-3/2 rounded-xl border border-dashed border-white/20 bg-white/5 flex items-center justify-center overflow-hidden">
-                  <img
-                    v-if="watermarkImageSrc"
-                    :src="watermarkImageSrc"
-                    alt="Watermark preview"
-                    class="max-h-full max-w-full object-contain"
-                  />
-                  <div v-else class="text-[11px] text-white/50 text-center px-6">
-                    Upload or select a logo to use as your watermark.
-                  </div>
-                </div>
-              </div>
-              <div class="flex flex-col gap-2 text-[11px] text-white/80">
-                <button
-                  type="button"
-                  class="rounded-lg border border-white/20 px-3 py-2 text-left hover:border-primary-400 transition-colors"
-                  @click="triggerWatermarkUpload"
-                >
-                  Upload image
-                </button>
-                <button
-                  v-if="brandKitLogoUrl"
-                  type="button"
-                  class="rounded-lg border border-white/10 px-3 py-2 text-left hover:border-primary-400 transition-colors"
-                  @click="useBrandKitLogo"
-                >
-                  Use {{ brandKitName }} logo
-                </button>
-                <button
-                  v-if="watermarkImageSrc"
-                  type="button"
-                  class="rounded-lg border border-white/10 px-3 py-2 text-left text-red-200 hover:border-red-300 hover:text-red-100 transition-colors"
-                  @click="updateWatermark({ imageSrc: undefined, imageId: undefined })"
-                >
-                  Remove logo
-                </button>
+            <div class="flex items-center justify-between">
+              <label class="text-[10px] font-bold text-white/40 uppercase tracking-widest">Logo Image</label>
+              <button type="button" class="text-[9px] font-bold text-primary-400 hover:text-primary-300 uppercase tracking-widest" @click="triggerWatermarkUpload">Upload</button>
+            </div>
+            <div class="aspect-video rounded-xl border border-dashed border-white/10 bg-white/5 flex items-center justify-center overflow-hidden relative group/logo">
+              <img v-if="watermarkImageSrc" :src="watermarkImageSrc" alt="Watermark preview" class="max-h-full max-w-full object-contain p-4" />
+              <div v-else class="text-[10px] text-white/20 uppercase tracking-widest font-bold">No logo selected</div>
+              <div v-if="watermarkImageSrc" class="absolute inset-0 bg-black/60 opacity-0 group-hover/logo:opacity-100 transition-opacity flex items-center justify-center">
+                 <button type="button" class="btn-glass-sm" @click="triggerWatermarkUpload">Change</button>
               </div>
             </div>
-            <input
-              ref="watermarkFileInput"
-              type="file"
-              accept="image/*"
-              class="hidden"
-              @change="handleWatermarkFileChange"
-            />
+            <input ref="watermarkFileInput" type="file" accept="image/*" class="hidden" @change="handleWatermarkFileChange" />
+            <button v-if="brandKitLogoUrl" type="button" class="w-full btn-glass-sm py-2 text-[10px]" @click="useBrandKitLogo">Use {{ brandKitName }} Logo</button>
           </div>
 
-          <div class="space-y-3">
-            <div class="flex flex-col gap-2">
-              <label class="text-[10px] font-semibold text-white/40 uppercase">Size</label>
-              <div class="flex items-center gap-2">
-                <input
-                  v-model.number="watermarkSizePercent"
-                  type="range"
-                  min="10"
-                  max="60"
-                  class="flex-1 h-2 accent-primary-500"
-                />
-                <span class="text-xs text-white/70 w-10 text-right">{{ watermarkSizePercent }}%</span>
+          <div class="pt-2 space-y-4">
+            <PropertyRow>
+              <div class="space-y-1.5">
+                <p class="text-[10px] font-bold text-white/40 uppercase tracking-widest">Size ({{ watermarkSizePercent }}%)</p>
+                <input v-model.number="watermarkSizePercent" type="range" min="5" max="100" class="flex-1 accent-primary-500" />
               </div>
-            </div>
-            <div class="flex flex-col gap-2">
-              <label class="text-[10px] font-semibold text-white/40 uppercase">Opacity</label>
-              <div class="flex items-center gap-2">
-                <input
-                  v-model.number="watermarkOpacityPercent"
-                  type="range"
-                  min="10"
-                  max="100"
-                  class="flex-1 h-2 accent-primary-500"
-                />
-                <span class="text-xs text-white/70 w-10 text-right">{{ watermarkOpacityPercent }}%</span>
+              <div class="space-y-1.5">
+                <p class="text-[10px] font-bold text-white/40 uppercase tracking-widest">Opacity ({{ watermarkOpacityPercent }}%)</p>
+                <input v-model.number="watermarkOpacityPercent" type="range" min="10" max="100" class="flex-1 accent-primary-500" />
               </div>
-              <p class="text-[10px] text-white/40">Free tier locks opacity at 60%.</p>
-            </div>
-          </div>
+            </PropertyRow>
 
-          <div class="space-y-2">
-            <label class="text-[10px] font-semibold text-white/40 uppercase">Position</label>
-            <div class="grid grid-cols-3 gap-2">
-              <button
-                v-for="preset in availableWatermarkPresets"
-                :key="preset.value"
-                type="button"
-                class="rounded-lg border px-3 py-2 text-xs font-medium transition-all"
-                :class="watermarkPreset === preset.value
-                  ? 'border-primary-500 bg-primary-500/10 text-white'
-                  : 'border-white/10 text-white/60 hover:border-white/30'"
-                @click="selectWatermarkPreset(preset.value)"
-              >
-                {{ preset.label }}
-              </button>
-            </div>
-          </div>
-
-          <div v-if="watermarkPreset === 'custom'" class="space-y-3">
-            <div class="flex flex-col gap-2">
-              <label class="text-[10px] font-semibold text-white/40 uppercase">Horizontal offset</label>
-              <div class="flex items-center gap-2">
-                <input
-                  v-model.number="watermarkCustomX"
-                  type="range"
-                  min="0"
-                  max="100"
-                  class="flex-1 h-2 accent-primary-500"
-                />
-                <span class="text-xs text-white/70 w-10 text-right">{{ watermarkCustomX }}%</span>
+            <div class="space-y-2">
+              <p class="text-[10px] font-bold text-white/40 uppercase tracking-widest">Position Preset</p>
+              <div class="grid grid-cols-3 gap-1.5">
+                <button
+                  v-for="preset in availableWatermarkPresets"
+                  :key="preset.value"
+                  type="button"
+                  class="rounded-lg border px-2 py-1.5 text-[9px] font-bold uppercase tracking-wider transition-all"
+                  :class="watermarkPreset === preset.value
+                    ? 'border-primary-500 bg-primary-500/10 text-primary-300'
+                    : 'border-white/5 text-white/40 hover:border-white/20 bg-white/5'"
+                  @click="selectWatermarkPreset(preset.value as any)"
+                >
+                  {{ preset.label }}
+                </button>
               </div>
             </div>
-            <div class="flex flex-col gap-2">
-              <label class="text-[10px] font-semibold text-white/40 uppercase">Vertical offset</label>
-              <div class="flex items-center gap-2">
-                <input
-                  v-model.number="watermarkCustomY"
-                  type="range"
-                  min="0"
-                  max="100"
-                  class="flex-1 h-2 accent-primary-500"
-                />
-                <span class="text-xs text-white/70 w-10 text-right">{{ watermarkCustomY }}%</span>
+
+            <div v-if="watermarkPreset === 'custom'" class="grid grid-cols-2 gap-3 pt-1">
+              <div class="space-y-1.5">
+                 <p class="text-[9px] font-bold text-white/30 uppercase tracking-widest">X Offset ({{ watermarkCustomX }}%)</p>
+                 <input v-model.number="watermarkCustomX" type="range" min="0" max="100" class="w-full h-1 accent-primary-500 bg-white/5 rounded-lg appearance-none cursor-pointer" />
+              </div>
+              <div class="space-y-1.5">
+                 <p class="text-[9px] font-bold text-white/30 uppercase tracking-widest">Y Offset ({{ watermarkCustomY }}%)</p>
+                 <input v-model.number="watermarkCustomY" type="range" min="0" max="100" class="w-full h-1 accent-primary-500 bg-white/5 rounded-lg appearance-none cursor-pointer" />
               </div>
             </div>
           </div>
         </div>
       </div>
-    </section>
+    </PropertySection>
   </div>
 </template>
-
-<style scoped>
-.control-glass {
-  width: 100%;
-  background-color: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 0.5rem;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.875rem;
-  line-height: 1.25rem;
-  color: white;
-  transition-property: all;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  transition-duration: 150ms;
-  outline: none;
-}
-
-.control-glass::placeholder {
-  color: rgba(255, 255, 255, 0.2);
-}
-
-.control-glass:focus {
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
-}
-
-.control-glass-sm {
-  background-color: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 0.5rem;
-  padding: 0.25rem 0.5rem;
-  font-size: 0.75rem;
-  line-height: 1rem;
-  color: white;
-  transition-property: all;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  transition-duration: 150ms;
-  outline: none;
-}
-
-.control-glass-sm::placeholder {
-  color: rgba(255, 255, 255, 0.2);
-}
-
-.control-glass-sm:focus {
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
-}
-</style>
