@@ -267,6 +267,7 @@ export interface WeekStripMetadata {
   startDate: string
   startDay: WeekDay
   label?: string
+  showHeader?: boolean
   backgroundColor?: string
   borderColor?: string
   borderWidth?: number
@@ -358,6 +359,8 @@ export interface PlannerNoteMetadata {
   title: string
   accentColor: string
   headerStyle?: PlannerHeaderStyle
+  showHeader?: boolean
+  headerHeight?: number
   titleAlign?: 'left' | 'center' | 'right'
   backgroundColor?: string
   borderColor?: string
@@ -385,6 +388,8 @@ export interface ScheduleMetadata {
   endHour: number
   intervalMinutes: 30 | 60
   headerStyle?: PlannerHeaderStyle
+  showHeader?: boolean
+  headerHeight?: number
   titleAlign?: 'left' | 'center' | 'right'
   backgroundColor?: string
   borderColor?: string
@@ -411,6 +416,8 @@ export interface ChecklistMetadata {
   rows: number
   showCheckboxes: boolean
   headerStyle?: PlannerHeaderStyle
+  showHeader?: boolean
+  headerHeight?: number
   titleAlign?: 'left' | 'center' | 'right'
   backgroundColor?: string
   borderColor?: string

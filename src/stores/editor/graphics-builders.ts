@@ -547,7 +547,9 @@ export function buildWeekStripGraphics(
   const computeHeaderHeight = (targetHeight: number): number =>
     Math.min(Math.max(40, Math.round(labelFontSize + 24)), Math.max(44, Math.round(targetHeight * 0.45)))
   const startDate = new Date(metadata.startDate)
+  const normalizedStartDay = typeof metadata.startDay === 'number' ? metadata.startDay : 0
   const isBlank = metadata.mode === 'blank'
+  const showHeader = metadata.showHeader !== false
   // Get holidays for both the start year and end year (in case week spans two years like Dec 28 - Jan 3)
   const endDate = new Date(startDate)
   endDate.setDate(endDate.getDate() + 6)
@@ -561,16 +563,31 @@ export function buildWeekStripGraphics(
       holidaysForYear = [...holidaysForYear, ...nextYearHolidays]
     }
   }
+  const blankWeekStart = (() => {
+    if (!isBlank) return null
+    const alignedStart = new Date(startDate)
+    const startWeekday = alignedStart.getDay()
+    const offset = (startWeekday - normalizedStartDay + 7) % 7
+    if (!Number.isNaN(offset)) {
+      alignedStart.setDate(alignedStart.getDate() - offset)
+    }
+    return alignedStart
+  })()
+
   const days = isBlank
-    ? (Array.from({ length: 7 }, () => ({
-        date: new Date(startDate),
-        dayOfMonth: 0,
-        isCurrentMonth: false,
-        isToday: false,
-        isWeekend: false,
-        weekNumber: 0,
-        holidays: [],
-      })) as WeekStripDay[])
+    ? (Array.from({ length: 7 }, (_, index) => {
+        const date = new Date((blankWeekStart ?? startDate).getTime())
+        date.setDate((blankWeekStart ?? startDate).getDate() + index)
+        return {
+          date,
+          dayOfMonth: 0,
+          isCurrentMonth: false,
+          isToday: false,
+          isWeekend: false,
+          weekNumber: 0,
+          holidays: [],
+        }
+      }) as WeekStripDay[])
     : (calendarGeneratorService.generateWeek(startDate, holidaysForYear, metadata.startDay) as WeekStripDay[])
 
   const holidayEntries = isBlank
@@ -598,7 +615,7 @@ export function buildWeekStripGraphics(
 
   if (!reserveSpaceForList) {
     const estimatedListSpace = Math.max(48, Math.min(height * 0.6, configuredListHeight))
-    const headerForBase = computeHeaderHeight(height)
+    const headerForBase = showHeader ? computeHeaderHeight(height) : 0
     const basePadding = Math.max(12, Math.round(height * 0.12))
     const baseBodyMin =
       height > 140 ? Math.max(56, Math.round(height * 0.28)) : Math.max(32, Math.round(height * 0.25))
@@ -606,8 +623,11 @@ export function buildWeekStripGraphics(
     height = Math.max(minContentHeight, height - estimatedListSpace)
   }
 
-  const headerHeight = computeHeaderHeight(height)
-  const labelTop = Math.max(12, Math.min(20, Math.round((headerHeight - labelFontSize) / 2)))
+  const headerHeight = showHeader ? computeHeaderHeight(height) : 0
+  const labelTop =
+    showHeader && headerHeight > 0
+      ? Math.max(12, Math.min(20, Math.round((headerHeight - labelFontSize) / 2)))
+      : 0
 
   // Calculate layout assuming holidays might be shown to prevent layout shifts
   const paddingBottomBase = Math.max(12, Math.round(height * 0.12))
@@ -636,18 +656,20 @@ export function buildWeekStripGraphics(
     )
   }
 
-  objects.push(
-    new Textbox(label, {
-      left: paddingX,
-      top: labelTop,
-      width: width - paddingX * 2,
-      fontSize: labelFontSize,
-      fontFamily: labelFontFamily,
-      fontWeight: labelFontWeight,
-      fill: labelColor,
-      selectable: false,
-    }),
-  )
+  if (showHeader) {
+    objects.push(
+      new Textbox(label, {
+        left: paddingX,
+        top: labelTop,
+        width: width - paddingX * 2,
+        fontSize: labelFontSize,
+        fontFamily: labelFontFamily,
+        fontWeight: labelFontWeight,
+        fill: labelColor,
+        selectable: false,
+      }),
+    )
+  }
 
   const weekdayRowHeightRaw = Math.max(18, Math.round(height * 0.16))
   const weekdayRowHeight = Math.max(
@@ -665,8 +687,16 @@ export function buildWeekStripGraphics(
   if (weekdayRowHeight > 0) {
     const weekdayFontSizeEff = Math.min(weekdayFontSize, Math.max(8, Math.floor(weekdayRowHeight * 0.55)))
     const weekdayTextTop = headerHeight + Math.max(0, (weekdayRowHeight - weekdayFontSizeEff) / 2)
+    const weekdayLabels = calendarGeneratorService.getWeekdayNames(
+      normalizedStartDay,
+      metadata.language || 'en',
+      'short',
+    ) as string[]
     days.forEach((day: WeekStripDay, index: number) => {
-      const dayName = day.date.toLocaleDateString(metadata.language || 'en', { weekday: 'short' }).toUpperCase()
+      const weekdayLabel = weekdayLabels[index % weekdayLabels.length] ?? ''
+      const dayName = isBlank
+        ? weekdayLabel.toUpperCase()
+        : day.date.toLocaleDateString(metadata.language || 'en', { weekday: 'short' }).toUpperCase()
       objects.push(
         new Textbox(dayName, {
           left: index * cellWidth + cellInsetX,
@@ -1367,11 +1397,13 @@ export function buildPlannerNoteGraphics(metadata: PlannerNoteMetadata): Group {
   const showBackground = metadata.showBackground !== false
   const showBorder = metadata.showBorder !== false
   const headerStyle = metadata.headerStyle ?? (metadata.pattern === 'hero' ? 'filled' : 'minimal')
+  const showHeader = metadata.showHeader !== false
+  const customHeaderHeight = metadata.headerHeight ?? 50
 
   const paddingX = 24
-  const paddingTop = 18
-  const headerHeight = headerStyle === 'none' ? 0 : 48
-  const bodyTop = paddingTop + (headerStyle === 'none' ? 18 : headerHeight)
+  const paddingTop = showHeader && headerStyle !== 'none' ? 18 : 12
+  const headerHeight = !showHeader || headerStyle === 'none' ? 0 : customHeaderHeight
+  const bodyTop = !showHeader || headerStyle === 'none' ? paddingTop : paddingTop + headerHeight
   const headerRectRadius = Math.min(cornerRadius, 12)
 
   if (showBackground || showBorder) {
@@ -1388,7 +1420,7 @@ export function buildPlannerNoteGraphics(metadata: PlannerNoteMetadata): Group {
     )
   }
 
-  if (headerStyle === 'filled' || headerStyle === 'tint') {
+  if (showHeader && (headerStyle === 'filled' || headerStyle === 'tint')) {
     const fill = metadata.headerBackgroundColor ?? metadata.accentColor
     const opacity =
       headerStyle === 'filled'
@@ -1409,21 +1441,23 @@ export function buildPlannerNoteGraphics(metadata: PlannerNoteMetadata): Group {
 
   const titleColor = metadata.titleColor ?? (headerStyle === 'filled' ? '#ffffff' : '#0f172a')
 
-  objects.push(
-    new Textbox(metadata.title, {
-      left: paddingX,
-      top: paddingTop + (headerStyle === 'none' ? 2 : 12),
-      width: width - paddingX * 2,
-      fontSize: 15,
-      fontFamily: 'Inter',
-      fontWeight: 700,
-      fill: titleColor,
-      textAlign: metadata.titleAlign ?? 'left',
-      selectable: false,
-    }),
-  )
+  if (showHeader && headerStyle !== 'none') {
+    objects.push(
+      new Textbox(metadata.title, {
+        left: paddingX,
+        top: paddingTop + 12,
+        width: width - paddingX * 2,
+        fontSize: 15,
+        fontFamily: 'Inter',
+        fontWeight: 700,
+        fill: titleColor,
+        textAlign: metadata.titleAlign ?? 'left',
+        selectable: false,
+      }),
+    )
+  }
 
-  if (headerStyle === 'minimal') {
+  if (showHeader && headerStyle === 'minimal') {
     objects.push(
       new Line([paddingX, paddingTop + 34, width - paddingX, paddingTop + 34], {
         stroke: metadata.accentColor,
@@ -1437,9 +1471,17 @@ export function buildPlannerNoteGraphics(metadata: PlannerNoteMetadata): Group {
   if (metadata.pattern === 'ruled') {
     const guideColor = metadata.guideColor ?? '#e2e8f0'
     const guideWidth = Math.max(0.5, metadata.guideWidth ?? 1)
-    for (let y = bodyTop + 16; y < height - 24; y += 26) {
+    const contentPadding = showHeader && headerStyle !== 'none' ? 16 : 6
+    const lineSpacing = 26
+    const availableHeight = height - bodyTop - contentPadding - 16
+    const numLines = Math.floor(availableHeight / lineSpacing)
+    const totalLinesHeight = (numLines - 1) * lineSpacing
+    const startY = bodyTop + contentPadding + (availableHeight - totalLinesHeight) / 2
+
+    for (let i = 0; i < numLines; i++) {
+      const y = startY + i * lineSpacing
       objects.push(
-        new Line([24, y, width - 24, y], {
+        new Line([16, y, width - 16, y], {
           stroke: guideColor,
           strokeWidth: guideWidth,
           selectable: false,
@@ -1451,18 +1493,37 @@ export function buildPlannerNoteGraphics(metadata: PlannerNoteMetadata): Group {
   if (metadata.pattern === 'grid') {
     const guideColor = metadata.guideColor ?? '#eff6ff'
     const guideWidth = Math.max(0.5, metadata.guideWidth ?? 1)
-    for (let x = 24; x < width - 24; x += 24) {
+    const contentPadding = showHeader && headerStyle !== 'none' ? 6 : 4
+    const gridSpacing = 20
+    const edgeMargin = 16
+    const availableWidth = width - 2 * edgeMargin
+    const availableHeight = height - bodyTop - contentPadding - 16
+    
+    const cols = Math.floor(availableWidth / gridSpacing)
+    const rows = Math.floor(availableHeight / gridSpacing)
+    
+    const gridWidth = cols * gridSpacing
+    const gridHeight = rows * gridSpacing
+    
+    const startX = edgeMargin + (availableWidth - gridWidth) / 2
+    const startY = bodyTop + contentPadding + (availableHeight - gridHeight) / 2
+    
+    // Horizontal lines
+    for (let i = 0; i <= rows; i++) {
+      const y = startY + i * gridSpacing
       objects.push(
-        new Line([x, bodyTop + 6, x, height - 24], {
+        new Line([startX, y, startX + gridWidth, y], {
           stroke: guideColor,
           strokeWidth: guideWidth,
           selectable: false,
         }),
       )
     }
-    for (let y = bodyTop + 6; y < height - 24; y += 24) {
+    // Vertical lines
+    for (let i = 0; i <= cols; i++) {
+      const x = startX + i * gridSpacing
       objects.push(
-        new Line([24, y, width - 24, y], {
+        new Line([x, startY, x, startY + gridHeight], {
           stroke: guideColor,
           strokeWidth: guideWidth,
           selectable: false,
@@ -1474,12 +1535,27 @@ export function buildPlannerNoteGraphics(metadata: PlannerNoteMetadata): Group {
   if (metadata.pattern === 'dot') {
     const dotColor = metadata.dotColor ?? metadata.guideColor ?? '#cbd5f5'
     const dotSize = Math.max(1, Math.min(8, metadata.guideWidth ?? 2))
-    for (let x = 28; x < width - 28; x += 20) {
-      for (let y = bodyTop + 16; y < height - 28; y += 20) {
+    const contentPadding = showHeader && headerStyle !== 'none' ? 12 : 6
+    const edgeMargin = 16
+    const spacing = 18
+    const availableWidth = width - 2 * edgeMargin
+    const availableHeight = height - bodyTop - contentPadding - 16
+    
+    const cols = Math.floor(availableWidth / spacing)
+    const rows = Math.floor(availableHeight / spacing)
+    
+    const gridWidth = (cols - 1) * spacing
+    const gridHeight = (rows - 1) * spacing
+    
+    const startX = edgeMargin + (availableWidth - gridWidth) / 2
+    const startY = bodyTop + contentPadding + (availableHeight - gridHeight) / 2
+
+    for (let i = 0; i < cols; i++) {
+      for (let j = 0; j < rows; j++) {
         objects.push(
           new Rect({
-            left: x,
-            top: y,
+            left: startX + i * spacing,
+            top: startY + j * spacing,
             width: dotSize,
             height: dotSize,
             rx: dotSize / 2,
@@ -1512,8 +1588,10 @@ export function buildScheduleGraphics(metadata: ScheduleMetadata): Group {
   const showBackground = metadata.showBackground !== false
   const showBorder = metadata.showBorder !== false
   const headerStyle = metadata.headerStyle ?? 'minimal'
-  const headerHeight = headerStyle === 'none' ? 0 : 48
-  const bodyTop = paddingTop + (headerStyle === 'none' ? 18 : headerHeight)
+  const showHeader = metadata.showHeader !== false
+  const customHeaderHeight = metadata.headerHeight ?? 50
+  const headerHeight = !showHeader || headerStyle === 'none' ? 0 : customHeaderHeight
+  const bodyTop = paddingTop + (!showHeader || headerStyle === 'none' ? 18 : headerHeight)
   const headerRectRadius = Math.min(cornerRadius, 12)
 
   if (showBackground || showBorder) {
@@ -1530,7 +1608,7 @@ export function buildScheduleGraphics(metadata: ScheduleMetadata): Group {
     )
   }
 
-  if (headerStyle === 'filled' || headerStyle === 'tint') {
+  if (showHeader && (headerStyle === 'filled' || headerStyle === 'tint')) {
     const fill = metadata.headerBackgroundColor ?? metadata.accentColor
     const opacity =
       headerStyle === 'filled'
@@ -1550,21 +1628,23 @@ export function buildScheduleGraphics(metadata: ScheduleMetadata): Group {
 
   const titleColor = metadata.titleColor ?? (headerStyle === 'filled' ? '#ffffff' : '#0f172a')
 
-  objects.push(
-    new Textbox(metadata.title, {
-      left: paddingX,
-      top: paddingTop + (headerStyle === 'none' ? 2 : 12),
-      width: width - paddingX * 2,
-      fontSize: 15,
-      fontFamily: 'Inter',
-      fontWeight: 700,
-      fill: titleColor,
-      textAlign: metadata.titleAlign ?? 'left',
-      selectable: false,
-    }),
-  )
+  if (showHeader && headerStyle !== 'none') {
+    objects.push(
+      new Textbox(metadata.title, {
+        left: paddingX,
+        top: paddingTop + 12,
+        width: width - paddingX * 2,
+        fontSize: 15,
+        fontFamily: 'Inter',
+        fontWeight: 700,
+        fill: titleColor,
+        textAlign: metadata.titleAlign ?? 'left',
+        selectable: false,
+      }),
+    )
+  }
 
-  if (headerStyle === 'minimal') {
+  if (showHeader && headerStyle === 'minimal') {
     objects.push(
       new Line([paddingX, paddingTop + 34, width - paddingX, paddingTop + 34], {
         stroke: metadata.accentColor,
@@ -1637,8 +1717,10 @@ export function buildChecklistGraphics(metadata: ChecklistMetadata): Group {
   const showBackground = metadata.showBackground !== false
   const showBorder = metadata.showBorder !== false
   const headerStyle = metadata.headerStyle ?? 'tint'
-  const headerHeight = headerStyle === 'none' ? 0 : 48
-  const bodyTop = paddingTop + (headerStyle === 'none' ? 18 : headerHeight)
+  const showHeader = metadata.showHeader !== false
+  const customHeaderHeight = metadata.headerHeight ?? 50
+  const headerHeight = !showHeader || headerStyle === 'none' ? 0 : customHeaderHeight
+  const bodyTop = paddingTop + (!showHeader || headerStyle === 'none' ? 18 : headerHeight)
   const headerRectRadius = Math.min(cornerRadius, 12)
 
   if (showBackground || showBorder) {
@@ -1655,7 +1737,7 @@ export function buildChecklistGraphics(metadata: ChecklistMetadata): Group {
     )
   }
 
-  if (headerStyle === 'filled' || headerStyle === 'tint') {
+  if (showHeader && (headerStyle === 'filled' || headerStyle === 'tint')) {
     const fill = metadata.headerBackgroundColor ?? metadata.accentColor
     const opacity =
       headerStyle === 'filled'
@@ -1675,21 +1757,23 @@ export function buildChecklistGraphics(metadata: ChecklistMetadata): Group {
 
   const titleColor = metadata.titleColor ?? (headerStyle === 'filled' ? '#ffffff' : '#0f172a')
 
-  objects.push(
-    new Textbox(metadata.title, {
-      left: paddingX,
-      top: paddingTop + (headerStyle === 'none' ? 2 : 12),
-      width: width - paddingX * 2,
-      fontSize: 15,
-      fontFamily: 'Inter',
-      fontWeight: 700,
-      fill: titleColor,
-      textAlign: metadata.titleAlign ?? 'left',
-      selectable: false,
-    }),
-  )
+  if (showHeader && headerStyle !== 'none') {
+    objects.push(
+      new Textbox(metadata.title, {
+        left: paddingX,
+        top: paddingTop + 12,
+        width: width - paddingX * 2,
+        fontSize: 15,
+        fontFamily: 'Inter',
+        fontWeight: 700,
+        fill: titleColor,
+        textAlign: metadata.titleAlign ?? 'left',
+        selectable: false,
+      }),
+    )
+  }
 
-  if (headerStyle === 'minimal') {
+  if (showHeader && headerStyle === 'minimal') {
     objects.push(
       new Line([paddingX, paddingTop + 34, width - paddingX, paddingTop + 34], {
         stroke: metadata.accentColor,

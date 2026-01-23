@@ -655,6 +655,34 @@ const patternVariantOptions = [
             <option v-for="opt in titleAlignOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
           </select>
         </div>
+        <div class="flex flex-wrap items-center gap-4 text-xs text-white/80">
+          <label class="flex items-center gap-2">
+            <input 
+              type="checkbox" 
+              class="accent-primary-400" 
+              :checked="scheduleMetadata.showHeader !== false" 
+              :disabled="!isPro"
+              @change="updateScheduleMetadata((draft) => { draft.showHeader = ($event.target as HTMLInputElement).checked })" 
+            />
+            <span>Show header</span>
+          </label>
+        </div>
+        <div v-if="scheduleMetadata.showHeader !== false">
+          <label class="text-xs font-medium text-white/60 mb-1.5 block">Header height</label>
+          <div class="flex items-center gap-3">
+            <input
+              type="range"
+              min="30"
+              max="100"
+              step="5"
+              class="flex-1 accent-primary-400"
+              :value="scheduleMetadata.headerHeight ?? 50"
+              :disabled="!isPro"
+              @input="updateScheduleMetadata((draft) => { draft.headerHeight = Number(($event.target as HTMLInputElement).value) })"
+            />
+            <span class="text-xs text-white/70 w-12 text-right">{{ scheduleMetadata.headerHeight ?? 50 }}px</span>
+          </div>
+        </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="text-xs font-medium text-white/60 mb-1.5 block">Accent</label>
@@ -825,6 +853,34 @@ const patternVariantOptions = [
           >
             <option v-for="opt in titleAlignOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
           </select>
+        </div>
+        <div class="flex flex-wrap items-center gap-4 text-xs text-white/80">
+          <label class="flex items-center gap-2">
+            <input 
+              type="checkbox" 
+              class="accent-primary-400" 
+              :checked="checklistMetadata.showHeader !== false" 
+              :disabled="!isPro"
+              @change="updateChecklistMetadata((draft) => { draft.showHeader = ($event.target as HTMLInputElement).checked })" 
+            />
+            <span>Show header</span>
+          </label>
+        </div>
+        <div v-if="checklistMetadata.showHeader !== false">
+          <label class="text-xs font-medium text-white/60 mb-1.5 block">Header height</label>
+          <div class="flex items-center gap-3">
+            <input
+              type="range"
+              min="30"
+              max="100"
+              step="5"
+              class="flex-1 accent-primary-400"
+              :value="checklistMetadata.headerHeight ?? 50"
+              :disabled="!isPro"
+              @input="updateChecklistMetadata((draft) => { draft.headerHeight = Number(($event.target as HTMLInputElement).value) })"
+            />
+            <span class="text-xs text-white/70 w-12 text-right">{{ checklistMetadata.headerHeight ?? 50 }}px</span>
+          </div>
         </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
@@ -1014,6 +1070,34 @@ const patternVariantOptions = [
           >
             <option v-for="opt in titleAlignOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
           </select>
+        </div>
+        <div class="flex flex-wrap items-center gap-4 text-xs text-white/80">
+          <label class="flex items-center gap-2">
+            <input 
+              type="checkbox" 
+              class="accent-primary-400" 
+              :checked="notesPanelMetadata.showHeader !== false" 
+              :disabled="!isPro"
+              @change="updateNotesPanelMetadata((draft) => { draft.showHeader = ($event.target as HTMLInputElement).checked })" 
+            />
+            <span>Show header</span>
+          </label>
+        </div>
+        <div v-if="notesPanelMetadata.showHeader !== false">
+          <label class="text-xs font-medium text-white/60 mb-1.5 block">Header height</label>
+          <div class="flex items-center gap-3">
+            <input
+              type="range"
+              min="30"
+              max="100"
+              step="5"
+              class="flex-1 accent-primary-400"
+              :value="notesPanelMetadata.headerHeight ?? 50"
+              :disabled="!isPro"
+              @input="updateNotesPanelMetadata((draft) => { draft.headerHeight = Number(($event.target as HTMLInputElement).value) })"
+            />
+            <span class="text-xs text-white/70 w-12 text-right">{{ notesPanelMetadata.headerHeight ?? 50 }}px</span>
+          </div>
         </div>
         <div>
           <label class="text-xs font-medium text-white/60 mb-1.5 block">Accent</label>

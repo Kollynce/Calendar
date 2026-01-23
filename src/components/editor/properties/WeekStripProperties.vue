@@ -94,6 +94,16 @@ const weekStripDateValue = computed(() =>
       />
     </div>
 
+    <label class="flex items-center gap-2 text-sm text-white/80">
+      <input
+        type="checkbox"
+        class="accent-primary-400"
+        :checked="weekStripMetadata.showHeader !== false"
+        @change="updateWeekStripMetadata((draft) => { draft.showHeader = ($event.target as HTMLInputElement).checked })"
+      />
+      <span>Show header</span>
+    </label>
+
     <div class="grid grid-cols-2 gap-3">
       <div>
         <label class="text-xs font-medium text-white/60 mb-1.5 block">Start date</label>

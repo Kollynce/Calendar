@@ -140,6 +140,7 @@ export function getDefaultWeekStripMetadata(
     startDate: overrides.startDate ?? getISODateString(),
     startDay: overrides.startDay ?? 0,
     label: overrides.label ?? 'Week Plan',
+    showHeader: overrides.showHeader ?? true,
     backgroundColor: overrides.backgroundColor ?? '#ffffff',
     borderColor: overrides.borderColor ?? '#e5e7eb',
     borderWidth: overrides.borderWidth ?? 1,
