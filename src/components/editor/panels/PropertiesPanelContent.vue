@@ -830,7 +830,7 @@ function isSectionOpen(id: string) {
                 :model-value="(notesPanelMetadata.pattern === 'dot' ? notesPanelMetadata.dotColor : notesPanelMetadata.guideColor) ?? '#e2e8f0'" 
                 :disabled="!isPro"
                 @update:modelValue="(c: string) => {
-                  if (notesPanelMetadata.pattern === 'dot') updateNotesPanelMetadata(d => { d.dotColor = c; d.guideColor = c });
+                  if (notesPanelMetadata?.pattern === 'dot') updateNotesPanelMetadata(d => { d.dotColor = c; d.guideColor = c });
                   else updateNotesPanelMetadata(d => d.guideColor = c);
                 }" 
               />

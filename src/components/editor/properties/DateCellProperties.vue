@@ -9,7 +9,6 @@ import { localizationService } from '@/services/calendar/localization.service'
 import { countries } from '@/data/countries'
 import type { DateCellMetadata } from '@/types'
 
-import AppTierBadge from '@/components/ui/AppTierBadge.vue'
 import { useAuthStore } from '@/stores'
 
 interface Props {
