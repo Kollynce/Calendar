@@ -159,6 +159,76 @@ class PDFExportService {
     }
   }
 
+  addTiledImages(pdf: jsPDF, dataUrls: string[], config: ExportConfig, addPage: boolean): void {
+    const { paperSize, orientation, bleed, cropMarks, layoutPreset, itemsPerSheet } = config
+    const dimensions = this.getPaperDimensions(paperSize, orientation)
+
+    if (addPage) {
+      pdf.addPage()
+    }
+
+    const targetTiles = Math.max(1, itemsPerSheet ?? dataUrls.length)
+
+    // Choose grid based on preset when available (A5 two-up = 2x1 landscape or 1x2 portrait; A6 four-up = 2x2)
+    let cols: number
+    let rows: number
+    switch (layoutPreset) {
+      case 'A5-2up':
+        if (orientation === 'portrait') {
+          cols = 1
+          rows = 2
+        } else {
+          cols = 2
+          rows = 1
+        }
+        break
+      case 'A6-4up':
+        cols = 2
+        rows = 2
+        break
+      default: {
+        cols = Math.ceil(Math.sqrt(targetTiles))
+        rows = Math.ceil(targetTiles / cols)
+      }
+    }
+
+    const cellWidth = dimensions.width / cols
+    const cellHeight = dimensions.height / rows
+    const padding = Math.min(cellWidth, cellHeight) * 0.03
+
+    dataUrls.forEach((url, idx) => {
+      const col = idx % cols
+      const row = Math.floor(idx / cols)
+      const x = bleed + col * cellWidth + padding
+      const y = bleed + row * cellHeight + padding
+      const availableW = cellWidth - padding * 2
+      const availableH = cellHeight - padding * 2
+
+      // Fit while preserving aspect ratio
+      // We don't know intrinsic size here; let jsPDF scale by provided target keeping aspect.
+      // Provide max dimensions, letting pdf.addImage preserve ratio.
+      // For PDF, we use the already-rotated image data from buildRotatedDataUrl
+      // So we don't need to swap dimensions or use jsPDF's rotation parameter
+      const targetW = availableW
+      const targetH = availableH
+      
+      // Use the rotated image data directly, no jsPDF rotation needed
+      pdf.addImage(url, 'PNG', x, y, targetW, targetH, undefined, 'FAST')
+    })
+
+    if (cropMarks) {
+      if (layoutPreset && (layoutPreset === 'A5-2up' || layoutPreset === 'A6-4up')) {
+        this.addCropMarksForLayout(pdf, dimensions, bleed, cols, rows)
+      } else {
+        this.addCropMarks(pdf, dimensions, bleed)
+      }
+    }
+
+    if (config.safeZone) {
+      this.addSafeZoneMarks(pdf, dimensions, bleed)
+    }
+  }
+
   /**
    * Export multi-page PDF (e.g., monthly calendar)
    */
@@ -242,6 +312,54 @@ class PDFExportService {
     // Bottom-right corner
     pdf.line(right + markOffset, bottom, right + markOffset + markLength, bottom)
     pdf.line(right, bottom + markOffset, right, bottom + markOffset + markLength)
+  }
+
+  /**
+   * Add crop marks for tiled layouts (A5-2up, A6-4up) around each tile
+   */
+  private addCropMarksForLayout(
+    pdf: jsPDF,
+    dimensions: { width: number; height: number },
+    bleed: number,
+    cols: number,
+    rows: number
+  ): void {
+    const markLength = 4 // mm
+    const markOffset = 1.5 // mm from tile edge
+    const padding = Math.min(dimensions.width / cols, dimensions.height / rows) * 0.03
+
+    pdf.setDrawColor(0, 0, 0)
+    pdf.setLineWidth(0.2)
+
+    const cellWidth = dimensions.width / cols
+    const cellHeight = dimensions.height / rows
+
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        const x = bleed + col * cellWidth + padding
+        const y = bleed + row * cellHeight + padding
+        const tileW = cellWidth - padding * 2
+        const tileH = cellHeight - padding * 2
+
+        // Top-left
+        pdf.line(x - markOffset - markLength, y, x - markOffset, y)
+        pdf.line(x, y - markOffset - markLength, x, y - markOffset)
+
+        // Top-right
+        const right = x + tileW
+        pdf.line(right + markOffset, y, right + markOffset + markLength, y)
+        pdf.line(right, y - markOffset - markLength, right, y - markOffset)
+
+        // Bottom-left
+        const bottom = y + tileH
+        pdf.line(x - markOffset - markLength, bottom, x - markOffset, bottom)
+        pdf.line(x, bottom + markOffset, x, bottom + markOffset + markLength)
+
+        // Bottom-right
+        pdf.line(right + markOffset, bottom, right + markOffset + markLength, bottom)
+        pdf.line(right, bottom + markOffset, right, bottom + markOffset + markLength)
+      }
+    }
   }
 
   /**

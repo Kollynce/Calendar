@@ -10,6 +10,19 @@ export interface ExportConfig {
   transparent: boolean
   pages: 'all' | 'current' | number[]
   includeUserObjectsAllMonths?: boolean
+  /**
+   * Optional rotation applied when tiling images (e.g., rotate landscape canvas into portrait sheet)
+   */
+  tileRotation?: number
+  /**
+   * Optional layout preset describing how many items to place per printed sheet
+   * (e.g., A4 single, A5 two-up on A4, A6 four-up on A4)
+   */
+  layoutPreset?: ExportLayoutPreset
+  /**
+   * Hint for server/client exporters on how many calendar items to tile on a single sheet
+   */
+  itemsPerSheet?: number
 }
 
 export type ExportFormat = 'pdf' | 'png' | 'jpg' | 'svg' | 'tiff'
@@ -28,6 +41,8 @@ export type PaperSize =
   | 'A4' | 'A3' | 'A2' | 'A1' | 'A0'
   | 'Letter' | 'Legal' | 'Tabloid'
   | 'custom'
+
+export type ExportLayoutPreset = 'A4-1up' | 'A5-2up' | 'A6-4up'
 
 export interface PaperDimensions {
   width: number

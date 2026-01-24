@@ -60,6 +60,8 @@ export const useExportStore = defineStore('export', () => {
     transparent: false,
     pages: 'current',
     includeUserObjectsAllMonths: true,
+    layoutPreset: 'A4-1up',
+    itemsPerSheet: 1,
   })
 
   const exporting = ref(false)
@@ -166,6 +168,35 @@ export const useExportStore = defineStore('export', () => {
 
     if (next.format !== 'pdf' && next.pages !== 'current') {
       next.pages = 'current'
+    }
+
+    if (next.layoutPreset) {
+      // Simple defaults: A4 sheet with 1, 2, or 4 items
+      if (!next.itemsPerSheet) {
+        next.itemsPerSheet = next.layoutPreset === 'A6-4up' ? 4 : next.layoutPreset === 'A5-2up' ? 2 : 1
+      }
+      if (!updates.paperSize) {
+        next.paperSize = 'A4'
+      }
+      // Do not force orientation when switching presets; allow canvas-based inference to decide
+      if (!updates.orientation && !config.value.layoutPreset) {
+        if (next.layoutPreset === 'A5-2up') {
+          next.orientation = 'landscape'
+        } else if (next.layoutPreset === 'A6-4up') {
+          next.orientation = 'portrait'
+        }
+      }
+
+      // Rotate landscape canvas into portrait sheet for 4-up tiling
+      if (next.layoutPreset === 'A6-4up') {
+        const size = (editorStore as any)?.canvasSize
+        const cw = size?.width
+        const ch = size?.height
+        const isLandscapeCanvas = Number.isFinite(cw) && Number.isFinite(ch) && cw > ch
+        next.tileRotation = isLandscapeCanvas ? 90 : 0
+      } else {
+        next.tileRotation = undefined
+      }
     }
 
     if (next.format === 'pdf' && Array.isArray(next.pages)) {
@@ -334,11 +365,58 @@ export const useExportStore = defineStore('export', () => {
       return exportAsYearPDF(months)
     }
 
-    return pdfExportService.exportFromFabricCanvas(
-      editorStore.canvas,
-      config.value,
-      editorStore.project?.name || 'calendar'
-    )
+    // Current page
+    const itemsPerSheet = Math.max(1, config.value.itemsPerSheet ?? 1)
+    if (itemsPerSheet <= 1) {
+      return pdfExportService.exportFromFabricCanvas(
+        editorStore.canvas,
+        config.value,
+        editorStore.project?.name || 'calendar'
+      )
+    }
+
+    // Tile the same page multiple times on one sheet when requested
+    const multiplier = QUALITY_DPI[config.value.quality] / 72
+    const dataUrl = editorStore.canvas.toDataURL({ format: 'png', multiplier })
+    
+    // Apply rotation if needed for tiling
+    const rotation = config.value.tileRotation ?? 0
+    const rotatedDataUrl = await applyRotationToDataUrl(dataUrl, rotation)
+    
+    const pdf = pdfExportService.createPDFDocument(config.value)
+    const tiles = Array.from({ length: itemsPerSheet }, () => rotatedDataUrl)
+    pdfExportService.addTiledImages(pdf, tiles, config.value, false)
+    return pdf.output('blob')
+  }
+  
+  /**
+   * Apply rotation to a data URL image
+   */
+  async function applyRotationToDataUrl(dataUrl: string, rotation: number): Promise<string> {
+    if (!rotation || rotation % 360 === 0) return dataUrl
+    
+    return await new Promise((resolve) => {
+      const img = new Image()
+      img.onload = () => {
+        const cw = img.width
+        const ch = img.height
+        const needsSwap = Math.abs(rotation) % 180 === 90
+        const canvas = document.createElement('canvas')
+        canvas.width = needsSwap ? ch : cw
+        canvas.height = needsSwap ? cw : ch
+        const ctx = canvas.getContext('2d')
+        if (!ctx) {
+          resolve(dataUrl)
+          return
+        }
+        ctx.translate(canvas.width / 2, canvas.height / 2)
+        ctx.rotate((rotation * Math.PI) / 180)
+        ctx.drawImage(img, -cw / 2, -ch / 2)
+        resolve(canvas.toDataURL('image/png'))
+      }
+      img.onerror = () => resolve(dataUrl)
+      img.src = dataUrl
+    })
   }
 
   function getTemplateForExport(): CalendarTemplate {
@@ -384,10 +462,15 @@ export const useExportStore = defineStore('export', () => {
 
     const pdf = pdfExportService.createPDFDocument(exportConfig)
     const preserveUserObjects = config.value.includeUserObjectsAllMonths !== false
+    const itemsPerSheet = Math.max(1, exportConfig.itemsPerSheet ?? 1)
     const monthList = months?.length ? normalizeMonthList(months) : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     const total = monthList.length
 
     try {
+      const batch: string[] = []
+      let pageIndex = 0
+      const multiplier = QUALITY_DPI[exportConfig.quality] / 72
+
       for (let i = 0; i < total; i++) {
         const month = monthList[i]
         if (!month) continue
@@ -471,10 +554,33 @@ export const useExportStore = defineStore('export', () => {
         })
         editorStore.canvas.renderAll()
 
-        statusText.value = `Generating PDF page ${i + 1}/${total}…`
-        await yieldToUI()
-        pdfExportService.appendFabricCanvasPage(pdf, editorStore.canvas, exportConfig, i > 0)
-        await yieldToUI()
+        const monthImage = editorStore.canvas.toDataURL({
+          format: 'png',
+          multiplier,
+        })
+        
+        // Apply rotation if needed for tiling
+        const rotation = exportConfig.tileRotation ?? 0
+        const rotatedMonthImage = await applyRotationToDataUrl(monthImage, rotation)
+
+        if (itemsPerSheet <= 1) {
+          statusText.value = `Generating PDF page ${i + 1}/${total}…`
+          await yieldToUI()
+          pdfExportService.appendFabricCanvasPage(pdf, editorStore.canvas, exportConfig, i > 0)
+          await yieldToUI()
+        } else {
+          batch.push(rotatedMonthImage)
+          const isLast = i === total - 1
+          const shouldFlush = batch.length === itemsPerSheet || isLast
+          if (shouldFlush) {
+            statusText.value = `Generating PDF page ${pageIndex + 1}…`
+            await yieldToUI()
+            pdfExportService.addTiledImages(pdf, batch, exportConfig, pageIndex > 0)
+            batch.length = 0
+            pageIndex += 1
+            await yieldToUI()
+          }
+        }
       }
 
       progress.value = 80

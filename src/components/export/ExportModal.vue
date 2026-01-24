@@ -26,6 +26,8 @@ import {
   Squares2X2Icon,
   ArrowsRightLeftIcon,
 } from '@heroicons/vue/24/outline'
+import type { ExportLayoutPreset } from '@/types'
+import { PAPER_DIMENSIONS } from '@/types/export.types'
 
 const props = defineProps<{
   isOpen: boolean
@@ -38,15 +40,153 @@ const editorStore = useEditorStore()
 const authStore = useAuthStore()
 const { config, exporting, progress, statusText, error, availableFormats, maxDPI, canRetryLastServerExport } = storeToRefs(exportStore)
 
+watch(
+  () => config.value.layoutPreset,
+  async () => {
+    const inferred = inferOrientationForPreset()
+    if (inferred) exportStore.updateConfig({ orientation: inferred })
+    // Regenerate preview after layout preset change (which may update tileRotation)
+    await generatePreview()
+  },
+)
+
 const previewUrl = ref<string | null>(null)
 
+async function generatePreview(): Promise<void> {
+  const canvas: any = editorStore.canvas
+  const w = typeof canvas?.getWidth === 'function' ? canvas.getWidth() : canvas?.width
+  const h = typeof canvas?.getHeight === 'function' ? canvas.getHeight() : canvas?.height
+
+  if (canvas?.toDataURL) {
+    try {
+      const maxDimension = Math.max(w ?? 0, h ?? 0)
+      const targetPreviewSize = 900
+      const multiplier = maxDimension
+        ? Math.min(1, targetPreviewSize / maxDimension)
+        : 0.5
+      const base = canvas.toDataURL({
+        format: 'jpeg',
+        quality: 0.85,
+        multiplier,
+      })
+      const rotation = config.value.tileRotation ?? 0
+      previewUrl.value = await buildRotatedDataUrl(base, rotation)
+    } catch {
+      previewUrl.value = null
+    }
+  } else {
+    previewUrl.value = null
+  }
+}
+
+async function buildRotatedDataUrl(baseUrl: string, rotation: number): Promise<string> {
+  if (!rotation || rotation % 360 === 0) return baseUrl
+  return await new Promise((resolve) => {
+    const img = new Image()
+    img.onload = () => {
+      const cw = img.width
+      const ch = img.height
+      const needsSwap = Math.abs(rotation) % 180 === 90
+      const canvas = document.createElement('canvas')
+      canvas.width = needsSwap ? ch : cw
+      canvas.height = needsSwap ? cw : ch
+      const ctx = canvas.getContext('2d')
+      if (!ctx) {
+        resolve(baseUrl)
+        return
+      }
+      ctx.translate(canvas.width / 2, canvas.height / 2)
+      ctx.rotate((rotation * Math.PI) / 180)
+      ctx.drawImage(img, -cw / 2, -ch / 2)
+      const result = canvas.toDataURL('image/jpeg', 0.85)
+      resolve(result)
+    }
+    img.onerror = () => resolve(baseUrl)
+    img.src = baseUrl
+  })
+}
+
+function getCanvasDimensions(): { w: number; h: number } | null {
+  // Prefer stored canvas size from editor store (doesn't depend on Fabric readiness)
+  const size = (editorStore as any)?.canvasSize
+  const w = size?.width
+  const h = size?.height
+  if (Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0) return { w, h }
+
+  const canvas: any = editorStore.canvas
+  const cw = typeof canvas?.getWidth === 'function' ? canvas.getWidth() : canvas?.width
+  const ch = typeof canvas?.getHeight === 'function' ? canvas.getHeight() : canvas?.height
+  if (Number.isFinite(cw) && Number.isFinite(ch) && cw > 0 && ch > 0) return { w: cw, h: ch }
+  return null
+}
+
+function inferOrientationForPreset(): 'portrait' | 'landscape' | null {
+  const preset = config.value.layoutPreset
+  if (!preset) return null
+  const dims = getCanvasDimensions()
+  if (preset === 'A6-4up') {
+    // Always portrait for 4-up A6 on A4
+    return 'portrait'
+  }
+  if (!dims) return null
+  const { w, h } = dims
+
+  // For A4-1up (single sheet), orientation should match canvas orientation
+  if (preset === 'A4-1up') {
+    return w > h ? 'landscape' : 'portrait'
+  }
+  
+  // For multi-sheet layouts (A5-2up), use inverted logic to optimize tiling
+  // If canvas is landscape, prefer portrait sheet to stack (top-bottom). If canvas is portrait, prefer landscape sheet (side-by-side).
+  return w > h ? 'portrait' : 'landscape'
+}
+
 const previewAspect = computed(() => {
+  // When a layout preset is selected, base the preview ratio on the paper size + orientation
+  const preset = config.value.layoutPreset
+  if (preset) {
+    const paperSize = config.value.paperSize ?? 'A4'
+    const paper = paperSize === 'custom' ? PAPER_DIMENSIONS.A4 : (PAPER_DIMENSIONS[paperSize] || PAPER_DIMENSIONS.A4)
+    const isLandscape = config.value.orientation === 'landscape'
+    const width = isLandscape ? paper.height : paper.width
+    const height = isLandscape ? paper.width : paper.height
+    return `${width} / ${height}`
+  }
+
+  // Fallback to canvas aspect when no preset is active
   const canvas: any = editorStore.canvas
   const w = typeof canvas?.getWidth === 'function' ? canvas.getWidth() : canvas?.width
   const h = typeof canvas?.getHeight === 'function' ? canvas.getHeight() : canvas?.height
   if (!w || !h) return '1 / 1.4'
   return `${w} / ${h}`
 })
+
+function getLayoutGrid(count: number, preset?: ExportLayoutPreset | null): { cols: number; rows: number; count: number } {
+  const safeCount = Math.max(1, count)
+  let cols = 1
+  let rows = 1
+  switch (preset) {
+    case 'A5-2up':
+      if (config.value.orientation === 'portrait') {
+        cols = 1
+        rows = 2
+      } else {
+        cols = 2
+        rows = 1
+      }
+      break
+    case 'A6-4up':
+      cols = 2
+      rows = 2
+      break
+    default:
+      cols = Math.ceil(Math.sqrt(safeCount))
+      rows = Math.ceil(safeCount / cols)
+  }
+  return { cols, rows, count: safeCount }
+}
+
+const layoutGrid = computed(() => getLayoutGrid(config.value.itemsPerSheet ?? 1, config.value.layoutPreset))
 
 const selectedFormat = computed({
   get: () => config.value.format,
@@ -80,6 +220,37 @@ const pageMode = computed({
     exportStore.updateConfig({ pages: value })
   },
 })
+
+const layoutPreset = computed({
+  get: () => config.value.layoutPreset,
+  set: (value: ExportLayoutPreset | undefined) => {
+    exportStore.updateConfig({ layoutPreset: value })
+  },
+})
+
+const itemsPerSheet = computed({
+  get: () => config.value.itemsPerSheet ?? 1,
+  set: (value: number) => exportStore.updateConfig({ itemsPerSheet: value }),
+})
+
+type LayoutOption = {
+  value: ExportLayoutPreset
+  label: string
+  subtitle: string
+  tiles: number
+  paperSize: string
+}
+
+const layoutOptions: readonly LayoutOption[] = [
+  { value: 'A4-1up', label: 'Full A4', subtitle: 'Single sheet, no tiling', tiles: 1, paperSize: 'A4' },
+  { value: 'A5-2up', label: 'Two-up (A5 on A4)', subtitle: '2 copies on one A4 sheet', tiles: 2, paperSize: 'A4' },
+  { value: 'A6-4up', label: 'Four-up (A6 on A4)', subtitle: '4 copies on one A4 sheet', tiles: 4, paperSize: 'A4' },
+]
+
+function applyLayout(option: LayoutOption): void {
+  const orientation = option.value === 'A6-4up' ? 'portrait' : undefined
+  exportStore.updateConfig({ layoutPreset: option.value, itemsPerSheet: option.tiles, orientation })
+}
 
 const includeUserObjectsAllMonths = computed({
   get: () => config.value.includeUserObjectsAllMonths !== false,
@@ -219,7 +390,7 @@ async function handleRetryServerExport(): Promise<void> {
 
 watch(
   () => props.isOpen,
-  (open) => {
+  async (open) => {
     if (!open) return
     exportStore.resetState()
     if (!availableFormats.value.includes(config.value.format)) {
@@ -235,27 +406,16 @@ watch(
     const w = typeof canvas?.getWidth === 'function' ? canvas.getWidth() : canvas?.width
     const h = typeof canvas?.getHeight === 'function' ? canvas.getHeight() : canvas?.height
 
-    if (canvas?.toDataURL) {
-      try {
-        const maxDimension = Math.max(w ?? 0, h ?? 0)
-        const targetPreviewSize = 900
-        const multiplier = maxDimension
-          ? Math.min(1, targetPreviewSize / maxDimension)
-          : 0.5
-        previewUrl.value = canvas.toDataURL({
-          format: 'jpeg',
-          quality: 0.85,
-          multiplier,
-        })
-      } catch {
-        previewUrl.value = null
-      }
-    } else {
-      previewUrl.value = null
-    }
+    // Generate initial preview
+    await generatePreview()
 
     if (w && h) {
-      exportStore.updateConfig({ orientation: w > h ? 'landscape' : 'portrait' })
+      const inferred = inferOrientationForPreset()
+      if (inferred && config.value.layoutPreset) {
+        exportStore.updateConfig({ orientation: inferred })
+      } else if (!config.value.layoutPreset) {
+        exportStore.updateConfig({ orientation: w > h ? 'landscape' : 'portrait' })
+      }
     }
 
     const pages = config.value.pages
@@ -337,12 +497,24 @@ watch(
                        class="w-48 sm:w-60 lg:w-full lg:max-w-sm bg-white shadow-2xl rotate-1 transition-transform hover:rotate-0 duration-500 relative ring-1 ring-gray-900/5 rounded-2xl overflow-hidden"
                        :style="{ aspectRatio: previewAspect }"
                      >
-                       <img v-if="previewUrl" :src="previewUrl" class="absolute inset-0 w-full h-full object-cover" alt="" />
-                       <div v-else class="h-full w-full flex items-center justify-center bg-gray-50">
-                         <span class="text-xs text-gray-400">Preview unavailable</span>
-                       </div>
+                       <template v-if="itemsPerSheet > 1">
+                         <div class="absolute inset-0 grid" :style="{ gridTemplateColumns: `repeat(${layoutGrid.cols}, 1fr)`, gridTemplateRows: `repeat(${layoutGrid.rows}, 1fr)` }">
+                           <div v-for="i in layoutGrid.count" :key="i" class="relative m-[2%] rounded-md overflow-hidden bg-gray-100">
+                             <img v-if="previewUrl" :src="previewUrl" class="w-full h-full object-cover" alt="" />
+                             <div v-else class="h-full w-full flex items-center justify-center bg-gray-50">
+                               <span class="text-[10px] text-gray-400">Preview</span>
+                             </div>
+                           </div>
+                         </div>
+                       </template>
+                       <template v-else>
+                         <img v-if="previewUrl" :src="previewUrl" class="absolute inset-0 w-full h-full object-cover" alt="" />
+                         <div v-else class="h-full w-full flex items-center justify-center bg-gray-50">
+                           <span class="text-xs text-gray-400">Preview unavailable</span>
+                         </div>
+                       </template>
                      </div>
-                     <p class="text-sm text-gray-500 font-medium">Preview (Cover Page)</p>
+                     <p class="text-sm text-gray-500 font-medium">Preview ({{ itemsPerSheet > 1 ? `${itemsPerSheet}-up` : 'Cover Page' }})</p>
                    </div>
                    <div class="hidden lg:flex flex-col items-center gap-1 text-xs text-gray-500">
                      <span>Format: {{ selectedFormat.toUpperCase() }}</span>
@@ -425,6 +597,60 @@ watch(
                           />
                         </button>
                       </div>
+                    </div>
+
+                    <div class="space-y-3">
+                      <div class="flex items-center justify-between">
+                        <label class="text-sm font-medium text-gray-900 dark:text-white">Print Layout</label>
+                        <p class="text-xs text-gray-500">Tile multiple months per sheet</p>
+                      </div>
+                      <div v-if="isPdf" class="space-y-3">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          <button
+                            v-for="option in layoutOptions"
+                            :key="option.value"
+                            type="button"
+                            @click="applyLayout(option)"
+                            :class="[
+                              'rounded-2xl border p-4 text-left flex flex-col gap-2 transition-all',
+                              layoutPreset === option.value
+                                ? 'border-primary-500 bg-primary-50/80 dark:bg-primary-900/10 shadow-lg shadow-primary-500/30'
+                                : 'border-gray-200 dark:border-gray-700 hover:border-primary-400 hover:-translate-y-0.5'
+                            ]"
+                          >
+                            <div class="flex items-center justify-between text-gray-900 dark:text-white">
+                              <div class="flex flex-col">
+                                <span class="font-semibold text-sm">{{ option.label }}</span>
+                                <span class="text-xs text-gray-500 dark:text-gray-400">{{ option.subtitle }}</span>
+                              </div>
+                              <span class="text-xs px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">
+                                {{ option.paperSize }}
+                              </span>
+                            </div>
+                            <div class="text-xs text-gray-500 dark:text-gray-400">{{ option.tiles }} items per sheet</div>
+                            <div class="flex gap-1">
+                              <span v-for="n in option.tiles" :key="n" class="h-2 flex-1 rounded bg-gray-300/70 dark:bg-gray-700"></span>
+                            </div>
+                          </button>
+                        </div>
+
+                        <div class="flex items-center justify-between gap-4 p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white/70 dark:bg-gray-900/30">
+                          <div>
+                            <p class="text-sm font-medium text-gray-900 dark:text-white">Items per sheet</p>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">Adjust if your printer supports different tiling</p>
+                          </div>
+                          <input
+                            type="number"
+                            min="1"
+                            max="8"
+                            step="1"
+                            v-model.number="itemsPerSheet"
+                            class="w-20 text-sm px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                          />
+                        </div>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Defaults to A4 single; choose A5 or A6 tiling for 2-up / 4-up printing.</p>
+                      </div>
+                      <div v-else class="text-xs text-gray-500">Select PDF to enable print layout presets.</div>
                     </div>
 
                     <div class="space-y-3">
