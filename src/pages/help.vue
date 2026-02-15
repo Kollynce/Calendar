@@ -140,7 +140,7 @@ async function submitTicket() {
             <p v-if="submitError" class="text-xs text-red-600 text-center">{{ submitError }}</p>
           </form>
           <div class="mt-6 text-xs text-gray-500 dark:text-gray-400">
-            Prefer email? Write to <span class="font-semibold text-gray-900 dark:text-white">support@calendarcreator.app</span>
+            Prefer email? Write to <span class="font-semibold text-gray-900 dark:text-white">support@planorapress.com</span>
           </div>
         </AppCard>
       </div>

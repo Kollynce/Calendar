@@ -7,7 +7,7 @@ const plans = [
     name: 'Free',
     price: '$0',
     period: 'forever',
-    description: 'Perfect for trying out CalendarCreator',
+    description: 'Perfect for trying PlanoraPress on real client work',
     features: [
       '3 calendar projects',
       'Basic templates',
@@ -92,14 +92,14 @@ const visiblePlans = plans.filter(plan => !plan.hidden)
       <div class="mx-auto max-w-3xl text-center mb-20 lg:mb-32">
         <div class="badge-premium mb-10 animate-fade-in-up">
           <SparklesIcon class="w-3.5 h-3.5" />
-          Subscription Plans
+          PlanoraPress pricing
         </div>
         <h2 class="text-5xl sm:text-7xl font-display font-black tracking-tighter text-gray-900 dark:text-white leading-[0.95] mb-10 animate-fade-in-up" style="animation-delay: 0.1s">
           Simple, Transparent <br/>
-          <span class="text-transparent bg-clip-text bg-linear-to-r from-primary-500 via-blue-500 to-indigo-600">Enterprise Pricing.</span>
+          <span class="text-transparent bg-clip-text bg-linear-to-r from-primary-500 via-blue-500 to-indigo-600">Global Pricing.</span>
         </h2>
         <p class="text-lg sm:text-xl lg:text-2xl leading-relaxed text-gray-500 dark:text-gray-400 max-w-2xl mx-auto animate-fade-in-up font-medium" style="animation-delay: 0.2s">
-          Choose the plan that's right for your creative scale. Start for free, upgrade as you grow.
+          Choose the plan that fits your print workflow. Start free, scale when your order volume grows.
         </p>
       </div>
 

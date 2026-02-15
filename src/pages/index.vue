@@ -2,6 +2,7 @@
 import { RouterLink } from "vue-router";
 import { useAuthStore } from "@/stores";
 import AppNavbar from "@/components/layout/AppNavbar.vue";
+import AppFooter from "@/components/layout/AppFooter.vue";
 import PricingSection from "@/components/marketing/PricingSection.vue";
 import HeroEditor from "@/components/marketing/HeroEditor.vue";
 import {
@@ -17,9 +18,9 @@ const authStore = useAuthStore();
 
 const features = [
   {
-    name: "Regional Calendars",
+    name: "Global Calendar Coverage",
     description:
-      "Precision engineered holiday data for all 54 African countries with local language support.",
+      "Design for any market with region-aware holidays and local date conventions your clients actually use.",
     icon: GlobeAltIcon,
     color: "text-blue-600",
     glowColor: "bg-blue-500",
@@ -27,9 +28,9 @@ const features = [
     visual: "grid",
   },
   {
-    name: "Advanced Studio",
+    name: "Creator Studio",
     description:
-      "A professional-grade canvas environment with drag-and-drop, layers, and refined design tools.",
+      "Drag, drop, and refine layouts fast with layers, spacing controls, and print-focused design tools.",
     icon: SwatchIcon,
     color: "text-purple-600",
     glowColor: "bg-purple-500",
@@ -37,9 +38,9 @@ const features = [
     visual: "canvas",
   },
   {
-    name: "Enterprise Export",
+    name: "Print-Ready Export",
     description:
-      "Lossless export in PDF, PNG, or SVG with bleed marks, crop marks, and CMYK profiles.",
+      "Export press-ready PDF, PNG, and SVG with bleed, crop marks, and reliable color workflow support.",
     icon: ArrowDownTrayIcon,
     color: "text-green-600",
     glowColor: "bg-green-500",
@@ -47,9 +48,9 @@ const features = [
     visual: "export",
   },
   {
-    name: "Smart Templates",
+    name: "Template Library",
     description:
-      "Start with 200+ professionally designed templates for Business, Education, or Artistic projects.",
+      "Start from ready-to-sell templates for business, schools, events, and branded promotional runs.",
     icon: SparklesIcon,
     color: "text-pink-600",
     glowColor: "bg-pink-500",
@@ -57,9 +58,9 @@ const features = [
     visual: "templates",
   },
   {
-    name: "Cross-Device UX",
+    name: "Work Anywhere",
     description:
-      "A fully responsive interface that adapts flawlessly to high-res tablets and desktops.",
+      "Review, edit, and approve jobs smoothly on desktop or tablet while staying in the same workflow.",
     icon: DevicePhoneMobileIcon,
     color: "text-orange-600",
     glowColor: "bg-orange-500",
@@ -67,9 +68,9 @@ const features = [
     visual: "responsive",
   },
   {
-    name: "High-Volume Batch",
+    name: "Bulk Job Automation",
     description:
-      "Automate the generation of hundreds of personalized calendars in seconds.",
+      "Generate hundreds of personalized calendar files in minutes for campaigns, clients, or seasonal batches.",
     icon: CalendarDaysIcon,
     color: "text-indigo-600",
     glowColor: "bg-indigo-500",
@@ -102,28 +103,36 @@ const features = [
           >
             <div class="badge-premium">
               <SparklesIcon class="w-4 h-4" />
-              Next-Gen Design Platform
+              Built for modern print shops
             </div>
           </div>
           <h1
             class="text-5xl sm:text-7xl lg:text-9xl font-display font-black tracking-tighter text-gray-900 dark:text-white leading-[0.85] mb-12 animate-fade-in-up"
             style="animation-delay: 0.2s"
           >
-            Design
+            Ship client-ready
             <span
               class="text-transparent bg-clip-text bg-linear-to-r from-primary-500 via-blue-500 to-indigo-600"
-              >Masterpieces</span
+              >calendar jobs</span
             >
             <br />
-            In Minutes.
+            without the chaos.
           </h1>
           <p
             class="mt-10 text-lg sm:text-xl lg:text-3xl leading-relaxed text-gray-600 dark:text-gray-300 animate-fade-in-up max-w-3xl mx-auto font-medium"
             style="animation-delay: 0.3s"
           >
-            Stop starting from zero. Access a professionally curated ecosystem
-            engineered for absolute clarity and class.
+            PlanoraPress helps print teams and creators move from concept to
+            press-ready files faster, with global templates, cleaner approvals,
+            and fewer production errors.
           </p>
+          <div
+            class="mt-8 inline-flex items-center gap-3 rounded-full border border-primary-500/20 bg-white/70 dark:bg-gray-900/70 px-5 py-2 text-xs sm:text-sm font-black uppercase tracking-[0.2em] text-primary-700 dark:text-primary-300 animate-fade-in-up"
+            style="animation-delay: 0.35s"
+          >
+            <span class="h-2 w-2 rounded-full bg-primary-500 animate-pulse"></span>
+            Global-ready for print businesses
+          </div>
           <div
             class="mt-16 flex flex-col sm:flex-row items-center justify-center gap-8 animate-fade-in-up"
             style="animation-delay: 0.4s"
@@ -143,7 +152,7 @@ const features = [
                 to="/auth/register"
                 class="group relative inline-flex items-center justify-center px-10 py-5 font-black uppercase tracking-widest text-white bg-primary-600 rounded-3xl overflow-hidden transition-all duration-500 shadow-2xl shadow-primary-500/25 hover:scale-105"
               >
-                <span class="relative z-10">Get Started Free</span>
+                <span class="relative z-10">Start Designing Free</span>
                 <div
                   class="absolute inset-0 bg-linear-to-r from-primary-500 to-blue-600 opacity-0 group-hover:opacity-100 transition-opacity duration-500"
                 ></div>
@@ -177,7 +186,7 @@ const features = [
         <p
           class="text-center text-xs font-display font-black uppercase tracking-[0.4em] text-gray-400 mb-10"
         >
-          Trusted by the next generation of creators
+          Trusted by print shops and creative teams worldwide
         </p>
         <div
           class="flex flex-wrap justify-center items-center gap-x-16 gap-y-10 opacity-30 grayscale hover:opacity-60 transition-all duration-700"
@@ -244,24 +253,24 @@ const features = [
         <div class="mx-auto max-w-3xl text-center mb-20 lg:mb-32">
           <div class="badge-premium mb-10 animate-fade-in-up">
             <SparklesIcon class="w-3.5 h-3.5" />
-            Product Ecosystem
+            Production toolkit
           </div>
           <h2
             class="text-5xl sm:text-7xl font-display font-black tracking-tighter text-gray-900 dark:text-white leading-[0.95] mb-10 animate-fade-in-up"
             style="animation-delay: 0.1s"
           >
-            Precision tools for <br />
+            Everything your print team needs <br />
             <span
               class="text-transparent bg-clip-text bg-linear-to-r from-primary-500 via-blue-500 to-indigo-600"
-              >the modern creator.</span
+              >to design and deliver faster.</span
             >
           </h2>
           <p
             class="text-lg sm:text-xl lg:text-2xl leading-relaxed text-gray-500 dark:text-gray-400 max-w-2xl mx-auto animate-fade-in-up font-medium"
             style="animation-delay: 0.2s"
           >
-            Engineered from the ground up to handle everything from individual
-            projects to commercial print workflows.
+            From one-off custom orders to high-volume seasonal campaigns,
+            PlanoraPress keeps your workflow consistent from brief to export.
           </p>
         </div>
 
@@ -564,16 +573,16 @@ const features = [
       <div class="mx-auto max-w-4xl text-center z-10 relative">
         <div class="badge-premium-dark mb-12 animate-fade-in-up">
           <SparklesIcon class="w-3.5 h-3.5" />
-          Unlimited Potential
+          Ready for your next production run?
         </div>
 
         <h2
           class="text-5xl md:text-8xl lg:text-9xl font-display font-black tracking-tighter text-white leading-[0.85] mb-12 animate-fade-in-up"
         >
-          Ready to start <br />
+          Turn more ideas into <br />
           <span
             class="text-transparent bg-clip-text bg-linear-to-r from-primary-400 via-blue-400 to-indigo-400"
-            >designing?</span
+            >finished print jobs.</span
           >
         </h2>
 
@@ -581,8 +590,8 @@ const features = [
           class="mx-auto mt-8 max-w-2xl text-xl md:text-2xl leading-relaxed text-gray-400 font-medium animate-fade-in-up"
           style="animation-delay: 0.1s"
         >
-          Join 10,000+ creators and print shops building their future with
-          CalendarCreator today.
+          Join teams around the globe using PlanoraPress to launch cleaner,
+          faster, and more profitable calendar projects.
         </p>
 
         <div
@@ -593,7 +602,7 @@ const features = [
             to="/auth/register"
             class="group relative inline-flex items-center justify-center px-12 py-6 font-black uppercase tracking-widest text-gray-900 bg-white rounded-3xl overflow-hidden transition-all duration-500 shadow-2xl hover:scale-105 hover:bg-gray-50"
           >
-            <span class="relative z-10">Get started for free</span>
+            <span class="relative z-10">Start free today</span>
             <div
               class="absolute inset-0 bg-linear-to-r from-primary-50 to-white opacity-0 group-hover:opacity-100 transition-opacity duration-500"
             ></div>
@@ -642,186 +651,7 @@ const features = [
       </div>
     </div>
 
-    <!-- Footer -->
-    <footer
-      class="bg-white dark:bg-gray-950 border-t border-gray-100 dark:border-gray-900 relative overflow-hidden"
-      aria-labelledby="footer-heading"
-    >
-      <div class="absolute inset-0 bg-noise opacity-10"></div>
-
-      <h2 id="footer-heading" class="sr-only">Footer</h2>
-      <div class="mx-auto max-w-7xl px-6 py-20 lg:px-8">
-        <div class="xl:grid xl:grid-cols-3 xl:gap-12">
-          <!-- Brand Column -->
-          <div class="space-y-8 xl:col-span-1">
-            <RouterLink to="/" class="flex items-center gap-2">
-              <div
-                class="h-10 w-10 rounded-xl bg-linear-to-br from-primary-500 to-indigo-600 flex items-center justify-center text-white font-black text-xl shadow-lg shrink-0"
-              >
-                C
-              </div>
-              <span
-                class="font-display font-black text-2xl tracking-tighter text-gray-900 dark:text-white"
-              >
-                Calendar<span class="text-primary-500">Creator</span>
-              </span>
-            </RouterLink>
-            <p
-              class="text-lg leading-relaxed text-gray-500 dark:text-gray-400 max-w-xs font-medium"
-            >
-              The professional ecosystem for regional calendar design and
-              enterprise-grade print automation.
-            </p>
-            <div class="flex flex-wrap gap-4">
-              <a
-                v-for="i in 4"
-                :key="i"
-                href="#"
-                class="w-10 h-10 rounded-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 flex items-center justify-center text-gray-400 hover:text-primary-500 hover:border-primary-500/50 transition-all shrink-0"
-              >
-                <span class="sr-only">Social</span>
-                <div class="w-4 h-4 bg-current rounded-sm opacity-50"></div>
-              </a>
-            </div>
-          </div>
-
-          <!-- Links Columns -->
-          <div
-            class="mt-16 grid grid-cols-1 sm:grid-cols-2 gap-8 xl:col-span-2 xl:mt-0 md:grid-cols-3"
-          >
-            <div>
-              <h3
-                class="text-xs font-display font-black leading-6 text-gray-900 dark:text-white uppercase tracking-[0.3em]"
-              >
-                Product
-              </h3>
-              <ul role="list" class="mt-8 space-y-4">
-                <li>
-                  <a
-                    href="#features"
-                    class="text-sm text-gray-500 hover:text-primary-600 dark:text-gray-400 dark:hover:text-white transition-colors font-medium flex items-center gap-2 group"
-                  >
-                    <div
-                      class="w-1 h-1 rounded-full bg-primary-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                    ></div>
-                    Features
-                  </a>
-                </li>
-                <li>
-                  <router-link
-                    to="/marketplace"
-                    class="text-sm text-gray-500 hover:text-primary-600 dark:text-gray-400 dark:hover:text-white transition-colors font-medium flex items-center gap-2 group"
-                  >
-                    <div
-                      class="w-1 h-1 rounded-full bg-primary-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                    ></div>
-                    Marketplace
-                  </router-link>
-                </li>
-                <li>
-                  <a
-                    href="#pricing"
-                    class="text-sm text-gray-500 hover:text-primary-600 dark:text-gray-400 dark:hover:text-white transition-colors font-medium flex items-center gap-2 group"
-                  >
-                    <div
-                      class="w-1 h-1 rounded-full bg-primary-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                    ></div>
-                    Pricing
-                  </a>
-                </li>
-              </ul>
-            </div>
-            <div>
-              <h3
-                class="text-xs font-display font-black leading-6 text-gray-900 dark:text-white uppercase tracking-[0.3em]"
-              >
-                Company
-              </h3>
-              <ul role="list" class="mt-8 space-y-4">
-                <li>
-                  <router-link
-                    to="/help"
-                    class="text-sm text-gray-500 hover:text-primary-600 dark:text-gray-400 dark:hover:text-white transition-colors font-medium flex items-center gap-2 group"
-                  >
-                    <div
-                      class="w-1 h-1 rounded-full bg-primary-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                    ></div>
-                    About
-                  </router-link>
-                </li>
-                <li>
-                  <router-link
-                    to="/help"
-                    class="text-sm text-gray-500 hover:text-primary-600 dark:text-gray-400 dark:hover:text-white transition-colors font-medium flex items-center gap-2 group"
-                  >
-                    <div
-                      class="w-1 h-1 rounded-full bg-primary-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                    ></div>
-                    Blog
-                  </router-link>
-                </li>
-                <li>
-                  <router-link
-                    to="/help"
-                    class="text-sm text-gray-500 hover:text-primary-600 dark:text-gray-400 dark:hover:text-white transition-colors font-medium flex items-center gap-2 group"
-                  >
-                    <div
-                      class="w-1 h-1 rounded-full bg-primary-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                    ></div>
-                    Careers
-                  </router-link>
-                </li>
-              </ul>
-            </div>
-            <div class="col-span-2 md:col-span-1">
-              <h3
-                class="text-xs font-display font-black leading-6 text-gray-900 dark:text-white uppercase tracking-[0.3em]"
-              >
-                Legal
-              </h3>
-              <ul role="list" class="mt-8 space-y-4">
-                <li>
-                  <router-link
-                    to="/privacy"
-                    class="text-sm text-gray-500 hover:text-primary-600 dark:text-gray-400 dark:hover:text-white transition-colors font-medium flex items-center gap-2 group"
-                  >
-                    <div
-                      class="w-1 h-1 rounded-full bg-primary-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                    ></div>
-                    Privacy Policy
-                  </router-link>
-                </li>
-                <li>
-                  <router-link
-                    to="/terms"
-                    class="text-sm text-gray-500 hover:text-primary-600 dark:text-gray-400 dark:hover:text-white transition-colors font-medium flex items-center gap-2 group"
-                  >
-                    <div
-                      class="w-1 h-1 rounded-full bg-primary-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                    ></div>
-                    Terms of Service
-                  </router-link>
-                </li>
-              </ul>
-            </div>
-          </div>
-        </div>
-
-        <div
-          class="mt-20 border-t border-gray-100 dark:border-gray-900 pt-8 flex flex-col md:flex-row justify-between items-center gap-6"
-        >
-          <p class="text-xs font-black uppercase tracking-widest text-gray-400">
-            &copy; 2025 CalendarCreator. Engineered for absolute clarity.
-          </p>
-          <div
-            class="flex items-center gap-4 text-xs font-black uppercase tracking-widest text-gray-400"
-          >
-            <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
-            All Systems Operational
-          </div>
-        </div>
-      </div>
-    </footer>
+    <AppFooter />
   </div>
 </template>
 

@@ -45,11 +45,12 @@ const userNavigation = [
         <div class="flex items-center">
           <div class="shrink-0 flex items-center">
             <RouterLink to="/" class="flex items-center gap-2">
-              <div class="h-8 w-8 rounded-lg bg-linear-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white font-bold text-lg">
-                C
+              <div class="relative h-8 w-8 rounded-lg bg-linear-to-br from-blue-600 via-indigo-500 to-indigo-700 flex items-center justify-center text-white font-black text-lg shadow-lg">
+                P
+                <span class="absolute right-1.5 top-1.5 h-1 w-1 rounded-full bg-white/90"></span>
               </div>
               <span class="font-display font-bold text-xl tracking-tight text-gray-900 dark:text-white">
-                Calendar<span class="text-primary-500">Creator</span>
+                Planora<span class="text-primary-500">Press</span>
               </span>
             </RouterLink>
           </div>

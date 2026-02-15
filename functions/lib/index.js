@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.paypalWebhook = exports.registerPayPalSubscription = exports.provisionUser = exports.retryExportJob = exports.processExportJobRetry = exports.processExportJob = exports.createExportJob = void 0;
+exports.paypalWebhook = exports.registerPayPalSubscription = exports.provisionUser = exports.verifyMarketplacePaystackTransaction = exports.initializeMarketplacePaystackTransaction = exports.captureMarketplacePayPalOrder = exports.createMarketplacePayPalOrder = exports.retryExportJob = exports.processExportJobRetry = exports.processExportJob = exports.createExportJob = void 0;
 const admin = __importStar(require("firebase-admin"));
 const logger = __importStar(require("firebase-functions/logger"));
 const functionsV1 = __importStar(require("firebase-functions/v1"));
@@ -93,6 +93,12 @@ function getPaypalWebhookId() {
 }
 function getPaypalApiBaseUrl() {
     return getPaypalMode() === 'live' ? 'https://api-m.paypal.com' : 'https://api-m.sandbox.paypal.com';
+}
+function getPaystackSecretKey() {
+    return getEnv('PAYSTACK_SECRET_KEY') || String(legacyRuntimeConfig?.paystack?.secret_key || '').trim();
+}
+function getPaystackApiBaseUrl() {
+    return 'https://api.paystack.co';
 }
 function getPlanIdEnv(key) {
     const paypalConfig = legacyRuntimeConfig?.paypal || {};
@@ -195,6 +201,27 @@ async function paypalApiRequest(path, init = {}) {
     }
     return data;
 }
+async function paystackApiRequest(path, init = {}) {
+    const secretKey = getPaystackSecretKey();
+    if (!secretKey) {
+        throw new Error('Paystack secret key not configured');
+    }
+    const url = `${getPaystackApiBaseUrl()}${path}`;
+    const resp = await fetch(url, {
+        ...init,
+        headers: {
+            Authorization: `Bearer ${secretKey}`,
+            'Content-Type': 'application/json',
+            ...(init.headers || {}),
+        },
+    });
+    const text = await resp.text();
+    const data = text ? JSON.parse(text) : {};
+    if (!resp.ok) {
+        throw new Error(`Paystack API error: ${resp.status} ${text || ''}`);
+    }
+    return data;
+}
 async function verifyPaypalWebhookSignature(input) {
     const webhookId = getPaypalWebhookId();
     if (!webhookId) {
@@ -251,6 +278,198 @@ async function updateUserTier(input) {
     catch (e) {
         logger.warn('Failed to set subscription custom claim', { uid, error: e?.message || String(e) });
     }
+}
+async function getMarketplaceTemplateById(templateId) {
+    const id = String(templateId || '').trim();
+    if (!id) {
+        throw new functionsV1.https.HttpsError('invalid-argument', 'templateId is required');
+    }
+    const snap = await admin.firestore().collection('marketplace_templates').doc(id).get();
+    if (!snap.exists) {
+        throw new functionsV1.https.HttpsError('not-found', 'Template not found');
+    }
+    const data = (snap.data() || {});
+    return { id, data };
+}
+async function createMarketplacePurchaseRecord(input) {
+    const paymentId = (0, crypto_1.randomUUID)();
+    const db = admin.firestore();
+    const now = admin.firestore.FieldValue.serverTimestamp();
+    const userPurchaseRef = db.collection('users').doc(input.userId).collection('purchases').doc(input.templateId);
+    const templatePurchaseRef = db.collection('marketplace_templates').doc(input.templateId).collection('purchases').doc(paymentId);
+    const paymentRef = db.collection('marketplace_payments').doc(paymentId);
+    await db.runTransaction(async (tx) => {
+        const existing = await tx.get(userPurchaseRef);
+        if (existing.exists)
+            return;
+        tx.set(userPurchaseRef, {
+            templateId: input.templateId,
+            userId: input.userId,
+            provider: input.provider,
+            providerReference: input.providerReference,
+            amountPaid: input.amount,
+            currency: input.currency,
+            createdAt: now,
+            updatedAt: now,
+        }, { merge: true });
+        tx.set(templatePurchaseRef, {
+            templateId: input.templateId,
+            userId: input.userId,
+            provider: input.provider,
+            providerReference: input.providerReference,
+            amountPaid: input.amount,
+            currency: input.currency,
+            createdAt: now,
+            updatedAt: now,
+        });
+        tx.set(paymentRef, {
+            id: paymentId,
+            templateId: input.templateId,
+            buyerId: input.userId,
+            provider: input.provider,
+            providerReference: input.providerReference,
+            amount: input.amount,
+            currency: input.currency,
+            status: 'completed',
+            createdAt: now,
+            updatedAt: now,
+        });
+    });
+    return paymentId;
+}
+async function createPayPalMarketplaceOrder(input) {
+    const template = await getMarketplaceTemplateById(input.templateId);
+    const amountCents = Number(template.data.price || 0);
+    if (!Number.isFinite(amountCents) || amountCents <= 0) {
+        throw new functionsV1.https.HttpsError('failed-precondition', 'Template does not require payment');
+    }
+    const amount = (amountCents / 100).toFixed(2);
+    const body = {
+        intent: 'CAPTURE',
+        purchase_units: [
+            {
+                reference_id: `${input.templateId}:${input.userId}`,
+                amount: {
+                    currency_code: 'USD',
+                    value: amount,
+                },
+                custom_id: JSON.stringify({ templateId: input.templateId, userId: input.userId }),
+            },
+        ],
+    };
+    const order = await paypalApiRequest('/v2/checkout/orders', {
+        method: 'POST',
+        body: JSON.stringify(body),
+    });
+    const orderId = String(order?.id || '').trim();
+    if (!orderId) {
+        throw new functionsV1.https.HttpsError('internal', 'Failed to create PayPal order');
+    }
+    return {
+        orderId,
+        amount: amountCents,
+        currency: 'USD',
+    };
+}
+async function capturePayPalMarketplaceOrder(input) {
+    const template = await getMarketplaceTemplateById(input.templateId);
+    const amountCents = Number(template.data.price || 0);
+    if (!Number.isFinite(amountCents) || amountCents <= 0) {
+        throw new functionsV1.https.HttpsError('failed-precondition', 'Template does not require payment');
+    }
+    const capture = await paypalApiRequest(`/v2/checkout/orders/${encodeURIComponent(input.orderId)}/capture`, {
+        method: 'POST',
+    });
+    const status = String(capture?.status || '').trim();
+    if (status !== 'COMPLETED') {
+        throw new functionsV1.https.HttpsError('failed-precondition', 'PayPal payment not completed');
+    }
+    const providerReference = String(capture?.id || input.orderId).trim();
+    const purchaseId = await createMarketplacePurchaseRecord({
+        templateId: input.templateId,
+        userId: input.userId,
+        provider: 'paypal',
+        providerReference,
+        amount: amountCents,
+        currency: 'USD',
+    });
+    return {
+        purchaseId,
+        status,
+        providerReference,
+    };
+}
+async function initializePaystackMarketplaceTransaction(input) {
+    const template = await getMarketplaceTemplateById(input.templateId);
+    const amountCents = Number(template.data.price || 0);
+    if (!Number.isFinite(amountCents) || amountCents <= 0) {
+        throw new functionsV1.https.HttpsError('failed-precondition', 'Template does not require payment');
+    }
+    const reference = `mkt_${input.templateId}_${input.userId}_${Date.now()}`;
+    const payload = {
+        email: input.email,
+        amount: amountCents,
+        currency: 'USD',
+        reference,
+        metadata: {
+            templateId: input.templateId,
+            userId: input.userId,
+        },
+    };
+    const init = await paystackApiRequest('/transaction/initialize', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+    });
+    const accessCode = String(init?.data?.access_code || '').trim();
+    const responseReference = String(init?.data?.reference || reference).trim();
+    if (!accessCode || !responseReference) {
+        throw new functionsV1.https.HttpsError('internal', 'Failed to initialize Paystack transaction');
+    }
+    return { accessCode, reference: responseReference };
+}
+async function verifyPaystackMarketplaceTransaction(input) {
+    const template = await getMarketplaceTemplateById(input.templateId);
+    const amountCents = Number(template.data.price || 0);
+    if (!Number.isFinite(amountCents) || amountCents <= 0) {
+        throw new functionsV1.https.HttpsError('failed-precondition', 'Template does not require payment');
+    }
+    const reference = String(input.reference || '').trim();
+    if (!reference) {
+        throw new functionsV1.https.HttpsError('invalid-argument', 'reference is required');
+    }
+    const verify = await paystackApiRequest(`/transaction/verify/${encodeURIComponent(reference)}`, {
+        method: 'GET',
+    });
+    const status = String(verify?.data?.status || '').trim();
+    const paidAmount = Number(verify?.data?.amount || 0);
+    const metadataTemplateId = String(verify?.data?.metadata?.templateId || '').trim();
+    const metadataUserId = String(verify?.data?.metadata?.userId || '').trim();
+    if (status !== 'success') {
+        throw new functionsV1.https.HttpsError('failed-precondition', 'Paystack payment not successful');
+    }
+    if (paidAmount !== amountCents) {
+        throw new functionsV1.https.HttpsError('failed-precondition', 'Paystack amount mismatch');
+    }
+    if (metadataTemplateId && metadataTemplateId !== input.templateId) {
+        throw new functionsV1.https.HttpsError('failed-precondition', 'Paystack template metadata mismatch');
+    }
+    if (metadataUserId && metadataUserId !== input.userId) {
+        throw new functionsV1.https.HttpsError('failed-precondition', 'Paystack user metadata mismatch');
+    }
+    const providerReference = String(verify?.data?.reference || reference).trim();
+    const purchaseId = await createMarketplacePurchaseRecord({
+        templateId: input.templateId,
+        userId: input.userId,
+        provider: 'paystack',
+        providerReference,
+        amount: amountCents,
+        currency: 'USD',
+    });
+    return {
+        purchaseId,
+        status,
+        providerReference,
+    };
 }
 exports.createExportJob = functionsV1.https.onCall(async (data, context) => {
     const uid = requireAuth(context);
@@ -923,6 +1142,73 @@ exports.retryExportJob = functionsV1.https.onCall(async (data, context) => {
         completedAt: admin.firestore.FieldValue.delete(),
     }, { merge: true });
     return { ok: true };
+});
+exports.createMarketplacePayPalOrder = functionsV1.https.onCall(async (data, context) => {
+    const userId = requireAuth(context);
+    const templateId = String(data?.templateId || '').trim();
+    if (!templateId) {
+        throw new functionsV1.https.HttpsError('invalid-argument', 'templateId is required');
+    }
+    const order = await createPayPalMarketplaceOrder({ templateId, userId });
+    return {
+        orderId: order.orderId,
+        amount: order.amount,
+        currency: order.currency,
+    };
+});
+exports.captureMarketplacePayPalOrder = functionsV1.https.onCall(async (data, context) => {
+    const userId = requireAuth(context);
+    const templateId = String(data?.templateId || '').trim();
+    const orderId = String(data?.orderId || '').trim();
+    if (!templateId || !orderId) {
+        throw new functionsV1.https.HttpsError('invalid-argument', 'templateId and orderId are required');
+    }
+    const capture = await capturePayPalMarketplaceOrder({
+        templateId,
+        userId,
+        orderId,
+    });
+    return {
+        ok: true,
+        purchaseId: capture.purchaseId,
+        status: capture.status,
+        providerReference: capture.providerReference,
+    };
+});
+exports.initializeMarketplacePaystackTransaction = functionsV1.https.onCall(async (data, context) => {
+    const userId = requireAuth(context);
+    const templateId = String(data?.templateId || '').trim();
+    const email = String(context.auth?.token?.email || '').trim();
+    if (!templateId) {
+        throw new functionsV1.https.HttpsError('invalid-argument', 'templateId is required');
+    }
+    if (!email) {
+        throw new functionsV1.https.HttpsError('failed-precondition', 'Authenticated email is required for Paystack checkout');
+    }
+    const initialized = await initializePaystackMarketplaceTransaction({ templateId, userId, email });
+    return {
+        accessCode: initialized.accessCode,
+        reference: initialized.reference,
+    };
+});
+exports.verifyMarketplacePaystackTransaction = functionsV1.https.onCall(async (data, context) => {
+    const userId = requireAuth(context);
+    const templateId = String(data?.templateId || '').trim();
+    const reference = String(data?.reference || '').trim();
+    if (!templateId || !reference) {
+        throw new functionsV1.https.HttpsError('invalid-argument', 'templateId and reference are required');
+    }
+    const verified = await verifyPaystackMarketplaceTransaction({
+        templateId,
+        userId,
+        reference,
+    });
+    return {
+        ok: true,
+        purchaseId: verified.purchaseId,
+        status: verified.status,
+        providerReference: verified.providerReference,
+    };
 });
 exports.provisionUser = functionsV1.auth.user().onCreate(async (user) => {
     const email = normalizeEmail(user.email);

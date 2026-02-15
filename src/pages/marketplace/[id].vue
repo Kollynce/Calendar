@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores'
 import MarketplaceLayout from '@/layouts/MarketplaceLayout.vue'
 import AppTierBadge from '@/components/ui/AppTierBadge.vue'
 import AppButton from '@/components/ui/AppButton.vue'
+import { loadScript } from '@paypal/paypal-js'
 import { 
   CheckIcon, 
   ShoppingBagIcon,
@@ -16,7 +17,11 @@ import {
 } from '@heroicons/vue/24/outline'
 import { StarIcon as StarSolidIcon } from '@heroicons/vue/24/solid'
 import type { SubscriptionTier } from '@/types'
-import { marketplaceService, type MarketplaceProduct } from '@/services/marketplace.service'
+import {
+  marketplaceService,
+  type MarketplaceProduct,
+  type MarketplaceRating,
+} from '@/services/marketplace.service'
 
 const route = useRoute()
 const router = useRouter()
@@ -24,10 +29,21 @@ const authStore = useAuthStore()
 
 const template = ref<MarketplaceProduct | null>(null)
 const relatedTemplates = ref<MarketplaceProduct[]>([])
+const ratings = ref<MarketplaceRating[]>([])
+const selectedRating = ref(0)
+const savingRating = ref(false)
+const hasPurchased = ref(false)
 const loading = ref(true)
 const loadError = ref<string | null>(null)
+const purchaseError = ref<string | null>(null)
+const selectedProvider = ref<'paypal' | 'paystack'>('paypal')
+
+const lightboxOpen = ref(false)
+const activeImageIndex = ref(0)
 
 const defaultFeatures = ['12 Months', 'A4 & Letter Size', 'High Resolution', 'Customizable Colors', 'Holiday Support']
+const paypalButtonsContainer = ref<HTMLDivElement | null>(null)
+let paystackScript: HTMLScriptElement | null = null
 
 async function loadTemplate(id?: string | string[]) {
   if (!id || typeof id !== 'string') {
@@ -50,8 +66,22 @@ async function loadTemplate(id?: string | string[]) {
     }
 
     template.value = fetched
+
+    const entitlement = await marketplaceService.getTemplateEntitlement({
+      templateId: fetched.id || id,
+      userId: authStore.user?.id,
+      subscriptionTier: authStore.subscriptionTier as 'free' | 'pro' | 'business' | 'enterprise',
+    })
+    hasPurchased.value = entitlement.purchased
+
     const related = await marketplaceService.listTemplatesByCreator(fetched.creatorId, 4)
     relatedTemplates.value = related.filter(r => r.id !== fetched.id)
+
+    ratings.value = await marketplaceService.listTemplateRatings(fetched.id || '', 20)
+    if (authStore.user?.id) {
+      const mine = await marketplaceService.getUserTemplateRating(fetched.id || '', authStore.user.id)
+      selectedRating.value = mine?.rating || 0
+    }
   } catch (error) {
     console.error('[MarketplaceDetail] Failed to load template', error)
     loadError.value = 'Unable to load template details right now. Please try again shortly.'
@@ -73,11 +103,16 @@ const galleryImages = computed(() => {
   return []
 })
 
+const ratingAverage = computed(() => Number(template.value?.ratingAverage || 0))
+const ratingCount = computed(() => Number(template.value?.ratingCount || 0))
+const canRate = computed(() => Boolean(authStore.user?.id && template.value?.id))
+
 const isIncluded = computed(() => {
   if (!template.value) return false
+  if (template.value.price === 0) return true
   if (authStore.isBusiness) return true
   if (authStore.isPro && template.value.requiredTier === 'pro') return true
-  return template.value.price === 0
+  return hasPurchased.value
 })
 
 const buttonText = computed(() => {
@@ -86,18 +121,172 @@ const buttonText = computed(() => {
   return `Purchase for $${(template.value.price / 100).toFixed(2)}`
 })
 
-function handleAction() {
+async function handleAction() {
   if (!template.value) return
   if (isIncluded.value) {
-    router.push('/dashboard/projects')
-  } else {
-    alert('Redirecting to payment...')
+    if (template.value.id) {
+      await marketplaceService.incrementDownloads(template.value.id)
+    }
+    await router.push('/dashboard/projects')
+    return
   }
+
+  purchaseError.value = null
+
+  if (selectedProvider.value === 'paypal') {
+    void mountPayPalButtons()
+    return
+  }
+
+  void payWithPaystack()
 }
 
 function viewRelatedTemplate(id: string) {
   router.push(`/marketplace/${id}`)
 }
+
+function viewCreatorProfile() {
+  if (!template.value?.creatorId) return
+  router.push(`/creator/${template.value.creatorId}`)
+}
+
+function openImage(index = 0) {
+  if (!galleryImages.value.length) return
+  activeImageIndex.value = Math.max(0, Math.min(index, galleryImages.value.length - 1))
+  lightboxOpen.value = true
+}
+
+function closeImage() {
+  lightboxOpen.value = false
+}
+
+function moveImage(direction: -1 | 1) {
+  if (!galleryImages.value.length) return
+  const next = activeImageIndex.value + direction
+  if (next < 0) {
+    activeImageIndex.value = galleryImages.value.length - 1
+    return
+  }
+  if (next >= galleryImages.value.length) {
+    activeImageIndex.value = 0
+    return
+  }
+  activeImageIndex.value = next
+}
+
+async function submitRating(stars: number) {
+  if (!template.value?.id || !authStore.user?.id || stars < 1 || stars > 5) return
+  savingRating.value = true
+  try {
+    await marketplaceService.upsertTemplateRating(template.value.id, {
+      userId: authStore.user.id,
+      displayName: authStore.user.displayName || 'Anonymous',
+      rating: stars,
+    })
+    selectedRating.value = stars
+    await loadTemplate(route.params.id)
+  } finally {
+    savingRating.value = false
+  }
+}
+
+async function mountPayPalButtons() {
+  if (!paypalButtonsContainer.value || !template.value?.id || !authStore.user?.id || isIncluded.value) return
+  paypalButtonsContainer.value.innerHTML = ''
+
+  const paypal = await loadScript({
+    clientId: import.meta.env.VITE_PAYPAL_CLIENT_ID || '',
+    currency: 'USD',
+    intent: 'capture',
+    components: 'buttons',
+  })
+  if (!paypal) {
+    purchaseError.value = 'Unable to load PayPal checkout right now.'
+    return
+  }
+
+  if (typeof paypal.Buttons !== 'function') {
+    purchaseError.value = 'PayPal checkout is unavailable right now.'
+    return
+  }
+
+  paypal.Buttons({
+    style: { layout: 'vertical', color: 'gold', shape: 'rect', label: 'pay' },
+    createOrder: async () => {
+      const order = await marketplaceService.createMarketplacePayPalOrder(template.value!.id!)
+      return order.orderId
+    },
+    onApprove: async (data) => {
+      await marketplaceService.captureMarketplacePayPalOrder(template.value!.id!, String(data.orderID || ''))
+      await marketplaceService.incrementDownloads(template.value!.id!)
+      router.push('/dashboard/projects')
+    },
+    onError: (error) => {
+      console.error('[MarketplaceDetail] PayPal checkout failed', error)
+      purchaseError.value = 'PayPal checkout failed. Please try again.'
+    },
+  }).render(paypalButtonsContainer.value)
+}
+
+async function ensurePaystackScript(): Promise<void> {
+  if (window.PaystackPop?.setup) return
+  await new Promise<void>((resolve, reject) => {
+    const script = document.createElement('script')
+    paystackScript = script
+    script.src = 'https://js.paystack.co/v1/inline.js'
+    script.async = true
+    script.onload = () => resolve()
+    script.onerror = () => reject(new Error('Failed to load Paystack script'))
+    document.head.appendChild(script)
+  })
+}
+
+async function payWithPaystack() {
+  if (!template.value?.id || !authStore.user?.email || isIncluded.value) return
+  try {
+    await ensurePaystackScript()
+    const initialized = await marketplaceService.initializeMarketplacePaystackTransaction(template.value.id)
+
+    const handler = window.PaystackPop?.setup({
+      key: import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || '',
+      email: authStore.user.email,
+      amount: template.value.price,
+      currency: 'USD',
+      ref: initialized.reference,
+      callback: async (response: { reference: string }) => {
+        await marketplaceService.verifyMarketplacePaystackTransaction(template.value!.id!, response.reference)
+        await marketplaceService.incrementDownloads(template.value!.id!)
+        router.push('/dashboard/projects')
+      },
+      onClose: () => {
+        // noop
+      },
+    })
+
+    handler?.openIframe()
+  } catch (error) {
+    console.error('[MarketplaceDetail] Paystack checkout failed', error)
+    purchaseError.value = 'Paystack checkout failed. Please try again.'
+  }
+}
+
+function onWindowKeydown(event: KeyboardEvent) {
+  if (!lightboxOpen.value) return
+  if (event.key === 'Escape') closeImage()
+  if (event.key === 'ArrowLeft') moveImage(-1)
+  if (event.key === 'ArrowRight') moveImage(1)
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', onWindowKeydown)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onWindowKeydown)
+  if (paystackScript?.parentNode) {
+    paystackScript.parentNode.removeChild(paystackScript)
+  }
+})
 </script>
 
 <template>
@@ -139,7 +328,7 @@ function viewRelatedTemplate(id: string) {
       <div class="grid lg:grid-cols-12 gap-16">
         <!-- Left: Preview Gallery -->
         <div class="lg:col-span-7 space-y-8">
-          <div class="relative aspect-4/3 bg-white dark:bg-gray-900 rounded-[2.5rem] border border-gray-200 dark:border-gray-800 shadow-2xl shadow-gray-200/50 dark:shadow-none overflow-hidden group">
+          <div class="relative aspect-4/3 bg-white dark:bg-gray-900 rounded-[2.5rem] border border-gray-200 dark:border-gray-800 shadow-2xl shadow-gray-200/50 dark:shadow-none overflow-hidden group cursor-zoom-in" @click="openImage(0)">
             <div v-if="galleryImages.length" class="absolute inset-0">
               <img 
                 :src="galleryImages[0]"
@@ -174,6 +363,7 @@ function viewRelatedTemplate(id: string) {
                 v-for="(image, index) in galleryImages"
                 :key="`thumb-${index}`"
                 class="aspect-square bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-gray-100 dark:border-gray-800 overflow-hidden cursor-pointer hover:border-primary-500 transition-all hover:scale-[1.02]"
+                @click="openImage(index)"
               >
                 <img :src="image" :alt="`${template.name} preview ${index + 1}`" class="w-full h-full object-cover" loading="lazy" />
               </div>
@@ -193,7 +383,7 @@ function viewRelatedTemplate(id: string) {
               <div class="space-y-3">
                 <div class="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-primary-600 dark:text-primary-400">
                   <StarSolidIcon class="w-3 h-3 text-amber-400" />
-                  4.9 Rating • Premium Asset
+                  {{ ratingAverage > 0 ? `${ratingAverage.toFixed(1)} Rating` : 'No ratings yet' }} • Premium Asset
                 </div>
                 <h1 class="text-4xl lg:text-5xl font-display font-black text-gray-900 dark:text-white leading-[1.1] tracking-tight">
                   {{ template.name }}
@@ -203,6 +393,9 @@ function viewRelatedTemplate(id: string) {
                 </p>
                 <p class="text-sm text-gray-400">
                   {{ template.downloads.toLocaleString() }} downloads
+                </p>
+                <p class="text-xs text-gray-400">
+                  {{ ratingCount }} ratings
                 </p>
               </div>
 
@@ -226,6 +419,25 @@ function viewRelatedTemplate(id: string) {
                 </div>
 
                 <div class="mt-8 space-y-4">
+                  <div v-if="!isIncluded" class="flex items-center gap-2">
+                    <button
+                      type="button"
+                      class="px-3 py-1.5 rounded-full text-xs font-bold border transition-colors"
+                      :class="selectedProvider === 'paypal' ? 'border-primary-500 text-primary-600 bg-primary-50 dark:bg-primary-900/20' : 'border-gray-200 text-gray-500'"
+                      @click="selectedProvider = 'paypal'"
+                    >
+                      PayPal
+                    </button>
+                    <button
+                      type="button"
+                      class="px-3 py-1.5 rounded-full text-xs font-bold border transition-colors"
+                      :class="selectedProvider === 'paystack' ? 'border-primary-500 text-primary-600 bg-primary-50 dark:bg-primary-900/20' : 'border-gray-200 text-gray-500'"
+                      @click="selectedProvider = 'paystack'"
+                    >
+                      Paystack
+                    </button>
+                  </div>
+
                   <AppButton 
                     variant="primary" 
                     class="w-full py-5 text-sm font-black uppercase tracking-[0.2em]"
@@ -237,6 +449,9 @@ function viewRelatedTemplate(id: string) {
                     </template>
                     {{ buttonText }}
                   </AppButton>
+
+                  <div v-if="!isIncluded && selectedProvider === 'paypal'" ref="paypalButtonsContainer"></div>
+                  <p v-if="purchaseError" class="text-xs text-red-300">{{ purchaseError }}</p>
                   
                   <AppButton 
                     v-if="!authStore.isBusiness"
@@ -281,6 +496,25 @@ function viewRelatedTemplate(id: string) {
                   {{ template.description }}
                 </p>
               </div>
+
+              <div class="space-y-4">
+                <h3 class="text-xs font-black text-gray-400 uppercase tracking-[0.2em]">Rate this template</h3>
+                <div class="flex items-center gap-2">
+                  <button
+                    v-for="star in 5"
+                    :key="`rating-star-${star}`"
+                    class="p-1"
+                    :disabled="!canRate || savingRating"
+                    @click="submitRating(star)"
+                  >
+                    <StarSolidIcon
+                      class="w-6 h-6"
+                      :class="star <= selectedRating ? 'text-amber-400' : 'text-gray-300 dark:text-gray-700'"
+                    />
+                  </button>
+                </div>
+                <p class="text-xs text-gray-400" v-if="!authStore.isAuthenticated">Sign in to leave a rating.</p>
+              </div>
             </div>
           </div>
         </div>
@@ -295,7 +529,7 @@ function viewRelatedTemplate(id: string) {
               </h2>
               <p class="text-sm text-gray-500">Discover other premium designs by this creator.</p>
             </div>
-            <AppButton variant="secondary" class="text-[10px] font-black uppercase tracking-widest px-6">View Profile</AppButton>
+            <AppButton variant="secondary" class="text-[10px] font-black uppercase tracking-widest px-6" @click="viewCreatorProfile">View Profile</AppButton>
           </div>
 
           <div v-if="relatedTemplates.length" class="grid sm:grid-cols-2 lg:grid-cols-4 gap-8">
@@ -331,6 +565,13 @@ function viewRelatedTemplate(id: string) {
         </section>
         </div>
       </div>
+    </div>
+
+    <div v-if="lightboxOpen && galleryImages.length" class="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center px-4" @click.self="closeImage">
+      <button class="absolute top-6 right-6 text-white/80 hover:text-white" @click="closeImage">Close</button>
+      <button class="absolute left-4 sm:left-8 text-white/80 hover:text-white text-2xl" @click="moveImage(-1)">‹</button>
+      <img :src="galleryImages[activeImageIndex]" :alt="`${template?.name} full preview`" class="max-h-[85vh] max-w-[90vw] object-contain rounded-xl shadow-2xl" />
+      <button class="absolute right-4 sm:right-8 text-white/80 hover:text-white text-2xl" @click="moveImage(1)">›</button>
     </div>
   </MarketplaceLayout>
 </template>

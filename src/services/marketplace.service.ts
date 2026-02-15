@@ -4,6 +4,7 @@ import {
   getDoc,
   getDocs,
   deleteDoc,
+  writeBatch,
   limit,
   orderBy,
   query,
@@ -12,8 +13,9 @@ import {
   where,
   serverTimestamp,
 } from 'firebase/firestore'
+import { httpsCallable } from 'firebase/functions'
 import { ref as storageRef, uploadString, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'
-import { db, storage } from '@/config/firebase'
+import { db, storage, functions } from '@/config/firebase'
 import type { CalendarTemplate } from '@/data/templates/calendar-templates'
 import type { CanvasState } from '@/types'
 
@@ -44,12 +46,78 @@ export interface MarketplaceProduct {
   canvasObjects?: any[] // Legacy support
   canvasState?: CanvasState | null
   thumbnail?: string | null
+  ratingAverage?: number
+  ratingCount?: number
   publishedAt?: any
   updatedAt?: any
 }
 
+export interface MarketplaceRating {
+  userId: string
+  displayName: string
+  rating: number
+  createdAt?: any
+  updatedAt?: any
+}
+
+export interface MarketplaceCreatorProfile {
+  creatorId: string
+  displayName: string
+  templateCount: number
+  totalDownloads: number
+  averageRating: number
+  templates: MarketplaceProduct[]
+}
+
+export interface MarketplacePaymentResult {
+  ok: boolean
+  purchaseId: string
+  status: string
+  providerReference: string
+}
+
+export interface MarketplaceTemplateEntitlement {
+  includedByTier: boolean
+  purchased: boolean
+  requiresPurchase: boolean
+}
+
 class MarketplaceService {
   private readonly collectionName = 'marketplace_templates'
+
+  private isIncludedByTier(requiredTier: MarketplaceProduct['requiredTier'], subscriptionTier: 'free' | 'pro' | 'business' | 'enterprise'): boolean {
+    if (subscriptionTier === 'enterprise' || subscriptionTier === 'business') return true
+    if (requiredTier === 'free') return true
+    if (requiredTier === 'pro' && subscriptionTier === 'pro') return true
+    return false
+  }
+
+  async getTemplateEntitlement(input: {
+    templateId: string
+    userId?: string
+    subscriptionTier: 'free' | 'pro' | 'business' | 'enterprise'
+  }): Promise<MarketplaceTemplateEntitlement> {
+    const template = await this.getTemplateById(input.templateId)
+    if (!template) {
+      return {
+        includedByTier: false,
+        purchased: false,
+        requiresPurchase: true,
+      }
+    }
+
+    const includedByTier = this.isIncludedByTier(template.requiredTier, input.subscriptionTier)
+    let purchased = false
+    if (input.userId && template.price > 0 && !includedByTier) {
+      purchased = await this.hasUserPurchasedTemplate(template.id || input.templateId, input.userId)
+    }
+
+    return {
+      includedByTier,
+      purchased,
+      requiresPurchase: !includedByTier && !purchased && template.price > 0,
+    }
+  }
 
   private async uploadThumbnailDataUrl(thumbnail: string, path: string, contentType?: string): Promise<string> {
     const ref = storageRef(storage, path)
@@ -246,6 +314,223 @@ class MarketplaceService {
 
     const snapshot = await getDocs(q)
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as unknown as MarketplaceProduct))
+  }
+
+  async listTemplateRatings(templateId: string, max = 50): Promise<MarketplaceRating[]> {
+    if (isDemoMode) {
+      return [
+        {
+          userId: 'demo-user',
+          displayName: 'Demo User',
+          rating: 5,
+        },
+      ]
+    }
+
+    const ratingsRef = collection(db, this.collectionName, templateId, 'ratings')
+    const ratingsQuery = query(ratingsRef, orderBy('updatedAt', 'desc'), limit(max))
+    const snapshot = await getDocs(ratingsQuery)
+    return snapshot.docs.map((ratingDoc) => {
+      const raw = ratingDoc.data() as Record<string, any>
+      return {
+        userId: String(raw.userId || ratingDoc.id),
+        displayName: String(raw.displayName || 'Anonymous'),
+        rating: Number(raw.rating || 0),
+        createdAt: raw.createdAt,
+        updatedAt: raw.updatedAt,
+      }
+    })
+  }
+
+  async getUserTemplateRating(templateId: string, userId: string): Promise<MarketplaceRating | null> {
+    if (!templateId || !userId) return null
+    if (isDemoMode) return null
+
+    const ratingRef = doc(db, this.collectionName, templateId, 'ratings', userId)
+    const snapshot = await getDoc(ratingRef)
+    if (!snapshot.exists()) return null
+
+    const raw = snapshot.data() as Record<string, any>
+    return {
+      userId,
+      displayName: String(raw.displayName || 'Anonymous'),
+      rating: Number(raw.rating || 0),
+      createdAt: raw.createdAt,
+      updatedAt: raw.updatedAt,
+    }
+  }
+
+  async upsertTemplateRating(templateId: string, input: { userId: string; displayName: string; rating: number }): Promise<void> {
+    if (isDemoMode) return
+
+    const normalizedRating = Math.max(1, Math.min(5, Math.round(input.rating)))
+    const ratingRef = doc(db, this.collectionName, templateId, 'ratings', input.userId)
+    const existing = await getDoc(ratingRef)
+
+    await setDoc(
+      ratingRef,
+      {
+        userId: input.userId,
+        displayName: input.displayName,
+        rating: normalizedRating,
+        createdAt: existing.exists() ? existing.data()?.createdAt || serverTimestamp() : serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true },
+    )
+
+    await this.recalculateTemplateRatingSummary(templateId)
+  }
+
+  async recalculateTemplateRatingSummary(templateId: string): Promise<void> {
+    if (isDemoMode) return
+
+    const ratings = await this.listTemplateRatings(templateId, 500)
+    const validRatings = ratings
+      .map((entry) => Number(entry.rating || 0))
+      .filter((value) => Number.isFinite(value) && value >= 1 && value <= 5)
+
+    const ratingCount = validRatings.length
+    const ratingAverage = ratingCount
+      ? Number((validRatings.reduce((sum, value) => sum + value, 0) / ratingCount).toFixed(1))
+      : 0
+
+    await updateDoc(doc(db, this.collectionName, templateId), {
+      ratingAverage,
+      ratingCount,
+      updatedAt: serverTimestamp(),
+    })
+  }
+
+  async hasUserPurchasedTemplate(templateId: string, userId: string): Promise<boolean> {
+    if (!templateId || !userId) return false
+    if (isDemoMode) return false
+
+    const purchaseRef = doc(db, 'users', userId, 'purchases', templateId)
+    const snapshot = await getDoc(purchaseRef)
+    return snapshot.exists()
+  }
+
+  async createPurchaseRecord(input: {
+    templateId: string
+    userId: string
+    amountPaid: number
+    provider: 'paypal' | 'paystack' | 'internal'
+    providerReference: string
+  }): Promise<string> {
+    if (isDemoMode) return `demo-purchase-${Date.now()}`
+
+    const paymentId = doc(collection(db, 'marketplace_payments')).id
+    const userPurchaseRef = doc(db, 'users', input.userId, 'purchases', input.templateId)
+    const templatePurchaseRef = doc(db, this.collectionName, input.templateId, 'purchases', paymentId)
+    const paymentRef = doc(db, 'marketplace_payments', paymentId)
+
+    const batch = writeBatch(db)
+    batch.set(
+      userPurchaseRef,
+      {
+        templateId: input.templateId,
+        userId: input.userId,
+        amountPaid: input.amountPaid,
+        provider: input.provider,
+        providerReference: input.providerReference,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true },
+    )
+
+    batch.set(templatePurchaseRef, {
+      templateId: input.templateId,
+      userId: input.userId,
+      amountPaid: input.amountPaid,
+      provider: input.provider,
+      providerReference: input.providerReference,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    })
+
+    batch.set(paymentRef, {
+      id: paymentId,
+      templateId: input.templateId,
+      buyerId: input.userId,
+      amount: input.amountPaid,
+      provider: input.provider,
+      providerReference: input.providerReference,
+      status: 'completed',
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    })
+
+    await batch.commit()
+    return paymentId
+  }
+
+  async getCreatorProfile(creatorId: string): Promise<MarketplaceCreatorProfile | null> {
+    const templates = await this.listTemplatesByCreator(creatorId, 100)
+    if (!templates.length) return null
+
+    const displayName = templates[0]?.creatorName || 'Unknown Creator'
+    const templateCount = templates.length
+    const totalDownloads = templates.reduce((sum, t) => sum + Number(t.downloads || 0), 0)
+
+    const ratingTotal = templates.reduce((sum, t) => sum + Number(t.ratingAverage || 0) * Number(t.ratingCount || 0), 0)
+    const ratingVotes = templates.reduce((sum, t) => sum + Number(t.ratingCount || 0), 0)
+    const averageRating = ratingVotes ? Number((ratingTotal / ratingVotes).toFixed(1)) : 0
+
+    return {
+      creatorId,
+      displayName,
+      templateCount,
+      totalDownloads,
+      averageRating,
+      templates,
+    }
+  }
+
+  async createMarketplacePayPalOrder(templateId: string): Promise<{ orderId: string; amount: number; currency: string }> {
+    const callable = httpsCallable(functions, 'createMarketplacePayPalOrder')
+    const result = await callable({ templateId })
+    const data = (result.data || {}) as Record<string, any>
+    return {
+      orderId: String(data.orderId || ''),
+      amount: Number(data.amount || 0),
+      currency: String(data.currency || 'USD'),
+    }
+  }
+
+  async captureMarketplacePayPalOrder(templateId: string, orderId: string): Promise<MarketplacePaymentResult> {
+    const callable = httpsCallable(functions, 'captureMarketplacePayPalOrder')
+    const result = await callable({ templateId, orderId })
+    const data = (result.data || {}) as Record<string, any>
+    return {
+      ok: Boolean(data.ok),
+      purchaseId: String(data.purchaseId || ''),
+      status: String(data.status || ''),
+      providerReference: String(data.providerReference || ''),
+    }
+  }
+
+  async initializeMarketplacePaystackTransaction(templateId: string): Promise<{ accessCode: string; reference: string }> {
+    const callable = httpsCallable(functions, 'initializeMarketplacePaystackTransaction')
+    const result = await callable({ templateId })
+    const data = (result.data || {}) as Record<string, any>
+    return {
+      accessCode: String(data.accessCode || ''),
+      reference: String(data.reference || ''),
+    }
+  }
+
+  async verifyMarketplacePaystackTransaction(templateId: string, reference: string): Promise<MarketplacePaymentResult> {
+    const callable = httpsCallable(functions, 'verifyMarketplacePaystackTransaction')
+    const result = await callable({ templateId, reference })
+    const data = (result.data || {}) as Record<string, any>
+    return {
+      ok: Boolean(data.ok),
+      purchaseId: String(data.purchaseId || ''),
+      status: String(data.status || ''),
+      providerReference: String(data.providerReference || ''),
+    }
   }
 
   async getTemplateById(id: string): Promise<MarketplaceProduct | null> {

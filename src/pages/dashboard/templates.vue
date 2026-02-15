@@ -185,6 +185,18 @@ async function useTemplate(template: MarketplaceProduct) {
 
   actionLoading.value = template.id || null
   try {
+    const entitlement = await marketplaceService.getTemplateEntitlement({
+      templateId: template.id!,
+      userId: authStore.user.id,
+      subscriptionTier: authStore.subscriptionTier as 'free' | 'pro' | 'business' | 'enterprise',
+    })
+
+    if (entitlement.requiresPurchase) {
+      alert('This template requires purchase before use.')
+      await router.push(`/marketplace/${template.id}`)
+      return
+    }
+
     await marketplaceService.incrementDownloads(template.id!)
     
     const projectId = crypto.randomUUID()

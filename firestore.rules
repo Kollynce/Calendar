@@ -199,7 +199,46 @@ service cloud.firestore {
         request.resource.data.creatorId == resource.data.creatorId &&
         validMarketplaceTemplate(request.resource.data);
 
+      match /ratings/{userId} {
+        allow read: if true;
+
+        allow create: if isAuthenticated() &&
+          request.auth.uid == userId &&
+          request.resource.data.userId == request.auth.uid &&
+          request.resource.data.displayName is string &&
+          request.resource.data.rating is number &&
+          request.resource.data.rating >= 1 &&
+          request.resource.data.rating <= 5;
+
+        allow update: if isAuthenticated() &&
+          request.auth.uid == userId &&
+          request.resource.data.userId == request.auth.uid &&
+          request.resource.data.rating is number &&
+          request.resource.data.rating >= 1 &&
+          request.resource.data.rating <= 5;
+
+        allow delete: if isAuthenticated() && request.auth.uid == userId;
+      }
+
+      match /purchases/{purchaseId} {
+        allow read: if isAuthenticated() && (
+          request.auth.uid == resource.data.userId ||
+          request.auth.uid == get(/databases/$(database)/documents/marketplace_templates/$(templateId)).data.creatorId ||
+          isAdmin()
+        );
+        allow write: if false;
+      }
+
       allow delete: if isAdminOrAdminRole() || isOwner(resource.data.creatorId);
+    }
+
+    match /marketplace_payments/{paymentId} {
+      allow read: if isAuthenticated() && (
+        request.auth.uid == resource.data.buyerId ||
+        request.auth.uid == get(/databases/$(database)/documents/marketplace_templates/$(resource.data.templateId)).data.creatorId ||
+        isAdmin()
+      );
+      allow write: if false;
     }
 
     match /subscriptions/{subscriptionId} {

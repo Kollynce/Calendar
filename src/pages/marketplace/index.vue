@@ -39,7 +39,6 @@ const tiers = [
 type MarketplaceTemplate = Omit<MarketplaceProduct, 'id' | 'category'> & {
   id: string
   category: string
-  rating?: number
 }
 
 const templates = ref<MarketplaceTemplate[]>([])
@@ -61,7 +60,6 @@ async function loadTemplates() {
   try {
     const products = await marketplaceService.listTemplates()
     templates.value = products.map(product => ({
-      rating: 4.8,
       ...product,
       id: product.id || crypto.randomUUID(),
       category: formatCategory(product.category),
@@ -103,6 +101,12 @@ const filteredTemplates = computed(() => {
 
   if (sortBy.value === 'popular') {
     return result.sort((a, b) => b.downloads - a.downloads)
+  } else if (sortBy.value === 'top-rated') {
+    return result.sort((a, b) => {
+      const ratingDiff = Number(b.ratingAverage || 0) - Number(a.ratingAverage || 0)
+      if (ratingDiff !== 0) return ratingDiff
+      return Number(b.ratingCount || 0) - Number(a.ratingCount || 0)
+    })
   } else if (sortBy.value === 'latest') {
     // In a real app, we'd use a date field. Here we use isNew or ID as fallback
     return result.sort((a, b) => (b.isNew ? 1 : 0) - (a.isNew ? 1 : 0))
@@ -405,6 +409,16 @@ function viewDetails(id: string) {
                 <div v-if="sortBy === 'popular'" class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-500 rounded-full"></div>
               </button>
               <button 
+                @click="sortBy = 'top-rated'"
+                :class="[
+                  'text-sm font-bold transition-all relative py-2 tracking-tight',
+                  sortBy === 'top-rated' ? 'text-gray-900 dark:text-white' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+                ]"
+              >
+                Top Rated
+                <div v-if="sortBy === 'top-rated'" class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-500 rounded-full"></div>
+              </button>
+              <button 
                 @click="sortBy = 'latest'"
                 :class="[
                   'text-sm font-bold transition-all relative py-2 tracking-tight',
@@ -533,7 +547,8 @@ function viewDetails(id: string) {
                     {{ template.category }}
                     <div class="flex items-center gap-1">
                       <StarSolidIcon class="w-3 h-3 text-amber-400" />
-                      <span class="text-gray-900 dark:text-white font-bold">{{ template.rating }}</span>
+                      <span class="text-gray-900 dark:text-white font-bold">{{ Number(template.ratingAverage || 0).toFixed(1) }}</span>
+                      <span class="text-gray-400">({{ Number(template.ratingCount || 0) }})</span>
                     </div>
                   </div>
                   <h3 class="text-lg font-display font-bold text-gray-900 dark:text-white group-hover:text-primary-600 transition-colors duration-300">
