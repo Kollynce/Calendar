@@ -550,6 +550,7 @@ export function buildWeekStripGraphics(
   const normalizedStartDay = typeof metadata.startDay === 'number' ? metadata.startDay : 0
   const isBlank = metadata.mode === 'blank'
   const showHeader = metadata.showHeader !== false
+  const showWeekdays = metadata.showWeekdays !== false
   // Get holidays for both the start year and end year (in case week spans two years like Dec 28 - Jan 3)
   const endDate = new Date(startDate)
   endDate.setDate(endDate.getDate() + 6)
@@ -672,10 +673,9 @@ export function buildWeekStripGraphics(
   }
 
   const weekdayRowHeightRaw = Math.max(18, Math.round(height * 0.16))
-  const weekdayRowHeight = Math.max(
-    12,
-    Math.min(34, Math.min(weekdayRowHeightRaw, height - headerHeight - paddingBottom - listHeight - 48)),
-  )
+  const weekdayRowHeight = showWeekdays
+    ? Math.max(12, Math.min(34, Math.min(weekdayRowHeightRaw, height - headerHeight - paddingBottom - listHeight - 48)))
+    : 0
   const bodyTop = headerHeight + weekdayRowHeight
   const cellHeight = Math.max(32, height - bodyTop - paddingBottom - listHeight)
   const cellWidth = days.length > 0 ? width / days.length : width
@@ -684,7 +684,7 @@ export function buildWeekStripGraphics(
   const dayNumberInsetX = 12
   const dayNumberInsetY = 8
 
-  if (weekdayRowHeight > 0) {
+  if (showWeekdays && weekdayRowHeight > 0) {
     const weekdayFontSizeEff = Math.min(weekdayFontSize, Math.max(8, Math.floor(weekdayRowHeight * 0.55)))
     const weekdayTextTop = headerHeight + Math.max(0, (weekdayRowHeight - weekdayFontSizeEff) / 2)
     const weekdayLabels = calendarGeneratorService.getWeekdayNames(

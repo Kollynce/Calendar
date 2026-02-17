@@ -106,16 +106,6 @@ const weekStripDateValue = computed(() =>
         </select>
       </PropertyField>
 
-      <PropertyField label="Label Override">
-         <input
-           type="text"
-           placeholder="(Optional)"
-           class="control-glass text-xs"
-           :value="weekStripMetadata.label ?? ''"
-           @input="updateWeekStripMetadata((draft) => { draft.label = ($event.target as HTMLInputElement).value || undefined })"
-         />
-      </PropertyField>
-
       <PropertyRow>
         <PropertyField label="Start Date">
           <input
@@ -153,6 +143,43 @@ const weekStripDateValue = computed(() =>
           @update:model-value="(val: string | number | null) => updateWeekStripMetadata((draft) => { draft.language = val as any })"
         />
       </PropertyField>
+
+      <div class="pt-4 border-t border-white/5 space-y-3">
+        <span class="text-[10px] font-medium text-white/40 uppercase">Header & Labels</span>
+        <PropertyRow>
+          <label class="flex items-center gap-2 text-[11px] text-white/60 cursor-pointer">
+            <input
+              type="checkbox"
+              class="accent-primary-400"
+              :checked="weekStripMetadata.showHeader !== false"
+              @change="updateWeekStripMetadata((draft) => { draft.showHeader = ($event.target as HTMLInputElement).checked })"
+            >
+            <span>Show Header</span>
+          </label>
+          <label class="flex items-center gap-2 text-[11px] text-white/60 cursor-pointer">
+            <input
+              type="checkbox"
+              class="accent-primary-400"
+              :checked="weekStripMetadata.showWeekdays !== false"
+              @change="updateWeekStripMetadata((draft) => { draft.showWeekdays = ($event.target as HTMLInputElement).checked })"
+            >
+            <span>Show Weekdays</span>
+          </label>
+        </PropertyRow>
+
+        <PropertyField
+          v-if="weekStripMetadata.showHeader !== false"
+          label="Label Override"
+        >
+          <input
+            type="text"
+            placeholder="(Optional)"
+            class="control-glass text-xs"
+            :value="weekStripMetadata.label ?? ''"
+            @input="updateWeekStripMetadata((draft) => { draft.label = ($event.target as HTMLInputElement).value || undefined })"
+          />
+        </PropertyField>
+      </div>
     </PropertySection>
 
     <!-- Appearance Section -->

@@ -299,6 +299,7 @@ export interface WeekStripMetadata {
 
   // Appearance - Labels & Typography
   showHeader?: boolean
+  showWeekdays?: boolean
   labelColor?: string
   labelFontFamily?: string
   labelFontSize?: number
