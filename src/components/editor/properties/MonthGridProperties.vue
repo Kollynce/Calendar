@@ -6,6 +6,11 @@ import AppSearchableSelect from '@/components/ui/AppSearchableSelect.vue'
 import PropertySection from './PropertySection.vue'
 import PropertyField from './PropertyField.vue'
 import PropertyRow from './PropertyRow.vue'
+import HeaderWeekdayToggles from './HeaderWeekdayToggles.vue'
+import BackgroundBorderControls from './BackgroundBorderControls.vue'
+import CornerRadiusField from './CornerRadiusField.vue'
+import HolidayMarkerControls from './HolidayMarkerControls.vue'
+import HolidayListControls from './HolidayListControls.vue'
 import { localizationService } from '@/services/calendar/localization.service'
 import { countries } from '@/data/countries'
 import type { CalendarGridMetadata } from '@/types'
@@ -149,26 +154,12 @@ const weekStartOptions: { value: 0 | 1 | 2 | 3 | 4 | 5 | 6; label: string }[] = 
       :is-open="isSectionOpen('header')"
       @toggle="toggleSection('header')"
     >
-      <PropertyRow>
-        <label class="flex items-center gap-2 text-[11px] text-white/60 cursor-pointer">
-          <input
-            type="checkbox"
-            class="accent-primary-400"
-            :checked="calendarMetadata.showHeader"
-            @change="updateCalendarMetadata((draft) => { draft.showHeader = ($event.target as HTMLInputElement).checked })"
-          >
-          <span>Show Header</span>
-        </label>
-        <label class="flex items-center gap-2 text-[11px] text-white/60 cursor-pointer">
-          <input
-            type="checkbox"
-            class="accent-primary-400"
-            :checked="calendarMetadata.showWeekdays"
-            @change="updateCalendarMetadata((draft) => { draft.showWeekdays = ($event.target as HTMLInputElement).checked })"
-          >
-          <span>Show Weekdays</span>
-        </label>
-      </PropertyRow>
+      <HeaderWeekdayToggles
+        :show-header="calendarMetadata.showHeader"
+        :show-weekdays="calendarMetadata.showWeekdays"
+        @update:showHeader="(value) => updateCalendarMetadata((draft) => { draft.showHeader = value })"
+        @update:showWeekdays="(value) => updateCalendarMetadata((draft) => { draft.showWeekdays = value })"
+      />
 
       <div v-if="calendarMetadata.showHeader" class="space-y-4 pt-4 border-t border-white/5">
         <PropertyField label="Title Override">
@@ -216,53 +207,22 @@ const weekStartOptions: { value: 0 | 1 | 2 | 3 | 4 | 5 | 6; label: string }[] = 
       :is-open="isSectionOpen('grid')"
       @toggle="toggleSection('grid')"
     >
-      <PropertyRow>
-        <label class="flex items-center gap-2 text-[11px] text-white/60 cursor-pointer">
-          <input
-            type="checkbox"
-            class="accent-primary-400"
-            :checked="calendarMetadata.showBackground"
-            @change="updateCalendarMetadata((draft) => { draft.showBackground = ($event.target as HTMLInputElement).checked })"
-          >
-          <span>Show Background</span>
-        </label>
-        <label class="flex items-center gap-2 text-[11px] text-white/60 cursor-pointer">
-          <input
-            type="checkbox"
-            class="accent-primary-400"
-            :checked="calendarMetadata.showBorder"
-            @change="updateCalendarMetadata((draft) => { draft.showBorder = ($event.target as HTMLInputElement).checked })"
-          >
-          <span>Show Border</span>
-        </label>
-      </PropertyRow>
+      <BackgroundBorderControls
+        :show-background="calendarMetadata.showBackground ?? true"
+        :show-border="calendarMetadata.showBorder ?? true"
+        :background-color="calendarMetadata.backgroundColor ?? '#ffffff'"
+        :border-color="calendarMetadata.borderColor ?? '#e5e7eb'"
+        @update:showBackground="(value) => updateCalendarMetadata((draft) => { draft.showBackground = value })"
+        @update:showBorder="(value) => updateCalendarMetadata((draft) => { draft.showBorder = value })"
+        @update:backgroundColor="(value) => updateCalendarMetadata((draft) => { draft.backgroundColor = value })"
+        @update:borderColor="(value) => updateCalendarMetadata((draft) => { draft.borderColor = value })"
+      />
 
       <PropertyRow>
-        <PropertyField label="Background">
-          <ColorPicker
-            :model-value="calendarMetadata.backgroundColor ?? '#ffffff'"
-            @update:modelValue="(c) => updateCalendarMetadata((draft) => { draft.backgroundColor = c })"
-          />
-        </PropertyField>
-        <PropertyField label="Border">
-          <ColorPicker
-            :model-value="calendarMetadata.borderColor ?? '#e5e7eb'"
-            @update:modelValue="(c) => updateCalendarMetadata((draft) => { draft.borderColor = c })"
-          />
-        </PropertyField>
-      </PropertyRow>
-
-      <PropertyRow>
-        <PropertyField label="Corner Radius">
-          <input
-            type="number"
-            min="0"
-            max="80"
-            class="control-glass text-xs"
-            :value="calendarMetadata.cornerRadius ?? 26"
-            @change="updateCalendarMetadata((draft) => { draft.cornerRadius = Math.max(0, Math.min(80, Number(($event.target as HTMLInputElement).value) || 0)) })"
-          />
-        </PropertyField>
+        <CornerRadiusField
+          :model-value="calendarMetadata.cornerRadius ?? 26"
+          @update:modelValue="(value) => updateCalendarMetadata((draft) => { draft.cornerRadius = value })"
+        />
         <PropertyField label="Cell Gap">
           <input
             type="number"
@@ -318,107 +278,29 @@ const weekStartOptions: { value: 0 | 1 | 2 | 3 | 4 | 5 | 6; label: string }[] = 
       :is-open="isSectionOpen('holidays')"
       @toggle="toggleSection('holidays')"
     >
-      <div class="flex items-center justify-between">
-        <span class="text-[10px] font-medium text-white/40 uppercase">Markers</span>
-        <label class="flex items-center gap-2 text-[11px] text-white/60 cursor-pointer">
-          <input
-            type="checkbox"
-            class="accent-primary-400"
-            :checked="calendarMetadata.showHolidayMarkers ?? true"
-            @change="updateCalendarMetadata((draft) => { draft.showHolidayMarkers = ($event.target as HTMLInputElement).checked })"
-          >
-          <span>Enabled</span>
-        </label>
-      </div>
+      <HolidayMarkerControls
+        :show-markers="calendarMetadata.showHolidayMarkers ?? true"
+        :marker-style="calendarMetadata.holidayMarkerStyle ?? 'text'"
+        :marker-color="calendarMetadata.holidayMarkerColor ?? '#ef4444'"
+        :marker-height="calendarMetadata.holidayMarkerHeight ?? 4"
+        :options="holidayMarkerOptions"
+        :is-marker-locked="isMarkerLocked"
+        @update:showMarkers="(value) => updateCalendarMetadata((draft) => { draft.showHolidayMarkers = value })"
+        @update:markerStyle="(value) => updateCalendarMetadata((draft) => { draft.holidayMarkerStyle = value as any })"
+        @update:markerColor="(value) => updateCalendarMetadata((draft) => { draft.holidayMarkerColor = value })"
+        @update:markerHeight="(value) => updateCalendarMetadata((draft) => { draft.holidayMarkerHeight = value })"
+      />
 
-      <div v-if="calendarMetadata.showHolidayMarkers !== false" class="space-y-4 pt-4 border-t border-white/5">
-        <PropertyField label="Marker Style" :is-pro="isMarkerLocked(holidayMarkerOptions.find(o => o.value === calendarMetadata.holidayMarkerStyle))">
-          <select
-            class="control-glass text-xs"
-            :value="calendarMetadata.holidayMarkerStyle ?? 'text'"
-            @change="updateCalendarMetadata((draft) => { 
-                const val = ($event.target as HTMLSelectElement).value;
-                const option = holidayMarkerOptions.find(o => o.value === val);
-                if (option && !isMarkerLocked(option)) draft.holidayMarkerStyle = val as any;
-              })"
-          >
-            <option v-for="option in holidayMarkerOptions" :key="option.value" :value="option.value" :disabled="isMarkerLocked(option)">
-              {{ option.label }}{{ isMarkerLocked(option) ? ' (Pro)' : '' }}
-            </option>
-          </select>
-        </PropertyField>
-
-        <PropertyRow>
-          <PropertyField label="Color">
-            <ColorPicker
-              :model-value="calendarMetadata.holidayMarkerColor ?? '#ef4444'"
-              @update:modelValue="(c) => updateCalendarMetadata((draft) => { draft.holidayMarkerColor = c })"
-            />
-          </PropertyField>
-          <PropertyField 
-            v-if="!['background', 'text'].includes(calendarMetadata.holidayMarkerStyle ?? 'text')"
-            label="Size"
-          >
-            <input
-              type="number"
-              min="1"
-              max="20"
-              class="control-glass text-xs"
-              :value="calendarMetadata.holidayMarkerHeight ?? 4"
-              @change="updateCalendarMetadata((draft) => { draft.holidayMarkerHeight = Math.max(1, Math.min(20, Number(($event.target as HTMLInputElement).value) || 4)) })"
-            />
-          </PropertyField>
-        </PropertyRow>
-      </div>
-
-      <div class="pt-4 border-t border-white/5 space-y-4">
-        <div class="flex items-center justify-between">
-          <span class="text-[10px] font-medium text-white/40 uppercase">Holiday List</span>
-          <label class="flex items-center gap-2 text-[11px] text-white/60 cursor-pointer">
-            <input
-              type="checkbox"
-              class="accent-primary-400"
-              :checked="calendarMetadata.showHolidayList !== false"
-              @change="updateCalendarMetadata((draft) => { draft.showHolidayList = ($event.target as HTMLInputElement).checked })"
-            >
-            <span>Show</span>
-          </label>
-        </div>
-
-        <div v-if="calendarMetadata.showHolidayList !== false" class="space-y-4">
-          <PropertyField label="List Title">
-            <input
-              type="text"
-              class="control-glass text-xs"
-              :value="calendarMetadata.holidayListTitle ?? 'Holidays'"
-              @input="updateCalendarMetadata((draft) => { draft.holidayListTitle = ($event.target as HTMLInputElement).value })"
-            />
-          </PropertyField>
-
-          <PropertyRow>
-            <PropertyField label="Max Items">
-              <input
-                type="number"
-                min="1"
-                max="8"
-                class="control-glass text-xs"
-                :value="calendarMetadata.holidayListMaxItems ?? 4"
-                @change="updateCalendarMetadata((draft) => { draft.holidayListMaxItems = Math.max(1, Math.min(8, Number(($event.target as HTMLInputElement).value) || 4)) })"
-              />
-            </PropertyField>
-            <PropertyField label="Height">
-              <input
-                type="number"
-                min="40"
-                max="220"
-                class="control-glass text-xs"
-                :value="calendarMetadata.holidayListHeight ?? 96"
-                @change="updateCalendarMetadata((draft) => { draft.holidayListHeight = Math.max(40, Math.min(220, Number(($event.target as HTMLInputElement).value) || 96)) })"
-              />
-            </PropertyField>
-          </PropertyRow>
-        </div>
-      </div>
+      <HolidayListControls
+        :show-list="calendarMetadata.showHolidayList !== false"
+        :list-title="calendarMetadata.holidayListTitle ?? 'Holidays'"
+        :max-items="calendarMetadata.holidayListMaxItems ?? 4"
+        :list-height="calendarMetadata.holidayListHeight ?? 96"
+        @update:showList="(value) => updateCalendarMetadata((draft) => { draft.showHolidayList = value })"
+        @update:listTitle="(value) => updateCalendarMetadata((draft) => { draft.holidayListTitle = value })"
+        @update:maxItems="(value) => updateCalendarMetadata((draft) => { draft.holidayListMaxItems = value })"
+        @update:listHeight="(value) => updateCalendarMetadata((draft) => { draft.holidayListHeight = value })"
+      />
     </PropertySection>
 
     <!-- Typography Section -->

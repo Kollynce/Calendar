@@ -1,15 +1,16 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import ColorPicker from '../ColorPicker.vue'
 import AppSearchableSelect from '@/components/ui/AppSearchableSelect.vue'
 import PropertySection from './PropertySection.vue'
 import PropertyField from './PropertyField.vue'
 import PropertyRow from './PropertyRow.vue'
+import { usePropertySections } from './usePropertySections'
+import { useHolidayMarkerOptions } from './useHolidayMarkerOptions'
 import { localizationService } from '@/services/calendar/localization.service'
 import { countries } from '@/data/countries'
 import type { DateCellMetadata } from '@/types'
 
-import { useAuthStore } from '@/stores'
 
 interface Props {
   dateCellMetadata: DateCellMetadata
@@ -17,39 +18,9 @@ interface Props {
 }
 
 const props = defineProps<Props>()
-const authStore = useAuthStore()
+const { toggleSection, isSectionOpen } = usePropertySections(['content'])
 
-// Section management
-const activeSections = ref<Set<string>>(new Set(['content']))
-
-function toggleSection(id: string) {
-  if (activeSections.value.has(id)) {
-    activeSections.value.delete(id)
-  } else {
-    activeSections.value.add(id)
-  }
-}
-
-function isSectionOpen(id: string) {
-  return activeSections.value.has(id)
-}
-
-const holidayMarkerOptions: { value: string; label: string; requiredTier?: 'pro' | 'business' }[] = [
-  { value: 'bar', label: 'Bar (Bottom)' },
-  { value: 'dot', label: 'Dot (Circle)' },
-  { value: 'square', label: 'Square (Solid)' },
-  { value: 'border', label: 'Border (Ring)', requiredTier: 'pro' },
-  { value: 'triangle', label: 'Corner (Triangle)', requiredTier: 'pro' },
-  { value: 'background', label: 'Background (Fill)', requiredTier: 'pro' },
-  { value: 'text', label: 'Text (Highlight)', requiredTier: 'pro' },
-]
-
-function isMarkerLocked(option: any): boolean {
-  if (!option?.requiredTier) return false
-  if (option.requiredTier === 'pro') return !authStore.isPro
-  if (option.requiredTier === 'business') return !authStore.isBusiness
-  return false
-}
+const { holidayMarkerOptions, isMarkerLocked } = useHolidayMarkerOptions()
 
 const languageOptions = computed(() =>
   localizationService.getAvailableLanguages().map(l => ({

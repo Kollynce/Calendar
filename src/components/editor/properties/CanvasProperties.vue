@@ -7,49 +7,33 @@ import ColorPicker from '../ColorPicker.vue'
 import PropertySection from './PropertySection.vue'
 import PropertyField from './PropertyField.vue'
 import PropertyRow from './PropertyRow.vue'
+import { usePropertySections } from './usePropertySections'
 import {
   CANVAS_SIZE_PRESETS,
   getPresetByCanvasSize,
   mmToPx,
-  pxToMm,
   type CanvasPreset,
 } from '@/config/canvas-presets'
 import { LockClosedIcon, LockOpenIcon } from '@heroicons/vue/24/outline'
 
 import type {
-  CanvasBackgroundPattern,
-  CanvasPatternConfig,
   WatermarkConfig,
   WatermarkMode,
   WatermarkPositionPreset,
 } from '@/types'
+import {
+  DEFAULT_PATTERN_CONFIG,
+  PATTERN_OPTIONS,
+  PRESET_GROUP_DEFS,
+  UNIT_OPTIONS,
+  convertUnitValue,
+  type CanvasBackgroundPattern,
+  type CanvasUnit,
+} from '@/config/canvas-ui'
 
 import AppTierBadge from '@/components/ui/AppTierBadge.vue'
 import { DEFAULT_WATERMARK_CONFIG, FREE_WATERMARK_PRESETS } from '@/config/watermark-defaults'
 import { WATERMARK_MODE_OPTIONS, WATERMARK_PRESETS } from '@/config/watermark-ui'
-
-type CanvasUnit = 'px' | 'mm' | 'cm' | 'in'
-
-const PATTERN_OPTIONS: { value: CanvasBackgroundPattern; label: string; icon: string }[] = [
-  { value: 'none', label: 'None', icon: '○' },
-  { value: 'ruled', label: 'Ruled', icon: '☰' },
-  { value: 'grid', label: 'Grid', icon: '▦' },
-  { value: 'dot', label: 'Dotted', icon: '⁙' },
-]
-
-const DEFAULT_PATTERN_CONFIG: CanvasPatternConfig = {
-  pattern: 'none',
-  color: '#e2e8f0',
-  spacing: 24,
-  opacity: 0.5,
-}
-
-const UNIT_OPTIONS: { value: CanvasUnit; label: string }[] = [
-  { value: 'px', label: 'Pixels (px)' },
-  { value: 'mm', label: 'Millimeters (mm)' },
-  { value: 'cm', label: 'Centimeters (cm)' },
-  { value: 'in', label: 'Inches (in)' },
-]
 
 const CANVAS_COLOR_PRESETS = [
   '#ffffff', '#f8fafc', '#f1f5f9', '#e2e8f0', '#cbd5e1', '#94a3b8',
@@ -262,25 +246,6 @@ function formatPresetSize(widthMm: number, heightMm: number): string {
 
 const detectedPreset = computed(() => getPresetByCanvasSize(width.value, height.value))
 
-const PRESET_GROUP_DEFS = [
-  {
-    label: 'Popular print',
-    keys: ['A5', 'A4', 'A3', 'A2', 'Letter', 'Legal', 'Tabloid', 'Executive', 'Poster18x24', 'Poster24x36'],
-  },
-  {
-    label: 'Photo & square',
-    keys: ['Photo4x6', 'Photo5x7', 'Square12in'],
-  },
-  {
-    label: 'Digital & social',
-    keys: ['InstagramSquare', 'InstagramStory', 'PinterestPin'],
-  },
-  {
-    label: 'Slides & screens',
-    keys: ['PresentationHD'],
-  },
-] as const
-
 const groupedPresets = computed(() => {
   const presetMap = new Map(CANVAS_SIZE_PRESETS.map((preset) => [preset.key, preset]))
   const used = new Set<string>()
@@ -370,36 +335,6 @@ function handleOrientationChange(target: 'portrait' | 'landscape'): void {
   applyCanvasSize()
 }
 
-function convertUnitValue(
-  value: number,
-  from: CanvasUnit,
-  to: CanvasUnit,
-): number {
-  if (!Number.isFinite(value)) return 0
-  if (from === to) return value
-  if (from === 'px') {
-    if (to === 'mm') return pxToMm(value)
-    if (to === 'cm') return pxToMm(value) / 10
-    if (to === 'in') return pxToMm(value) / 25.4
-  }
-  if (from === 'mm') {
-    if (to === 'px') return mmToPx(value)
-    if (to === 'cm') return value / 10
-    if (to === 'in') return value / 25.4
-  }
-  if (from === 'cm') {
-    if (to === 'px') return mmToPx(value * 10)
-    if (to === 'mm') return value * 10
-    if (to === 'in') return value / 2.54
-  }
-  if (from === 'in') {
-    if (to === 'px') return mmToPx(value * 25.4)
-    if (to === 'mm') return value * 25.4
-    if (to === 'cm') return value * 2.54
-  }
-  return 0
-}
-
 function updateWidthValue(value: number): void {
   if (!Number.isFinite(value) || value <= 0) return
   const convertedValue = convertUnitValue(value, selectedUnit.value, 'px')
@@ -482,20 +417,7 @@ watch([selectedPattern, patternColor, patternSpacing, patternOpacity], () => {
   scheduleApplyCanvasPattern()
 })
 
-// Section management
-const activeSections = ref<Set<string>>(new Set(['structure']))
-
-function toggleSection(id: string) {
-  if (activeSections.value.has(id)) {
-    activeSections.value.delete(id)
-  } else {
-    activeSections.value.add(id)
-  }
-}
-
-function isSectionOpen(id: string) {
-  return activeSections.value.has(id)
-}
+const { toggleSection, isSectionOpen } = usePropertySections(['structure'])
 </script>
 
 <template>

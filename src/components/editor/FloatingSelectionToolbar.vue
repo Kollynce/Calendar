@@ -246,7 +246,7 @@ onBeforeUnmount(() => {
           transform: 'translateX(-50%)'
         }"
       >
-        <div class="flex items-center gap-1 px-2 py-1.5 bg-[#2a2a2a] rounded-xl shadow-2xl border border-white/10">
+        <div class="editor-popover flex items-center gap-1 px-2 py-1.5">
           <div
             v-if="quickActions.length"
             class="flex items-center gap-1 pr-2 mr-1 border-r border-white/10"

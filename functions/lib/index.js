@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.paypalWebhook = exports.registerPayPalSubscription = exports.provisionUser = exports.verifyMarketplacePaystackTransaction = exports.initializeMarketplacePaystackTransaction = exports.captureMarketplacePayPalOrder = exports.createMarketplacePayPalOrder = exports.retryExportJob = exports.processExportJobRetry = exports.processExportJob = exports.createExportJob = void 0;
+exports.paypalWebhook = exports.registerPayPalSubscription = exports.adminUpdateUserAccount = exports.provisionUser = exports.verifyMarketplacePaystackTransaction = exports.initializeMarketplacePaystackTransaction = exports.captureMarketplacePayPalOrder = exports.createMarketplacePayPalOrder = exports.retryExportJob = exports.processExportJobRetry = exports.processExportJob = exports.createExportJob = exports.incrementTemplateDownloads = void 0;
 const admin = __importStar(require("firebase-admin"));
 const logger = __importStar(require("firebase-functions/logger"));
 const functionsV1 = __importStar(require("firebase-functions/v1"));
@@ -65,6 +65,16 @@ function requireAuth(context) {
         throw new functionsV1.https.HttpsError('unauthenticated', 'Authentication required');
     }
     return uid;
+}
+async function requireAdmin(context) {
+    const uid = requireAuth(context);
+    if (context.auth?.token?.admin === true)
+        return uid;
+    const userSnap = await admin.firestore().collection('users').doc(uid).get();
+    const role = String(userSnap.data()?.role || '').trim().toLowerCase();
+    if (role === 'admin')
+        return uid;
+    throw new functionsV1.https.HttpsError('permission-denied', 'Admin access required');
 }
 function getAdminEmail() {
     const fromEnv = normalizeEmail(process.env.ADMIN_EMAIL);
@@ -279,6 +289,24 @@ async function updateUserTier(input) {
         logger.warn('Failed to set subscription custom claim', { uid, error: e?.message || String(e) });
     }
 }
+async function updateUserRoleAndTier(input) {
+    const uid = String(input.userId || '').trim();
+    if (!uid) {
+        throw new functionsV1.https.HttpsError('invalid-argument', 'userId is required');
+    }
+    await admin.firestore().collection('users').doc(uid).set({
+        role: input.role,
+        subscription: input.subscription,
+        updatedAt: new Date().toISOString(),
+    }, { merge: true });
+    const userRecord = await admin.auth().getUser(uid);
+    const existingClaims = userRecord.customClaims || {};
+    await admin.auth().setCustomUserClaims(uid, {
+        ...existingClaims,
+        admin: input.role === 'admin',
+        subscription: input.subscription,
+    });
+}
 async function getMarketplaceTemplateById(templateId) {
     const id = String(templateId || '').trim();
     if (!id) {
@@ -471,6 +499,25 @@ async function verifyPaystackMarketplaceTransaction(input) {
         providerReference,
     };
 }
+exports.incrementTemplateDownloads = functionsV1.https.onCall(async (data, context) => {
+    requireAuth(context);
+    const templateId = String(data?.templateId || '').trim();
+    if (!templateId) {
+        throw new functionsV1.https.HttpsError('invalid-argument', 'templateId is required');
+    }
+    const templateRef = admin.firestore().collection('marketplace_templates').doc(templateId);
+    await admin.firestore().runTransaction(async (tx) => {
+        const snap = await tx.get(templateRef);
+        if (!snap.exists) {
+            throw new functionsV1.https.HttpsError('not-found', 'Template not found');
+        }
+        tx.update(templateRef, {
+            downloads: admin.firestore.FieldValue.increment(1),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+    });
+    return { ok: true };
+});
 exports.createExportJob = functionsV1.https.onCall(async (data, context) => {
     const uid = requireAuth(context);
     const projectId = String(data?.projectId || '').trim();
@@ -1250,6 +1297,34 @@ exports.provisionUser = functionsV1.auth.user().onCreate(async (user) => {
         updatedAt: now,
         lastLoginAt: now,
     }, { merge: true });
+});
+exports.adminUpdateUserAccount = functionsV1.https.onCall(async (data, context) => {
+    await requireAdmin(context);
+    const userId = String(data?.userId || '').trim();
+    const role = String(data?.role || '').trim().toLowerCase();
+    const subscription = String(data?.subscription || '').trim().toLowerCase();
+    if (!userId) {
+        throw new functionsV1.https.HttpsError('invalid-argument', 'userId is required');
+    }
+    const allowedRoles = ['user', 'creator', 'admin'];
+    const allowedSubscriptions = ['free', 'pro', 'business', 'enterprise'];
+    if (!allowedRoles.includes(role)) {
+        throw new functionsV1.https.HttpsError('invalid-argument', 'Invalid role');
+    }
+    if (!allowedSubscriptions.includes(subscription)) {
+        throw new functionsV1.https.HttpsError('invalid-argument', 'Invalid subscription tier');
+    }
+    await updateUserRoleAndTier({
+        userId,
+        role: role,
+        subscription: subscription,
+    });
+    return {
+        ok: true,
+        userId,
+        role,
+        subscription,
+    };
 });
 exports.registerPayPalSubscription = functionsV1.https.onCall(async (data, context) => {
     const uid = requireAuth(context);

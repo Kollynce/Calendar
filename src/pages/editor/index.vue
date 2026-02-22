@@ -291,14 +291,6 @@ async function handlePublishToMarketplace(productData: any) {
   try {
     if (!editorStore.project) return
 
-    // Debug authentication state
-    console.log('[handlePublishToMarketplace] Auth state:', {
-      isAuthenticated: authStore.isAuthenticated,
-      userId: authStore.user?.id,
-      userDisplayName: authStore.user?.displayName,
-      firebaseUser: authStore.firebaseUser?.uid,
-    })
-
     if (!authStore.isAuthenticated || !authStore.user?.id) {
       throw new Error('User not authenticated or missing user ID')
     }
@@ -318,8 +310,6 @@ async function handlePublishToMarketplace(productData: any) {
       canvasObjects: canvasState?.objects ?? [],
       downloads: 0,
     }
-
-    console.log('[handlePublishToMarketplace] Publishing product:', product)
 
     await marketplaceService.publishTemplate(product)
     
@@ -452,8 +442,12 @@ const projectName = computed({
 const routeProjectId = computed(() => {
   const raw = route.params.id
   const result = typeof raw === 'string' && raw.length > 0 ? raw : null
-  console.log('[routeProjectId computed] Route params.id:', raw, '→ result:', result)
   return result
+})
+
+const routeTemplateId = computed(() => {
+  const raw = route.query.templateId
+  return typeof raw === 'string' && raw.length > 0 ? raw : null
 })
 
 function buildDefaultProjectConfig() {
@@ -495,7 +489,6 @@ async function ensureProjectForRoute(): Promise<void> {
 let isInitializing = false
 
 function handleCanvasReady(canvasEl: HTMLCanvasElement): void {
-  console.log('[handleCanvasReady] Canvas element ready, initializing editor canvas')
   canvasElRef.value = canvasEl
   void initializeEditorCanvas()
 }
@@ -504,15 +497,12 @@ async function initializeEditorCanvas(): Promise<void> {
   await nextTick()
 
   if (!canvasElRef.value) {
-    console.log('[initializeEditorCanvas] No canvas ref, skipping')
     return
   }
   if (editorStore.canvas) {
-    console.log('[initializeEditorCanvas] Canvas already exists, skipping')
     return
   }
   if (isInitializing) {
-    console.log('[initializeEditorCanvas] Already initializing, skipping duplicate call')
     return
   }
 
@@ -520,17 +510,12 @@ async function initializeEditorCanvas(): Promise<void> {
   const expectedProjectId = routeProjectId.value
   const loadedProjectId = editorStore.project?.id
   if (expectedProjectId && loadedProjectId !== expectedProjectId) {
-    console.log('[initializeEditorCanvas] Project mismatch - route:', expectedProjectId, 'loaded:', loadedProjectId, '- skipping initialization')
     return
   }
 
   isInitializing = true
   try {
-    console.log('[initializeEditorCanvas] Initializing canvas for project:', editorStore.project?.id)
     await editorStore.initializeCanvas(canvasElRef.value)
-    const currentCanvas = editorStore.canvas
-    const objectCount = (currentCanvas as any)?.getObjects?.().length ?? 0
-    console.log('[initializeEditorCanvas] Canvas initialized with', objectCount, 'objects')
   } finally {
     isInitializing = false
   }
@@ -546,54 +531,72 @@ async function initializeEditorCanvas(): Promise<void> {
 }
 
 onMounted(() => {
-  void ensureProjectForRoute()
-  loadTemplateThumbnails()
+  void initializeEditorPage()
 })
 
+async function applyTemplateFromRouteQuery(): Promise<void> {
+  const templateId = routeTemplateId.value
+  if (!templateId || !authStore.user?.id) return
+
+  if (editorStore.project?.templateId === templateId) return
+
+  const template = allTemplates.value.find((item) => item.id === templateId)
+  if (!template) return
+
+  try {
+    const entitlement = await marketplaceService.getTemplateEntitlement({
+      templateId,
+      userId: authStore.user.id,
+      subscriptionTier: authStore.subscriptionTier as 'free' | 'pro' | 'business' | 'enterprise',
+    })
+
+    if (entitlement.includedByTier || entitlement.purchased) {
+      await applyTemplate(template)
+    }
+  } catch (error) {
+    console.error('[Editor] Failed to apply template from route query', error)
+  }
+}
+
+async function initializeEditorPage(): Promise<void> {
+  await ensureProjectForRoute()
+  await loadTemplateThumbnails()
+  await applyTemplateFromRouteQuery()
+}
+
 watch(routeProjectId, async (next, prev) => {
-  console.log('[routeProjectId watch] Route changed from', prev, 'to', next)
-  console.log('[routeProjectId watch] Current project in store:', editorStore.project?.id)
-  console.log('[routeProjectId watch] Canvas exists:', !!editorStore.canvas)
-  
   if (next === prev) {
-    console.log('[routeProjectId watch] Same route ID, skipping')
     return
   }
 
   // Always destroy and reload if the route project ID doesn't match the loaded project
   if (next && editorStore.project?.id === next && editorStore.canvas) {
-    console.log('[routeProjectId watch] Same project already loaded, skipping')
     return
   }
 
-  console.log('[routeProjectId watch] Destroying canvas and loading new project')
-  
   // Destroy canvas and clear state before loading new project
   if (editorStore.canvas) {
-    console.log('[routeProjectId watch] Destroying existing canvas')
     editorStore.destroyCanvas()
   }
-  
+
   // Clear the canvas ref so it gets recreated
   canvasElRef.value = null
-  
+
   // Increment key to force Canvas component to remount with fresh DOM element
   canvasKey.value++
-  console.log('[routeProjectId watch] Canvas key incremented to', canvasKey.value)
-  
+
   // Wait a tick to ensure canvas component unmounts
   await nextTick()
-  
-  console.log('[routeProjectId watch] Loading project:', next)
+
   await ensureProjectForRoute()
-  console.log('[routeProjectId watch] Project loaded:', editorStore.project?.id, 'with', editorStore.project?.canvas.objects.length, 'objects')
-  
+
   // Wait another tick to ensure project is fully loaded and Canvas remounts
   await nextTick()
-  
-  // Canvas will emit canvas-ready when it remounts, which will call initializeEditorCanvas
-  console.log('[routeProjectId watch] Waiting for Canvas to remount and emit canvas-ready')
 }, { immediate: false, flush: 'post' })
+
+watch(routeTemplateId, async () => {
+  await applyTemplateFromRouteQuery()
+})
 
 onBeforeUnmount(() => {
   editorStore.destroyCanvas()

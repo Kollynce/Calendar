@@ -106,6 +106,17 @@ const galleryImages = computed(() => {
 const ratingAverage = computed(() => Number(template.value?.ratingAverage || 0))
 const ratingCount = computed(() => Number(template.value?.ratingCount || 0))
 const canRate = computed(() => Boolean(authStore.user?.id && template.value?.id))
+const ratingFillPercent = computed(() => {
+  const percent = (ratingAverage.value / 5) * 100
+  return Math.min(100, Math.max(0, percent))
+})
+const ratingMood = computed(() => {
+  if (!ratingCount.value) return 'Be the first to share your thoughts.'
+  if (ratingAverage.value >= 4.5) return 'Beloved by designers who crave polish.'
+  if (ratingAverage.value >= 3.5) return 'Highly rated by most creators.'
+  if (ratingAverage.value >= 2.5) return 'Mixed feedback — your insight helps.'
+  return 'Help other creators decide with an honest review.'
+})
 
 const isIncluded = computed(() => {
   if (!template.value) return false
@@ -122,23 +133,29 @@ const buttonText = computed(() => {
 })
 
 async function handleAction() {
-  if (!template.value) return
-  if (isIncluded.value) {
-    if (template.value.id) {
-      await marketplaceService.incrementDownloads(template.value.id)
+  try {
+    if (!template.value) return
+
+    if (isIncluded.value) {
+      if (template.value.id) {
+        await marketplaceService.incrementDownloads(template.value.id)
+      }
+      await router.push('/dashboard/projects')
+      return
     }
-    await router.push('/dashboard/projects')
-    return
+
+    purchaseError.value = null
+
+    if (selectedProvider.value === 'paypal') {
+      void mountPayPalButtons()
+      return
+    }
+
+    void payWithPaystack()
+  } catch (error) {
+    console.error('[MarketplaceDetail] Failed to handle template action', error)
+    purchaseError.value = 'Something went wrong while processing this template. Please try again.'
   }
-
-  purchaseError.value = null
-
-  if (selectedProvider.value === 'paypal') {
-    void mountPayPalButtons()
-    return
-  }
-
-  void payWithPaystack()
 }
 
 function viewRelatedTemplate(id: string) {
@@ -490,30 +507,67 @@ onBeforeUnmount(() => {
                 </div>
               </div>
 
-              <div class="space-y-4">
-                <h3 class="text-xs font-black text-gray-400 uppercase tracking-[0.2em]">Description</h3>
-                <p class="text-gray-600 dark:text-gray-400 leading-relaxed text-sm">
-                  {{ template.description }}
-                </p>
-              </div>
+              <div class="flex flex-col gap-6">
+                <div class="w-full rounded-3xl border border-gray-100 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/60 backdrop-blur p-8 space-y-6">
+                  <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                      <p class="text-[11px] font-black uppercase tracking-[0.25em] text-gray-400">Community rating</p>
+                      <div class="mt-2 flex items-baseline gap-2">
+                        <span class="text-5xl font-black text-gray-900 dark:text-white">{{ ratingAverage.toFixed(1) }}</span>
+                        <span class="text-sm text-gray-500 dark:text-gray-400">/ 5</span>
+                      </div>
+                    </div>
+                    <div class="text-left sm:text-right">
+                      <p class="text-sm font-semibold text-gray-900 dark:text-white">{{ ratingCount }} reviews</p>
+                      <p class="text-xs text-gray-500">{{ ratingMood }}</p>
+                    </div>
+                  </div>
 
-              <div class="space-y-4">
-                <h3 class="text-xs font-black text-gray-400 uppercase tracking-[0.2em]">Rate this template</h3>
-                <div class="flex items-center gap-2">
-                  <button
-                    v-for="star in 5"
-                    :key="`rating-star-${star}`"
-                    class="p-1"
-                    :disabled="!canRate || savingRating"
-                    @click="submitRating(star)"
-                  >
-                    <StarSolidIcon
-                      class="w-6 h-6"
-                      :class="star <= selectedRating ? 'text-amber-400' : 'text-gray-300 dark:text-gray-700'"
-                    />
-                  </button>
+                  <div>
+                    <div class="h-2 rounded-full bg-gray-200 dark:bg-gray-800 overflow-hidden">
+                      <div
+                        class="h-full rounded-full bg-linear-to-r from-amber-400 via-primary-500 to-primary-600"
+                        :style="{ width: `${ratingFillPercent}%` }"
+                      ></div>
+                    </div>
+                    <p class="mt-2 text-xs text-gray-500">{{ (ratingFillPercent / 20).toFixed(1) }}x more likely to be favorited</p>
+                  </div>
+
+                  <div class="flex flex-wrap gap-2">
+                    <button
+                      v-for="star in 5"
+                      :key="`rating-star-${star}`"
+                      class="flex-1 min-w-[60px] rounded-2xl border border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-800/60 p-2 transition hover:-translate-y-0.5"
+                      :class="{
+                        'shadow-lg shadow-amber-500/20 border-amber-300 bg-amber-50/80 dark:bg-amber-500/10': star <= selectedRating,
+                        'opacity-50 cursor-not-allowed': !canRate || savingRating,
+                      }"
+                      :disabled="!canRate || savingRating"
+                      @click="submitRating(star)"
+                    >
+                      <div class="flex items-center justify-center gap-1 text-sm font-semibold">
+                        <StarSolidIcon class="w-4 h-4" :class="star <= selectedRating ? 'text-amber-400' : 'text-gray-400'" />
+                        {{ star }}
+                      </div>
+                    </button>
+                  </div>
+                  <p class="text-xs text-gray-400" v-if="!authStore.isAuthenticated">Sign in to leave a rating.</p>
                 </div>
-                <p class="text-xs text-gray-400" v-if="!authStore.isAuthenticated">Sign in to leave a rating.</p>
+
+                <div class="w-full relative overflow-hidden rounded-3xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 p-8 shadow-xl">
+                  <div class="absolute -top-10 -right-6 w-40 h-40 bg-primary-500/10 blur-3xl"></div>
+                  <p class="text-[11px] font-black uppercase tracking-[0.25em] text-gray-400">Description</p>
+                  <h3 class="mt-3 text-2xl font-display font-black text-gray-900 dark:text-white leading-snug">
+                    What makes this template unique
+                  </h3>
+                  <p class="mt-4 text-sm leading-relaxed text-gray-600 dark:text-gray-300">
+                    {{ template.description || 'No description yet — start creating and add your own flair.' }}
+                  </p>
+                  <div class="mt-6 flex flex-wrap gap-3 text-[10px] font-bold uppercase tracking-[0.25em] text-gray-400">
+                    <span class="rounded-full border border-gray-200 dark:border-gray-700 px-3 py-1">{{ template.category }}</span>
+                    <span class="rounded-full border border-gray-200 dark:border-gray-700 px-3 py-1">{{ featureList[0] }}</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

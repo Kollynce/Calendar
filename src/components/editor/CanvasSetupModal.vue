@@ -15,34 +15,18 @@ import {
   CANVAS_SIZE_PRESETS,
   getPresetByCanvasSize,
   mmToPx,
-  pxToMm,
   type CanvasPreset,
 } from '@/config/canvas-presets'
 import { LockClosedIcon, LockOpenIcon } from '@heroicons/vue/24/outline'
-import type { CanvasBackgroundPattern, CanvasPatternConfig } from '@/types'
-
-type CanvasUnit = 'px' | 'mm' | 'cm' | 'in'
-
-const PATTERN_OPTIONS: { value: CanvasBackgroundPattern; label: string; icon: string }[] = [
-  { value: 'none', label: 'None', icon: '○' },
-  { value: 'ruled', label: 'Ruled', icon: '☰' },
-  { value: 'grid', label: 'Grid', icon: '▦' },
-  { value: 'dot', label: 'Dotted', icon: '⁙' },
-]
-
-const DEFAULT_PATTERN_CONFIG: CanvasPatternConfig = {
-  pattern: 'none',
-  color: '#e2e8f0',
-  spacing: 24,
-  opacity: 0.5,
-}
-
-const UNIT_OPTIONS: { value: CanvasUnit; label: string }[] = [
-  { value: 'px', label: 'Pixels (px)' },
-  { value: 'mm', label: 'Millimeters (mm)' },
-  { value: 'cm', label: 'Centimeters (cm)' },
-  { value: 'in', label: 'Inches (in)' },
-]
+import type { CanvasBackgroundPattern } from '@/types'
+import {
+  DEFAULT_PATTERN_CONFIG,
+  PATTERN_OPTIONS,
+  PRESET_GROUP_DEFS,
+  UNIT_OPTIONS,
+  convertUnitValue,
+  type CanvasUnit,
+} from '@/config/canvas-ui'
 
 const props = defineProps<{
   isOpen: boolean
@@ -95,25 +79,6 @@ function formatPresetSize(widthMm: number, heightMm: number): string {
 
 const previewAspect = computed(() => `${Math.max(width.value, 1)} / ${Math.max(height.value, 1)}`)
 const detectedPreset = computed(() => getPresetByCanvasSize(width.value, height.value))
-
-const PRESET_GROUP_DEFS = [
-  {
-    label: 'Popular print',
-    keys: ['A5', 'A4', 'A3', 'A2', 'Letter', 'Legal', 'Tabloid', 'Executive', 'Poster18x24', 'Poster24x36'],
-  },
-  {
-    label: 'Photo & square',
-    keys: ['Photo4x6', 'Photo5x7', 'Square12in'],
-  },
-  {
-    label: 'Digital & social',
-    keys: ['InstagramSquare', 'InstagramStory', 'PinterestPin'],
-  },
-  {
-    label: 'Slides & screens',
-    keys: ['PresentationHD'],
-  },
-] as const
 
 const groupedPresets = computed(() => {
   const presetMap = new Map(CANVAS_SIZE_PRESETS.map((preset) => [preset.key, preset]))
@@ -212,36 +177,6 @@ function handleOrientationChange(target: 'portrait' | 'landscape'): void {
   width.value = newWidth
   height.value = newHeight
   setAspectRatioFromCurrent()
-}
-
-function convertUnitValue(
-  value: number,
-  from: CanvasUnit,
-  to: CanvasUnit,
-): number {
-  if (!Number.isFinite(value)) return 0
-  if (from === to) return value
-  if (from === 'px') {
-    if (to === 'mm') return pxToMm(value)
-    if (to === 'cm') return pxToMm(value) / 10
-    if (to === 'in') return pxToMm(value) / 25.4
-  }
-  if (from === 'mm') {
-    if (to === 'px') return mmToPx(value)
-    if (to === 'cm') return value / 10
-    if (to === 'in') return value / 25.4
-  }
-  if (from === 'cm') {
-    if (to === 'px') return mmToPx(value * 10)
-    if (to === 'mm') return value * 10
-    if (to === 'in') return value / 2.54
-  }
-  if (from === 'in') {
-    if (to === 'px') return mmToPx(value * 25.4)
-    if (to === 'mm') return value * 25.4
-    if (to === 'cm') return value * 2.54
-  }
-  return 0
 }
 
 function updateWidthValue(value: number): void {

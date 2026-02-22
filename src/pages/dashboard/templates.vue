@@ -197,8 +197,6 @@ async function useTemplate(template: MarketplaceProduct) {
       return
     }
 
-    await marketplaceService.incrementDownloads(template.id!)
-    
     const projectId = crypto.randomUUID()
     const now = new Date().toISOString()
     

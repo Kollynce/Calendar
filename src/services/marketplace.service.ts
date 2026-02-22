@@ -651,14 +651,12 @@ class MarketplaceService {
   async incrementDownloads(id: string): Promise<void> {
     if (isDemoMode) return
     
-    const template = await this.getTemplateById(id)
-    if (!template) return
-    
-    const docRef = doc(db, this.collectionName, id)
-    await updateDoc(docRef, {
-      downloads: (template.downloads || 0) + 1,
-      updatedAt: serverTimestamp(),
-    })
+    try {
+      const callable = httpsCallable(functions, 'incrementTemplateDownloads')
+      await callable({ templateId: id })
+    } catch (error) {
+      console.warn('[MarketplaceService] Failed to increment downloads via Cloud Function', error)
+    }
   }
 }
 

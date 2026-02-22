@@ -55,7 +55,6 @@ export function useCanvasOperations(
   }
 
   function handleCanvasReady(canvasEl: HTMLCanvasElement): void {
-    console.log('[handleCanvasReady] Canvas element ready, initializing editor canvas')
     canvasRef.value = canvasEl
     void initializeEditorCanvas()
   }
@@ -64,32 +63,24 @@ export function useCanvasOperations(
     await nextTick()
 
     if (!canvasRef.value) {
-      console.log('[initializeEditorCanvas] No canvas ref, skipping')
       return
     }
     if (editorStore.canvas) {
-      console.log('[initializeEditorCanvas] Canvas already exists, skipping')
       return
     }
     if (isInitializing) {
-      console.log('[initializeEditorCanvas] Already initializing, skipping duplicate call')
       return
     }
 
     const expectedProjectId = routeProjectId.value
     const loadedProjectId = editorStore.project?.id
     if (expectedProjectId && loadedProjectId !== expectedProjectId) {
-      console.log('[initializeEditorCanvas] Project mismatch - route:', expectedProjectId, 'loaded:', loadedProjectId, '- skipping initialization')
       return
     }
 
     isInitializing = true
     try {
-      console.log('[initializeEditorCanvas] Initializing canvas for project:', editorStore.project?.id)
       await editorStore.initializeCanvas(canvasRef.value)
-      const currentCanvas = editorStore.canvas
-      const objectCount = (currentCanvas as any)?.getObjects?.().length ?? 0
-      console.log('[initializeEditorCanvas] Canvas initialized with', objectCount, 'objects')
     } finally {
       isInitializing = false
     }
@@ -103,41 +94,27 @@ export function useCanvasOperations(
 
   function setupRouteWatcher() {
     watch(routeProjectId, async (next, prev) => {
-      console.log('[routeProjectId watch] Route changed from', prev, 'to', next)
-      console.log('[routeProjectId watch] Current project in store:', editorStore.project?.id)
-      console.log('[routeProjectId watch] Canvas exists:', !!editorStore.canvas)
-      
       if (next === prev) {
-        console.log('[routeProjectId watch] Same route ID, skipping')
         return
       }
 
       if (next && editorStore.project?.id === next && editorStore.canvas) {
-        console.log('[routeProjectId watch] Same project already loaded, skipping')
         return
       }
-
-      console.log('[routeProjectId watch] Destroying canvas and loading new project')
       
       if (editorStore.canvas) {
-        console.log('[routeProjectId watch] Destroying existing canvas')
         editorStore.destroyCanvas()
       }
       
       canvasRef.value = null
       
       canvasKey.value++
-      console.log('[routeProjectId watch] Canvas key incremented to', canvasKey.value)
       
       await nextTick()
       
-      console.log('[routeProjectId watch] Loading project:', next)
       await ensureProjectForRoute()
-      console.log('[routeProjectId watch] Project loaded:', editorStore.project?.id, 'with', editorStore.project?.canvas.objects.length, 'objects')
       
       await nextTick()
-      
-      console.log('[routeProjectId watch] Waiting for AdobeCanvas to remount and emit canvas-ready')
     }, { immediate: false, flush: 'post' })
   }
 

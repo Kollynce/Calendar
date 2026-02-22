@@ -9,7 +9,9 @@ import {
   query,
   where,
 } from 'firebase/firestore'
+import { httpsCallable } from 'firebase/functions'
 import { db } from '@/config/firebase'
+import { functions } from '@/config/firebase'
 import { useAuthStore } from '@/stores'
 import AppLayout from '@/layouts/AppLayout.vue'
 import AppCard from '@/components/ui/AppCard.vue'
@@ -19,13 +21,38 @@ type AdminUserRow = User & {
   projectCount: number
 }
 
+async function updateUserAccount(userId: string): Promise<void> {
+  const row = users.value.find((u) => u.id === userId)
+  if (!row) return
+
+  savingUserId.value = userId
+  error.value = null
+
+  try {
+    await updateUserAccountCallable({
+      userId,
+      role: row.role,
+      subscription: row.subscription,
+    })
+  } catch (e: any) {
+    error.value = e?.message || 'Failed to update user account'
+  } finally {
+    savingUserId.value = null
+  }
+}
+
 const authStore = useAuthStore()
 
 const loading = ref(false)
 const error = ref<string | null>(null)
 const search = ref('')
+const savingUserId = ref<string | null>(null)
 
 const users = ref<AdminUserRow[]>([])
+const roleOptions: UserRole[] = ['user', 'creator', 'admin']
+const subscriptionOptions: SubscriptionTier[] = ['free', 'pro', 'business', 'enterprise']
+
+const updateUserAccountCallable = httpsCallable(functions, 'adminUpdateUserAccount')
 
 const filteredUsers = computed(() => {
   const q = search.value.trim().toLowerCase()
@@ -204,14 +231,15 @@ onMounted(async () => {
                 <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">Projects</th>
                 <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">Created</th>
                 <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">Last Login</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">Actions</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-200 dark:divide-gray-800 bg-white dark:bg-gray-950">
               <tr v-if="loading">
-                <td class="px-4 py-4 text-sm text-gray-500 dark:text-gray-400" colspan="6">Loading…</td>
+                <td class="px-4 py-4 text-sm text-gray-500 dark:text-gray-400" colspan="7">Loading…</td>
               </tr>
               <tr v-else-if="filteredUsers.length === 0">
-                <td class="px-4 py-4 text-sm text-gray-500 dark:text-gray-400" colspan="6">No users found.</td>
+                <td class="px-4 py-4 text-sm text-gray-500 dark:text-gray-400" colspan="7">No users found.</td>
               </tr>
               <tr v-for="u in filteredUsers" :key="u.id" class="hover:bg-gray-50 dark:hover:bg-gray-900/40">
                 <td class="px-4 py-4">
@@ -221,11 +249,32 @@ onMounted(async () => {
                     <p class="text-xs text-gray-400 mt-1">UID: {{ u.id }}</p>
                   </div>
                 </td>
-                <td class="px-4 py-4 text-sm text-gray-700 dark:text-gray-300 capitalize">{{ u.role }}</td>
-                <td class="px-4 py-4 text-sm text-gray-700 dark:text-gray-300 capitalize">{{ u.subscription }}</td>
+                <td class="px-4 py-4 text-sm text-gray-700 dark:text-gray-300">
+                  <select v-model="u.role" class="input h-9 py-1 text-sm capitalize">
+                    <option v-for="role in roleOptions" :key="role" :value="role" class="capitalize">
+                      {{ role }}
+                    </option>
+                  </select>
+                </td>
+                <td class="px-4 py-4 text-sm text-gray-700 dark:text-gray-300">
+                  <select v-model="u.subscription" class="input h-9 py-1 text-sm capitalize">
+                    <option v-for="tier in subscriptionOptions" :key="tier" :value="tier" class="capitalize">
+                      {{ tier }}
+                    </option>
+                  </select>
+                </td>
                 <td class="px-4 py-4 text-sm text-gray-700 dark:text-gray-300">{{ u.projectCount }}</td>
                 <td class="px-4 py-4 text-sm text-gray-700 dark:text-gray-300">{{ formatDate(u.createdAt) }}</td>
                 <td class="px-4 py-4 text-sm text-gray-700 dark:text-gray-300">{{ formatDate(u.lastLoginAt) }}</td>
+                <td class="px-4 py-4 text-sm text-gray-700 dark:text-gray-300">
+                  <button
+                    class="btn btn-secondary h-9 px-3 text-xs"
+                    :disabled="savingUserId === u.id"
+                    @click="updateUserAccount(u.id)"
+                  >
+                    {{ savingUserId === u.id ? 'Saving…' : 'Save' }}
+                  </button>
+                </td>
               </tr>
             </tbody>
             </table>

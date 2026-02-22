@@ -571,7 +571,6 @@ export const useEditorStore = defineStore('editor', () => {
   function refreshCalendarGridsForYear(year: number): void {
     if (!canvas.value) return
     if (refreshGridsInProgress) {
-      console.log('[Calendar] Refresh already in progress, skipping')
       return
     }
     
@@ -585,14 +584,6 @@ export const useEditorStore = defineStore('editor', () => {
       const gridsToRebuild = objects.filter((obj) => {
         const metadata = (obj as any)?.data?.elementMetadata as CanvasElementMetadata | undefined
         return metadata?.kind === 'calendar-grid' && metadata.year === y
-      })
-      
-      console.log('[Calendar] Refresh calendar grids', {
-        year: y,
-        holidayCount: calendarStore.allHolidays?.length ?? 0,
-        gridCount: gridsToRebuild.length,
-        totalObjects: objects.length,
-        gridIds: gridsToRebuild.map(obj => (obj as any).id),
       })
       
       if (gridsToRebuild.length === 0) return
@@ -609,9 +600,7 @@ export const useEditorStore = defineStore('editor', () => {
 
           const rebuilt = rebuildElementWithMetadata(obj, metadata)
           if (!rebuilt) return
-          
-          console.log('[Calendar] Rebuilding grid', { oldId: (obj as any).id, newId: (rebuilt as any).id })
-          
+
           // Remove old object and add rebuilt one
           canvas.value?.remove(obj)
           canvas.value?.add(rebuilt)
@@ -698,11 +687,7 @@ export const useEditorStore = defineStore('editor', () => {
 
   watch(
     () => [calendarStore.allHolidays, calendarStore.config.year] as const,
-    ([holidays, year]) => {
-      console.log('[Calendar] Holidays or year changed, refreshing grids', {
-        year,
-        holidayCount: holidays?.length ?? 0,
-      })
+    ([, year]) => {
       refreshCalendarGridsForYear(year)
     },
     { deep: false, immediate: true },

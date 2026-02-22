@@ -3,6 +3,7 @@ import { computed, ref, watch, type Component } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useExportStore } from '@/stores/export.store'
 import { useEditorStore } from '@/stores/editor.store'
+import { marketplaceService } from '@/services/marketplace.service'
 import { 
   Dialog, 
   DialogPanel, 
@@ -377,6 +378,10 @@ const safeZone = computed({
 async function handleExport(): Promise<void> {
   await exportStore.exportProject()
   if (!error.value) {
+    const templateId = editorStore.project?.templateId
+    if (templateId) {
+      await marketplaceService.incrementDownloads(templateId)
+    }
     emit('close')
   }
 }
@@ -384,6 +389,10 @@ async function handleExport(): Promise<void> {
 async function handleRetryServerExport(): Promise<void> {
   await exportStore.retryLastServerPdfExport()
   if (!error.value) {
+    const templateId = editorStore.project?.templateId
+    if (templateId) {
+      await marketplaceService.incrementDownloads(templateId)
+    }
     emit('close')
   }
 }

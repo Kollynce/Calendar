@@ -14,13 +14,6 @@ import CollageProperties from '@/components/editor/properties/CollageProperties.
 import CanvasProperties from '@/components/editor/properties/CanvasProperties.vue'
 import TableProperties from '@/components/editor/properties/TableProperties.vue'
 import { useAuthStore } from '@/stores/auth.store'
-
-console.log('[PropertiesPanelContent] Components imported:', {
-  MonthGridProperties,
-  CanvasProperties,
-  TableProperties,
-  ColorPicker
-})
 import type {
   CanvasElementMetadata,
   CalendarGridMetadata,

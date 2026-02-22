@@ -179,10 +179,6 @@ export function createProjectModule(params: {
         return
       }
 
-      console.log('[loadProjectById] Loaded project from Firebase:', id)
-      console.log('[loadProjectById] Canvas has', found.canvas?.objects?.length || 0, 'objects')
-      console.log('[loadProjectById] First object:', JSON.stringify(found.canvas?.objects?.[0], null, 2))
-      
       loadProject(found)
     } finally {
       loading.value = false
@@ -244,9 +240,7 @@ export function createProjectModule(params: {
       }
       if (fabricObj.data) {
         jsonObj.data = fabricObj.data
-        if (depth === 0) {
-          console.log(`[injectData] Object ${fabricObj.id} has data:`, !!fabricObj.data, 'metadata:', fabricObj.data?.elementMetadata?.kind)
-        }
+        // no-op: keep data injection metadata intact
       }
       
       // Process nested objects in groups
@@ -273,15 +267,6 @@ export function createProjectModule(params: {
       json.objects = json.objects.filter((obj: any) => !obj?.data?.watermark)
     }
 
-    // Log what we're saving
-    console.log('[getCanvasState] Serialized', json.objects?.length || 0, 'objects')
-    if (json.objects?.[0]) {
-      console.log('[getCanvasState] First object has id:', json.objects[0].id, 'data:', !!json.objects[0].data)
-      if (json.objects[0].data?.elementMetadata) {
-        console.log('[getCanvasState] First object metadata:', json.objects[0].data.elementMetadata.kind)
-      }
-    }
-    
     return {
       ...json,
       width: canvas.value.width,
@@ -291,9 +276,7 @@ export function createProjectModule(params: {
   }
 
   async function saveProject(): Promise<void> {
-    console.log('[saveProject] Save triggered')
     if (!project.value || !canvas.value) {
-      console.log('[saveProject] Aborted - no project or canvas')
       return
     }
 
@@ -301,9 +284,7 @@ export function createProjectModule(params: {
     saving.value = true
 
     try {
-      console.log('[saveProject] Getting canvas state...')
       project.value.canvas = getCanvasState() as CanvasState
-      console.log('[saveProject] Canvas state captured')
       project.value.updatedAt = new Date().toISOString()
 
       const canvasWidth = canvas.value.getWidth?.() ?? canvas.value.width ?? 0

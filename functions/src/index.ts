@@ -67,6 +67,17 @@ function requireAuth(context: functionsV1.https.CallableContext): string {
   return uid
 }
 
+async function requireAdmin(context: functionsV1.https.CallableContext): Promise<string> {
+  const uid = requireAuth(context)
+  if (context.auth?.token?.admin === true) return uid
+
+  const userSnap = await admin.firestore().collection('users').doc(uid).get()
+  const role = String(userSnap.data()?.role || '').trim().toLowerCase()
+  if (role === 'admin') return uid
+
+  throw new functionsV1.https.HttpsError('permission-denied', 'Admin access required')
+}
+
 function getAdminEmail(): string {
   const fromEnv = normalizeEmail(process.env.ADMIN_EMAIL)
   if (fromEnv) return fromEnv
@@ -76,6 +87,8 @@ function getAdminEmail(): string {
 }
 
 type SubscriptionTier = 'free' | 'pro' | 'business' | 'enterprise'
+
+type UserRole = 'user' | 'creator' | 'admin'
 
 type SubscriptionStatus = 'active' | 'past_due' | 'canceled' | 'incomplete' | 'trialing'
 
@@ -339,6 +352,35 @@ async function updateUserTier(input: { userId: string; tier: SubscriptionTier })
   }
 }
 
+async function updateUserRoleAndTier(input: {
+  userId: string
+  role: UserRole
+  subscription: SubscriptionTier
+}): Promise<void> {
+  const uid = String(input.userId || '').trim()
+  if (!uid) {
+    throw new functionsV1.https.HttpsError('invalid-argument', 'userId is required')
+  }
+
+  await admin.firestore().collection('users').doc(uid).set(
+    {
+      role: input.role,
+      subscription: input.subscription,
+      updatedAt: new Date().toISOString(),
+    },
+    { merge: true },
+  )
+
+  const userRecord = await admin.auth().getUser(uid)
+  const existingClaims = userRecord.customClaims || {}
+
+  await admin.auth().setCustomUserClaims(uid, {
+    ...existingClaims,
+    admin: input.role === 'admin',
+    subscription: input.subscription,
+  })
+}
+
 async function getMarketplaceTemplateById(templateId: string): Promise<{ id: string; data: MarketplaceTemplateDocument }> {
   const id = String(templateId || '').trim()
   if (!id) {
@@ -572,6 +614,31 @@ async function verifyPaystackMarketplaceTransaction(input: { templateId: string;
     providerReference,
   }
 }
+
+export const incrementTemplateDownloads = functionsV1.https.onCall(async (data, context) => {
+  requireAuth(context)
+
+  const templateId = String(data?.templateId || '').trim()
+  if (!templateId) {
+    throw new functionsV1.https.HttpsError('invalid-argument', 'templateId is required')
+  }
+
+  const templateRef = admin.firestore().collection('marketplace_templates').doc(templateId)
+
+  await admin.firestore().runTransaction(async (tx: admin.firestore.Transaction) => {
+    const snap = await tx.get(templateRef)
+    if (!snap.exists) {
+      throw new functionsV1.https.HttpsError('not-found', 'Template not found')
+    }
+
+    tx.update(templateRef, {
+      downloads: admin.firestore.FieldValue.increment(1),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    })
+  })
+
+  return { ok: true }
+})
 
 export const createExportJob = functionsV1.https.onCall(async (data, context) => {
   const uid = requireAuth(context)
@@ -1499,6 +1566,42 @@ export const provisionUser = functionsV1.auth.user().onCreate(async (user) => {
       },
       { merge: true },
     )
+})
+
+export const adminUpdateUserAccount = functionsV1.https.onCall(async (data, context) => {
+  await requireAdmin(context)
+
+  const userId = String(data?.userId || '').trim()
+  const role = String(data?.role || '').trim().toLowerCase()
+  const subscription = String(data?.subscription || '').trim().toLowerCase()
+
+  if (!userId) {
+    throw new functionsV1.https.HttpsError('invalid-argument', 'userId is required')
+  }
+
+  const allowedRoles: UserRole[] = ['user', 'creator', 'admin']
+  const allowedSubscriptions: SubscriptionTier[] = ['free', 'pro', 'business', 'enterprise']
+
+  if (!allowedRoles.includes(role as UserRole)) {
+    throw new functionsV1.https.HttpsError('invalid-argument', 'Invalid role')
+  }
+
+  if (!allowedSubscriptions.includes(subscription as SubscriptionTier)) {
+    throw new functionsV1.https.HttpsError('invalid-argument', 'Invalid subscription tier')
+  }
+
+  await updateUserRoleAndTier({
+    userId,
+    role: role as UserRole,
+    subscription: subscription as SubscriptionTier,
+  })
+
+  return {
+    ok: true,
+    userId,
+    role,
+    subscription,
+  }
 })
 
 export const registerPayPalSubscription = functionsV1.https.onCall(async (data, context) => {

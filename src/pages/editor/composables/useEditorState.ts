@@ -78,7 +78,6 @@ export function useEditorState() {
   const routeProjectId = computed(() => {
     const raw = route.params.id
     const result = typeof raw === 'string' && raw.length > 0 ? raw : null
-    console.log('[routeProjectId computed] Route params.id:', raw, '→ result:', result)
     return result
   })
 

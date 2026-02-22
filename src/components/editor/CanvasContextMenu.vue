@@ -246,27 +246,19 @@ defineExpose({
     >
       <div
         v-if="isVisible"
-        class="context-menu fixed z-50 min-w-[200px] py-1.5 bg-[#2d2d2d] rounded-lg shadow-xl border border-[#3d3d3d] backdrop-blur-sm"
+        class="context-menu editor-popover fixed z-50 min-w-[200px] py-1.5"
         :style="{ left: `${position.x}px`, top: `${position.y}px` }"
       >
         <template v-for="item in menuItems" :key="item.id">
           <!-- Divider -->
-          <div
-            v-if="item.divider"
-            class="my-1 border-t border-[#3d3d3d]"
-          />
+          <div v-if="item.divider" class="editor-popover-divider" />
           
           <!-- Menu Item -->
           <button
             v-else
             @click="handleItemClick(item)"
             :disabled="item.disabled"
-            class="w-full flex items-center gap-3 px-3 py-1.5 text-left text-[13px] transition-colors"
-            :class="[
-              item.disabled 
-                ? 'text-gray-500 cursor-not-allowed' 
-                : 'text-gray-200 hover:bg-white/10 hover:text-white'
-            ]"
+            class="editor-popover-item"
           >
             <component
               v-if="item.icon"
@@ -300,10 +292,4 @@ defineExpose({
 </template>
 
 <style scoped>
-.context-menu {
-  box-shadow: 
-    0 4px 6px -1px rgba(0, 0, 0, 0.3),
-    0 2px 4px -1px rgba(0, 0, 0, 0.2),
-    0 0 0 1px rgba(255, 255, 255, 0.05) inset;
-}
 </style>

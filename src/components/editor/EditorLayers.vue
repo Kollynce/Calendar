@@ -74,8 +74,7 @@ watch(canvas, (newCanvas) => {
 
 const layers = computed(() => {
   // Access layerVersion to make this reactive (intentionally unused)
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  void layerVersion.value
+  layerVersion.value
   
   if (!canvas.value) return []
   
